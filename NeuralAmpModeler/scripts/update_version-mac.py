@@ -20,7 +20,7 @@ from parse_config import parse_config, parse_xcconfig
 
 def main():
     config = parse_config(projectpath)
-    project_name = os.environ.get("PROJECT_NAME", os.path.basename(projectpath))
+    project_name = os.path.basename(projectpath)
     bundle_name = config["BUNDLE_NAME"]
 
     def resource_path(suffix):
