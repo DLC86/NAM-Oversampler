@@ -14,6 +14,8 @@
 #include "IPlug_include_in_plug_hdr.h"
 #include "ISender.h"
 
+#include <mutex>
+
 
 const int kNumPresets = 1;
 // The plugin is mono inside
@@ -47,6 +49,8 @@ enum EParams
   kInputCalibrationLevel,
   kOutputMode,
   kSlim,
+  kOversamplingFactor,
+  kAntiAliasFilterPhase,
   kNumParams
 };
 
@@ -65,6 +69,9 @@ enum ECtrlTags
   kCtrlTagSlimmableIcon,
   kCtrlTagSlimOverlayBackdrop,
   kCtrlTagSlimKnob,
+  kCtrlTagOversamplingBox,
+  kCtrlTagOversampling,
+  kCtrlTagAntiAliasFilterPhase,
   kNumCtrlTags
 };
 
@@ -102,14 +109,7 @@ public:
   ResamplingNAM(std::unique_ptr<nam::DSP> encapsulated, const double expected_sample_rate)
   : nam::DSP(encapsulated->NumInputChannels(), encapsulated->NumOutputChannels(), expected_sample_rate)
   , mEncapsulated(std::move(encapsulated))
-  , mResampler(GetNAMSampleRate(mEncapsulated))
   {
-    // Assign the encapsulated object's processing function  to this object's member so that the resampler can use it:
-    auto ProcessBlockFunc = [&](NAM_SAMPLE** input, NAM_SAMPLE** output, int numFrames) {
-      mEncapsulated->process(input, output, numFrames);
-    };
-    mBlockProcessFunc = ProcessBlockFunc;
-
     // Get the other information from the encapsulated NAM so that we can tell the outside world about what we're
     // holding.
     if (mEncapsulated->HasLoudness())
@@ -125,10 +125,6 @@ public:
       SetOutputLevel(mEncapsulated->GetOutputLevel());
     }
 
-    // NOTE: prewarm samples doesn't mean anything--we can prewarm the encapsulated model as it likes and be good to
-    // go.
-    // _prewarm_samples = 0;
-
     // And be ready
     int maxBlockSize = 2048; // Conservative
     Reset(expected_sample_rate, maxBlockSize);
@@ -136,37 +132,60 @@ public:
 
   ~ResamplingNAM() = default;
 
-  void prewarm() override { mEncapsulated->prewarm(); };
+  void prewarm() override
+  {
+    std::lock_guard<std::mutex> lock(mStateMutex);
+    mEncapsulated->prewarm();
+  };
 
   void process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames) override
   {
+    std::lock_guard<std::mutex> lock(mStateMutex);
+
     if (num_frames > mMaxExternalBlockSize)
       // We can afford to be careful
       throw std::runtime_error("More frames were provided than the max expected!");
 
-    if (!NeedToResample())
+    if (!IsResamplingActive())
     {
       mEncapsulated->process(input, output, num_frames);
     }
     else
     {
-      mResampler.ProcessBlock(input, output, num_frames, mBlockProcessFunc);
+      mResamplingContainer->ProcessBlock(
+        input, output, num_frames,
+        [this](NAM_SAMPLE** resampledInput, NAM_SAMPLE** resampledOutput, int resampledFrames) {
+          mEncapsulated->process(resampledInput, resampledOutput, resampledFrames);
+        });
     }
   };
 
-  int GetLatency() const { return NeedToResample() ? mResampler.GetLatency() : 0; };
+  int GetLatency() const
+  {
+    std::lock_guard<std::mutex> lock(mStateMutex);
+    return IsResamplingActive() ? mResamplingContainer->GetLatency() : 0;
+  };
+
+  void SetOversamplingFactor(int factor)
+  {
+    std::lock_guard<std::mutex> lock(mStateMutex);
+    mRequestedOversamplingFactor = factor < 1 ? 1 : factor;
+    if (mEncapsulated)
+      ResetUnlocked(mExternalSampleRate, mMaxExternalBlockSize);
+  };
+
+  void SetAntiAliasFilterPhase(dsp::EAntiAliasFilterPhase filterPhase)
+  {
+    std::lock_guard<std::mutex> lock(mStateMutex);
+    mAntiAliasFilterPhase = filterPhase;
+    if (mEncapsulated)
+      ResetUnlocked(mExternalSampleRate, mMaxExternalBlockSize);
+  };
 
   void Reset(const double sampleRate, const int maxBlockSize) override
   {
-    mExpectedSampleRate = sampleRate;
-    mMaxExternalBlockSize = maxBlockSize;
-    mResampler.Reset(sampleRate, maxBlockSize);
-
-    // Allocations in the encapsulated model (HACK)
-    // Stolen some code from the resampler; it'd be nice to have these exposed as methods? :)
-    const double mUpRatio = sampleRate / GetEncapsulatedSampleRate();
-    const auto maxEncapsulatedBlockSize = static_cast<int>(std::ceil(static_cast<double>(maxBlockSize) / mUpRatio));
-    mEncapsulated->ResetAndPrewarm(sampleRate, maxEncapsulatedBlockSize);
+    std::lock_guard<std::mutex> lock(mStateMutex);
+    ResetUnlocked(sampleRate, maxBlockSize);
   };
 
   // So that we can let the world know if we're resampling (useful for debugging)
@@ -179,18 +198,63 @@ public:
   }
 
 private:
-  bool NeedToResample() const { return GetExpectedSampleRate() != GetEncapsulatedSampleRate(); };
+  void ResetUnlocked(const double sampleRate, const int maxBlockSize)
+  {
+    mExpectedSampleRate = sampleRate;
+    mExternalSampleRate = sampleRate;
+    mMaxExternalBlockSize = maxBlockSize;
+
+    const double renderingSampleRate = GetRenderingSampleRate(sampleRate);
+    const bool resamplingActive = std::abs(renderingSampleRate - sampleRate) > 1.0e-6;
+    const auto maxEncapsulatedBlockSize =
+      static_cast<int>(std::ceil(maxBlockSize * renderingSampleRate / sampleRate)) + 1;
+    const int timeScale = mRequestedOversamplingFactor > 1 ? mRequestedOversamplingFactor : 1;
+
+    mEncapsulated->SetTimeScale(timeScale);
+
+    if (resamplingActive)
+    {
+      if (mResamplingContainer == nullptr || std::abs(mRenderingSampleRate - renderingSampleRate) > 1.0e-6)
+      {
+        mResamplingContainer =
+          std::make_unique<dsp::ResamplingContainer<NAM_SAMPLE, 1, 32>>(renderingSampleRate, mAntiAliasFilterPhase);
+        mRenderingSampleRate = renderingSampleRate;
+      }
+      mResamplingContainer->SetAntiAliasFilterPhase(mAntiAliasFilterPhase);
+      mResamplingContainer->Reset(sampleRate, maxBlockSize);
+      mEncapsulated->ResetAndPrewarm(renderingSampleRate, maxEncapsulatedBlockSize);
+    }
+    else
+    {
+      mResamplingContainer = nullptr;
+      mRenderingSampleRate = sampleRate;
+      mEncapsulated->ResetAndPrewarm(sampleRate, maxBlockSize);
+    }
+  };
+  double GetRenderingSampleRate(double externalSampleRate) const
+  {
+    if (mRequestedOversamplingFactor > 1)
+      return externalSampleRate * static_cast<double>(mRequestedOversamplingFactor);
+    return GetEncapsulatedSampleRate();
+  }
+
+  bool IsResamplingActive() const { return mResamplingContainer != nullptr; };
+
   // The encapsulated NAM
   std::unique_ptr<nam::DSP> mEncapsulated;
+  mutable std::mutex mStateMutex;
 
-  // The resampling wrapper
-  dsp::ResamplingContainer<NAM_SAMPLE, 1, 12> mResampler;
+  // Stateful real-time resampler for model sample-rate matching and user oversampling.
+  std::unique_ptr<dsp::ResamplingContainer<NAM_SAMPLE, 1, 32>> mResamplingContainer;
+  double mRenderingSampleRate = 0.0;
 
   // Used to check that we don't get too large a block to process.
   int mMaxExternalBlockSize = 0;
 
-  // This function is defined to conform to the interface expected by the iPlug2 resampler.
-  std::function<void(NAM_SAMPLE**, NAM_SAMPLE**, int)> mBlockProcessFunc;
+  // The requested oversampling factor (can override model's natural resampling)
+  int mRequestedOversamplingFactor = 1;
+  dsp::EAntiAliasFilterPhase mAntiAliasFilterPhase = dsp::EAntiAliasFilterPhase::MinimumPhase;
+  double mExternalSampleRate = 48000.0;
 };
 
 class NeuralAmpModeler final : public iplug::Plugin
@@ -241,10 +305,11 @@ private:
   void _PrepareBuffers(const size_t numChannels, const size_t numFrames);
   // Manage pointers
   void _PrepareIOPointers(const size_t nChans);
-  // Copy the input buffer to the object, applying input level.
+  // Copy the input buffer to the object, collapsing to the plugin's internal channel layout.
   // :param nChansIn: In from external
   // :param nChansOut: Out to the internal of the DSP routine
   void _ProcessInput(iplug::sample** inputs, const size_t nFrames, const size_t nChansIn, const size_t nChansOut);
+  void _ApplyInputGain(iplug::sample** inputs, const size_t nFrames, const size_t nChans);
   // Copy the output to the output buffer, applying output level.
   // :param nChansIn: In from internal
   // :param nChansOut: Out to external
@@ -313,6 +378,10 @@ private:
   // Post-IR filters
   recursive_linear_filter::HighPass mHighPass;
   //  recursive_linear_filter::LowPass mLowPass;
+
+  // Oversampling factor (1, 2, 4, 8, 16, 32)
+  int mOversamplingFactor = 1;
+  dsp::EAntiAliasFilterPhase mAntiAliasFilterPhase = dsp::EAntiAliasFilterPhase::MinimumPhase;
 
   // Path to model's config.json or model.nam
   WDL_String mNAMPath;

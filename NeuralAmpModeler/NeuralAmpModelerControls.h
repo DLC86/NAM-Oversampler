@@ -33,6 +33,12 @@ IRECT CornerButtonArea(const IRECT& rect)
   return mainArea.GetFromTRHC(50, 50).GetCentredInside(20, 20);
 };
 
+IRECT LeftCornerButtonArea(const IRECT& rect, const float size = 24.0f)
+{
+  const auto mainArea = rect.GetPadded(-20);
+  return mainArea.GetFromTLHC(50, 50).GetCentredInside(size, size);
+};
+
 class NAMSquareButtonControl : public ISVGButtonControl
 {
 public:
@@ -47,6 +53,25 @@ public:
       g.FillRoundRect(PluginColors::MOUSEOVER, mRECT, 2.f);
 
     ISVGButtonControl::Draw(g);
+  }
+};
+
+class NAMBitmapButtonControl : public IButtonControlBase, public IBitmapBase
+{
+public:
+  NAMBitmapButtonControl(const IRECT& bounds, IActionFunction af, IBitmap bitmap)
+  : IButtonControlBase(bounds, af)
+  , IBitmapBase(bitmap)
+  {
+  }
+
+  void OnRescale() override { mBitmap = GetUI()->GetScaledBitmap(mBitmap); }
+
+  void Draw(IGraphics& g) override
+  {
+    if (mMouseIsOver)
+      g.FillRoundRect(PluginColors::MOUSEOVER, mRECT.GetPadded(-3.0f), 2.f);
+    g.DrawFittedBitmap(mBitmap, mRECT);
   }
 };
 
@@ -304,7 +329,7 @@ public:
 
   void OnAttached() override
   {
-    auto prevFileFunc = [&](IControl* pCaller) {
+    auto prevFileFunc = [this](IControl* pCaller) {
       const auto nItems = NItems();
       if (nItems == 0)
         return;
@@ -316,7 +341,7 @@ public:
       LoadFileAtCurrentIndex();
     };
 
-    auto nextFileFunc = [&](IControl* pCaller) {
+    auto nextFileFunc = [this](IControl* pCaller) {
       const auto nItems = NItems();
       if (nItems == 0)
         return;
@@ -328,12 +353,12 @@ public:
       LoadFileAtCurrentIndex();
     };
 
-    auto loadFileFunc = [&](IControl* pCaller) {
+    auto loadFileFunc = [this](IControl* pCaller) {
       WDL_String fileName;
       WDL_String path;
       GetSelectedFileDirectory(path);
 #ifdef NAM_PICK_DIRECTORY
-      pCaller->GetUI()->PromptForDirectory(path, [&](const WDL_String& fileName, const WDL_String& path) {
+      pCaller->GetUI()->PromptForDirectory(path, [this](const WDL_String& fileName, const WDL_String& path) {
         if (path.GetLength())
         {
           ClearPathList();
@@ -345,7 +370,7 @@ public:
       });
 #else
       pCaller->GetUI()->PromptForFile(
-        fileName, path, EFileAction::Open, mExtension.Get(), [&](const WDL_String& fileName, const WDL_String& path) {
+        fileName, path, EFileAction::Open, mExtension.Get(), [this](const WDL_String& fileName, const WDL_String& path) {
           if (fileName.GetLength())
           {
             ClearPathList();
@@ -358,7 +383,7 @@ public:
 #endif
     };
 
-    auto clearFileFunc = [&](IControl* pCaller) {
+    auto clearFileFunc = [this](IControl* pCaller) {
       pCaller->GetDelegate()->SendArbitraryMsgFromUI(mClearMsgTag);
       mFileNameControl->SetLabelAndTooltip(mDefaultLabelStr.Get());
       SetBrowserState(NAMBrowserState::Empty);
@@ -366,7 +391,7 @@ public:
       //      pCaller->GetUI()->GetControlWithTag(kCtrlTagOutputMode)->SetDisabled(false);
     };
 
-    auto chooseFileFunc = [&, loadFileFunc](IControl* pCaller) {
+    auto chooseFileFunc = [this, loadFileFunc](IControl* pCaller) {
       if (std::string_view(pCaller->As<IVButtonControl>()->GetLabelStr()) == mDefaultLabelStr.Get())
       {
         loadFileFunc(pCaller);
@@ -679,6 +704,145 @@ public:
   };
 };
 
+class OversamplingControl : public IVRadioButtonControl
+{
+public:
+  OversamplingControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
+                      EDirection direction = EDirection::Vertical)
+  : IVRadioButtonControl(bounds, paramIdx, {"OFF", "2x", "4x", "8x", "16x", "32x"}, "", style,
+                         EVShape::Ellipse, direction, buttonSize) {};
+};
+
+class AntiAliasFilterPhaseControl : public IVRadioButtonControl
+{
+public:
+  AntiAliasFilterPhaseControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
+                              EDirection direction = EDirection::Vertical)
+  : IVRadioButtonControl(bounds, paramIdx, {"Min Phase", "Linear Phase"}, "", style, EVShape::Ellipse, direction,
+                         buttonSize) {};
+};
+
+class NAMOversamplingPageControl : public IContainerBaseWithNamedChildren
+{
+public:
+  NAMOversamplingPageControl(const IRECT& bounds, const IBitmap& bitmap, ISVG closeSVG, const IVStyle& style,
+                             const IVStyle& radioButtonStyle)
+  : IContainerBaseWithNamedChildren(bounds)
+  , mBitmap(bitmap)
+  , mCloseSVG(closeSVG)
+  , mStyle(style)
+  , mRadioButtonStyle(radioButtonStyle)
+  {
+    mIgnoreMouse = false;
+  }
+
+  bool OnKeyDown(float x, float y, const IKeyPress& key) override
+  {
+    if (key.VK == kVK_ESCAPE)
+    {
+      HideAnimated(true);
+      return true;
+    }
+    return false;
+  }
+
+  void HideAnimated(bool hide)
+  {
+    mWillHide = hide;
+    if (!hide)
+      mHide = false;
+    else
+      ForAllChildrenFunc([hide](int childIdx, IControl* pChild) { pChild->Hide(hide); });
+
+    SetAnimation(
+      [&](IControl* pCaller) {
+        auto progress = static_cast<float>(pCaller->GetAnimationProgress());
+        SetBlend(IBlend(EBlend::Default, mWillHide ? 1.0f - progress : progress));
+
+        if (progress > 1.0f)
+        {
+          pCaller->OnEndAnimation();
+          IContainerBase::Hide(mWillHide);
+          GetUI()->SetAllControlsDirty();
+        }
+      },
+      mAnimationTime);
+
+    SetDirty(true);
+  }
+
+  void OnAttached() override
+  {
+    const float pad = 20.0f;
+    const IVStyle titleStyle = DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular"))
+                                 .WithDrawFrame(false)
+                                 .WithShadowOffset(2.f);
+    const auto page = GetRECT();
+    const auto content = page.GetPadded(-(pad + 10.0f));
+    const auto titleArea = content.GetFromTop(50.0f);
+    const auto radioArea = content.GetCentredInside(430.0f, 54.0f).GetVShifted(-34.0f);
+    const auto filterArea = content.GetCentredInside(280.0f, 54.0f).GetVShifted(28.0f);
+    const auto infoArea = content.GetFromBottom(72.0f).GetHPadded(-8.0f);
+    const float buttonSize = 10.0f;
+    const auto infoText = IText(12, EAlign::Center, PluginColors::HELP_TEXT);
+    const auto infoStyle = mStyle.WithDrawFrame(false).WithValueText(infoText);
+
+    AddNamedChildControl(new IBitmapControl(page, mBitmap), mControlNames.bitmap)->SetIgnoreMouse(true);
+    AddNamedChildControl(new IVLabelControl(titleArea, "OVERSAMPLING", titleStyle), mControlNames.title);
+
+    auto* oversamplingControl = AddNamedChildControl(
+      new OversamplingControl(radioArea, kOversamplingFactor, mRadioButtonStyle, buttonSize, EDirection::Horizontal),
+      mControlNames.oversampling, kCtrlTagOversampling);
+    oversamplingControl->SetTooltip("Oversampling factor");
+
+    auto* filterPhaseControl =
+      AddNamedChildControl(new AntiAliasFilterPhaseControl(filterArea, kAntiAliasFilterPhase, mRadioButtonStyle,
+                                                           buttonSize, EDirection::Horizontal),
+                           mControlNames.filterPhase, kCtrlTagAntiAliasFilterPhase);
+    filterPhaseControl->SetTooltip("Anti-alias filter phase");
+
+    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 0), "NAM-Oversampler v1.0.0", infoStyle),
+                         mControlNames.version);
+    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 1), "The Tone Scientist", infoStyle),
+                         mControlNames.author);
+    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(4, 2), "https://github.com/DLC86/NAM-Oversampler",
+                                         "https://github.com/DLC86/NAM-Oversampler", infoText, COLOR_TRANSPARENT,
+                                         PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
+                         mControlNames.github);
+    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(4, 3), "https://shop.thetonescientist.com",
+                                         "https://shop.thetonescientist.com", infoText, COLOR_TRANSPARENT,
+                                         PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
+                         mControlNames.shop);
+
+    auto closeAction = [&](IControl* pCaller) {
+      static_cast<NAMOversamplingPageControl*>(pCaller->GetParent())->HideAnimated(true);
+    };
+    AddNamedChildControl(
+      new NAMSquareButtonControl(CornerButtonArea(GetRECT()), closeAction, mCloseSVG), mControlNames.close);
+  }
+
+private:
+  IBitmap mBitmap;
+  ISVG mCloseSVG;
+  IVStyle mStyle;
+  IVStyle mRadioButtonStyle;
+  int mAnimationTime = 200;
+  bool mWillHide = false;
+
+  struct ControlNames
+  {
+    const std::string author = "Author";
+    const std::string bitmap = "Bitmap";
+    const std::string close = "Close";
+    const std::string filterPhase = "FilterPhase";
+    const std::string github = "GitHub";
+    const std::string oversampling = "Oversampling";
+    const std::string shop = "Shop";
+    const std::string title = "Title";
+    const std::string version = "Version";
+  } mControlNames;
+};
+
 class NAMSettingsPageControl : public IContainerBaseWithNamedChildren
 {
 public:
@@ -765,15 +929,17 @@ public:
     const auto titleArea = GetRECT().GetPadded(-(pad + 10.0f)).GetFromTop(50.0f);
     AddNamedChildControl(new IVLabelControl(titleArea, "SETTINGS", titleStyle), mControlNames.title);
 
+    const float height = NAM_KNOB_HEIGHT + NAM_SWTICH_HEIGHT + 10.0f;
+    const float width = titleArea.W();
+
     // Attach input/output calibration controls
     {
-      const float height = NAM_KNOB_HEIGHT + NAM_SWTICH_HEIGHT + 10.0f;
-      const float width = titleArea.W();
       const auto inputOutputArea = titleArea.GetFromBottom(height).GetTranslated(0.0f, height);
       const auto inputArea = inputOutputArea.GetFromLeft(0.5f * width);
       const auto outputArea = inputOutputArea.GetFromRight(0.5f * width);
 
       const float knobWidth = 87.0f; // HACK based on looking at the main page knobs.
+
       const auto inputLevelArea =
         inputArea.GetFromTop(NAM_KNOB_HEIGHT).GetFromBottom(25.0f).GetMidHPadded(0.5f * knobWidth);
       const auto inputSwitchArea = inputArea.GetFromBottom(NAM_SWTICH_HEIGHT).GetMidHPadded(0.5f * knobWidth);

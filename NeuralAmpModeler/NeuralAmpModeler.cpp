@@ -93,7 +93,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kCalibrateInput)->InitBool(kCalibrateInputParamName.c_str(), kDefaultCalibrateInput);
   GetParam(kInputCalibrationLevel)
     ->InitDouble(kInputCalibrationLevelParamName.c_str(), kDefaultInputCalibrationLevel, -60.0, 60.0, 0.1, "dBu");
-  GetParam(kSlim)->InitDouble("Slim", 0.0, 0.0, 1.0, 0.01);
+  GetParam(kSlim)->InitDouble("Slim", 1.0, 0.0, 1.0, 0.01);
+  GetParam(kOversamplingFactor)->InitEnum("Oversampling", 0, {"OFF", "2x", "4x", "8x", "16x", "32x"});
+  GetParam(kAntiAliasFilterPhase)->InitEnum("Filter Phase", 0, {"Min Phase", "Linear Phase"});
 
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
 
@@ -136,6 +138,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto knobBackgroundBitmap = pGraphics->LoadBitmap(KNOBBACKGROUND_FN);
     const auto switchHandleBitmap = pGraphics->LoadBitmap(SLIDESWITCHHANDLE_FN);
     const auto meterBackgroundBitmap = pGraphics->LoadBitmap(METERBACKGROUND_FN);
+    const auto ttsLogoBitmap = pGraphics->LoadBitmap(TTS_LOGO_FN);
 
     const auto b = pGraphics->GetBounds();
     const auto mainArea = b.GetPadded(-20);
@@ -180,6 +183,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     // Misc Areas
     const auto settingsButtonArea = CornerButtonArea(b);
+    const auto oversamplingButtonArea = LeftCornerButtonArea(b, 42.0f).GetTranslated(8.0f, 10.0f);
 
     // Model loader button
     auto loadModelCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
@@ -217,7 +221,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     pGraphics->AttachBackground(BACKGROUND_FN);
     pGraphics->AttachControl(new IBitmapControl(b, linesBitmap));
-    pGraphics->AttachControl(new IVLabelControl(titleArea, "NEURAL AMP MODELER", titleStyle));
+    pGraphics->AttachControl(new IVLabelControl(titleArea, "NAM-OVERSAMPLER", titleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
 
 #ifdef NAM_PICK_DIRECTORY
@@ -284,6 +288,13 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(new NAMMeterControl(outputMeterArea, meterBackgroundBitmap, style), kCtrlTagOutputMeter);
 
     // Settings/help/about box
+    pGraphics->AttachControl(new NAMBitmapButtonControl(
+      oversamplingButtonArea,
+      [pGraphics](IControl* pCaller) {
+        pGraphics->GetControlWithTag(kCtrlTagOversamplingBox)->As<NAMOversamplingPageControl>()->HideAnimated(false);
+      },
+      ttsLogoBitmap));
+
     pGraphics->AttachControl(new NAMCircleButtonControl(
       settingsButtonArea,
       [pGraphics](IControl* pCaller) {
@@ -295,6 +306,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       ->AttachControl(new NAMSettingsPageControl(b, backgroundBitmap, inputLevelBackgroundBitmap, switchHandleBitmap,
                                                  crossSVG, style, radioButtonStyle),
                       kCtrlTagSettingsBox)
+      ->Hide(true);
+
+    pGraphics
+      ->AttachControl(
+        new NAMOversamplingPageControl(b, backgroundBitmap, crossSVG, style, radioButtonStyle), kCtrlTagOversamplingBox)
       ->Hide(true);
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
@@ -354,15 +370,17 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
     mNoiseGateTrigger.SetSampleRate(sampleRate);
     triggerOutput = mNoiseGateTrigger.Process(mInputPointers, numChannelsInternal, numFrames);
   }
+  _ApplyInputGain(triggerOutput, numFrames, numChannelsInternal);
 
   if (mModel != nullptr)
   {
-    mModel->process(triggerOutput, mOutputPointers, nFrames);
+    mModel->process(mInputPointers, mOutputPointers, nFrames);
   }
   else
   {
-    _FallbackDSP(triggerOutput, mOutputPointers, numChannelsInternal, numFrames);
+    _FallbackDSP(mInputPointers, mOutputPointers, numChannelsInternal, numFrames);
   }
+
   // Apply the noise gate after the NAM
   sample** gateGainOutput =
     noiseGateActive ? mNoiseGateGain.Process(mOutputPointers, numChannelsInternal, numFrames) : mOutputPointers;
@@ -522,6 +540,25 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kToneMid: mToneStack->SetParam("middle", GetParam(paramIdx)->Value()); break;
     case kToneTreble: mToneStack->SetParam("treble", GetParam(paramIdx)->Value()); break;
     case kSlim: _ApplySlimParamToLoadedNAMs(); break;
+    case kOversamplingFactor:
+      {
+        // Convert enum value (0-5) to factor (1, 2, 4, 8, 16, 32)
+        int enumValue = static_cast<int>(GetParam(kOversamplingFactor)->Value());
+        int factor = 1 << enumValue; // 2^enumValue
+        mOversamplingFactor = factor;
+        if (mModel) mModel->SetOversamplingFactor(factor);
+        _UpdateLatency();
+      }
+      break;
+    case kAntiAliasFilterPhase:
+      {
+        const int enumValue = static_cast<int>(GetParam(kAntiAliasFilterPhase)->Value());
+        mAntiAliasFilterPhase = enumValue == 0 ? dsp::EAntiAliasFilterPhase::MinimumPhase
+                                               : dsp::EAntiAliasFilterPhase::LinearPhase;
+        if (mModel) mModel->SetAntiAliasFilterPhase(mAntiAliasFilterPhase);
+        _UpdateLatency();
+      }
+      break;
     default: break;
   }
 }
@@ -616,6 +653,8 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   {
     mModel = std::move(mStagedModel);
     mStagedModel = nullptr;
+    mModel->SetOversamplingFactor(mOversamplingFactor);
+    mModel->SetAntiAliasFilterPhase(mAntiAliasFilterPhase);
     mNewModelLoadedInDSP = true;
     _UpdateLatency();
     _SetInputGain();
@@ -897,7 +936,7 @@ void NeuralAmpModeler::_ProcessInput(iplug::sample** inputs, const size_t nFrame
   // carried straight through. Don't apply any division over nChansIn because we're just "catching anything out there."
   // However, in a DAW, it's probably something providing stereo, and we want to take the average in order to avoid
   // doubling the loudness. (This would change w/ double mono processing)
-  double gain = mInputGain;
+  double gain = 1.0;
 #ifndef APP_API
   gain /= (float)nChansIn;
 #endif
@@ -908,6 +947,14 @@ void NeuralAmpModeler::_ProcessInput(iplug::sample** inputs, const size_t nFrame
         mInputArray[0][s] = gain * inputs[c][s];
       else
         mInputArray[0][s] += gain * inputs[c][s];
+}
+
+void NeuralAmpModeler::_ApplyInputGain(iplug::sample** inputs, const size_t nFrames, const size_t nChans)
+{
+  const double gain = mInputGain;
+  for (size_t c = 0; c < nChans; c++)
+    for (size_t s = 0; s < nFrames; s++)
+      mInputArray[c][s] = gain * inputs[c][s];
 }
 
 void NeuralAmpModeler::_ProcessOutput(iplug::sample** inputs, iplug::sample** outputs, const size_t nFrames,
