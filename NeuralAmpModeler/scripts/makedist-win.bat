@@ -85,6 +85,11 @@ REM msbuild NeuralAmpModeler.sln /p:configuration=release /p:platform=win32 /nol
 REM echo Building 64 bit binaries...
 REM add projects with /t to build VST3 and AAX
 msbuild NeuralAmpModeler.sln /t:NeuralAmpModeler-app;NeuralAmpModeler-vst3 /p:configuration=release /p:platform=x64 /nologo /verbosity:minimal /fileLogger /m /flp:logfile=build-win.log;errorsonly;append
+if errorlevel 1 (
+  echo MSBuild failed.
+  if exist build-win.log type build-win.log
+  exit /B 1
+)
 
 REM --echo Copying AAX Presets
 
@@ -127,6 +132,10 @@ echo Making Installer ...
 
 FOR /F "tokens=* USEBACKQ" %%F IN (`call python scripts\makezip-win.py %DEMO% %ZIP%`) DO (
 SET ZIP_NAME=%%F
+)
+if errorlevel 1 (
+  echo Failed to make zip.
+  exit /B 1
 )
 
 echo ------------------------------------------------------------------
