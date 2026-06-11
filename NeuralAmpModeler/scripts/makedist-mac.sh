@@ -1,6 +1,6 @@
-#! /bin/sh
+#!/usr/bin/env bash
 
-# this script requires xcpretty https://github.com/xcpretty/xcpretty
+# If xcpretty is available, the build log is formatted with it.
 
 BASEDIR=$(dirname $0)
 
@@ -152,12 +152,19 @@ fi
 #---------------------------------------------------------------------------------------------------------
 # build xcode project. Change target to build individual formats, or add to All target in the xcode project
 
-xcodebuild -project ./projects/$PLUGIN_NAME-macOS.xcodeproj -xcconfig ./config/$PLUGIN_NAME-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release | tee build-mac.log | xcpretty #&& exit ${PIPESTATUS[0]}
+if command -v xcpretty >/dev/null 2>&1; then
+  xcodebuild -project ./projects/$PLUGIN_NAME-macOS.xcodeproj -xcconfig ./config/$PLUGIN_NAME-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release 2>&1 | tee build-mac.log | xcpretty
+  BUILD_STATUS=${PIPESTATUS[0]}
+else
+  echo "xcpretty not found; using raw xcodebuild output"
+  xcodebuild -project ./projects/$PLUGIN_NAME-macOS.xcodeproj -xcconfig ./config/$PLUGIN_NAME-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release 2>&1 | tee build-mac.log
+  BUILD_STATUS=${PIPESTATUS[0]}
+fi
 
-if [ "${PIPESTATUS[0]}" -ne "0" ]; then
+if [ "${BUILD_STATUS}" -ne "0" ]; then
   echo "ERROR: build failed, aborting"
   echo ""
-  # cat build-mac.log
+  cat build-mac.log
   exit 1
 else
   rm build-mac.log
