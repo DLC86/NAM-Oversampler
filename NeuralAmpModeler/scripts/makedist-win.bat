@@ -37,7 +37,15 @@ echo ------------------------------------------------------------------
 echo Updating version numbers ...
 
 call python prepare_resources-win.py %DEMO%
+if errorlevel 1 (
+  echo prepare_resources-win.py failed.
+  exit /B 1
+)
 call python update_installer-win.py %DEMO%
+if errorlevel 1 (
+  echo update_installer-win.py failed.
+  exit /B 1
+)
 
 cd ..\
 
