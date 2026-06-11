@@ -8,6 +8,8 @@ build-*
 *.db
 *.suo
 */.vs
+__pycache__/
+*.pyc
 *.pem
 mkcert*
 

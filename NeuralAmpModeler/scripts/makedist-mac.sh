@@ -16,6 +16,7 @@ fi
 IPLUG2_ROOT=../iPlug2
 XCCONFIG=$IPLUG2_ROOT/../common-mac.xcconfig
 SCRIPTS=$IPLUG2_ROOT/Scripts
+PROJECT_NAME=${PROJECT_NAME:-$(basename "$PWD")}
 
 # CODESIGN disabled by default. 
 CODESIGN=0
@@ -73,6 +74,26 @@ copy_third_party_notices()
 
 if [ $DEMO == 1 ]; then
   ARCHIVE_NAME=$ARCHIVE_NAME-demo
+fi
+
+PROJECT_XCCONFIG="./config/$PROJECT_NAME-mac.xcconfig"
+if [ ! -f "$PROJECT_XCCONFIG" ]; then
+  PROJECT_XCCONFIG="./config/$PLUGIN_NAME-mac.xcconfig"
+fi
+
+PROJECT_XCODEPROJ="./projects/$PROJECT_NAME-macOS.xcodeproj"
+if [ ! -d "$PROJECT_XCODEPROJ" ]; then
+  PROJECT_XCODEPROJ="./projects/$PLUGIN_NAME-macOS.xcodeproj"
+fi
+
+ICON_FILE="resources/$PLUGIN_NAME.icns"
+if [ ! -f "$ICON_FILE" ]; then
+  ICON_FILE="resources/$PROJECT_NAME.icns"
+fi
+
+MANUAL_FILE="manual/$PLUGIN_NAME manual.pdf"
+if [ ! -f "$MANUAL_FILE" ]; then
+  MANUAL_FILE="manual/$PROJECT_NAME manual.pdf"
 fi
 
 # TODO: use get_archive_name script
@@ -153,11 +174,11 @@ fi
 # build xcode project. Change target to build individual formats, or add to All target in the xcode project
 
 if command -v xcpretty >/dev/null 2>&1; then
-  xcodebuild -project ./projects/$PLUGIN_NAME-macOS.xcodeproj -xcconfig ./config/$PLUGIN_NAME-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release 2>&1 | tee build-mac.log | xcpretty
+  xcodebuild -project "$PROJECT_XCODEPROJ" -xcconfig "$PROJECT_XCCONFIG" DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release 2>&1 | tee build-mac.log | xcpretty
   BUILD_STATUS=${PIPESTATUS[0]}
 else
   echo "xcpretty not found; using raw xcodebuild output"
-  xcodebuild -project ./projects/$PLUGIN_NAME-macOS.xcodeproj -xcconfig ./config/$PLUGIN_NAME-mac.xcconfig DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release 2>&1 | tee build-mac.log
+  xcodebuild -project "$PROJECT_XCODEPROJ" -xcconfig "$PROJECT_XCCONFIG" DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release 2>&1 | tee build-mac.log
   BUILD_STATUS=${PIPESTATUS[0]}
 fi
 
@@ -177,15 +198,15 @@ echo "setting icons"
 echo ""
 
 if [ -d $AU ]; then
-  ./$SCRIPTS/SetFileIcon -image resources/$PLUGIN_NAME.icns -file $AU
+  ./$SCRIPTS/SetFileIcon -image "$ICON_FILE" -file $AU
 fi
 
 if [ -d $VST3 ]; then
-  ./$SCRIPTS/SetFileIcon -image resources/$PLUGIN_NAME.icns -file $VST3
+  ./$SCRIPTS/SetFileIcon -image "$ICON_FILE" -file $VST3
 fi
 
 if [ -d "${AAX}" ]; then
-  ./$SCRIPTS/SetFileIcon -image resources/$PLUGIN_NAME.icns -file "${AAX}"
+  ./$SCRIPTS/SetFileIcon -image "$ICON_FILE" -file "${AAX}"
 fi
 
 #---------------------------------------------------------------------------------------------------------
@@ -262,7 +283,7 @@ if [ $BUILD_INSTALLER == 1 ]; then
   fi
 
   #set installer icon
-  ./$SCRIPTS/SetFileIcon -image resources/$PLUGIN_NAME.icns -file "${PKG}"
+  ./$SCRIPTS/SetFileIcon -image "$ICON_FILE" -file "${PKG}"
 
   #---------------------------------------------------------------------------------------------------------
   # make dmg, can use dmgcanvas http://www.araelium.com/dmgcanvas/ to make a nice dmg, fallback to hdiutil
@@ -274,7 +295,7 @@ if [ $BUILD_INSTALLER == 1 ]; then
   else
     cp installer/changelog.txt build-mac/installer/
     cp installer/known-issues.txt build-mac/installer/
-    cp "manual/$PLUGIN_NAME manual.pdf" build-mac/installer/
+    cp "$MANUAL_FILE" build-mac/installer/
     hdiutil create build-mac/$ARCHIVE_NAME.dmg -format UDZO -srcfolder build-mac/installer/ -ov -anyowners -volname $PLUGIN_NAME
   fi
 

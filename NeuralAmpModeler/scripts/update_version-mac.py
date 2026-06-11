@@ -21,6 +21,15 @@ from parse_config import parse_config, parse_xcconfig
 
 def main():
     config = parse_config(projectpath)
+    project_name = os.environ.get("PROJECT_NAME", os.path.basename(projectpath))
+    bundle_name = config["BUNDLE_NAME"]
+
+    def resource_path(suffix):
+        bundle_path = os.path.join(projectpath, "resources", bundle_name + suffix)
+        if os.path.exists(bundle_path):
+            return bundle_path
+        return os.path.join(projectpath, "resources", project_name + suffix)
+
     xcconfig = parse_xcconfig(
         os.path.join(os.getcwd(), IPLUG2_ROOT + "/../common-mac.xcconfig")
     )
@@ -41,7 +50,7 @@ def main():
 
     # VST3
 
-    plistpath = projectpath + "/resources/" + config["BUNDLE_NAME"] + "-VST3-Info.plist"
+    plistpath = resource_path("-VST3-Info.plist")
     with open(plistpath, "rb") as f:
         vst3 = plistlib.load(f)
         vst3["CFBundleExecutable"] = config["BUNDLE_NAME"]
@@ -67,7 +76,7 @@ def main():
 
     # AUDIOUNIT v2
 
-    plistpath = projectpath + "/resources/" + config["BUNDLE_NAME"] + "-AU-Info.plist"
+    plistpath = resource_path("-AU-Info.plist")
     with open(plistpath, "rb") as f:
         auv2 = plistlib.load(f)
         auv2["CFBundleExecutable"] = config["BUNDLE_NAME"]
@@ -121,9 +130,7 @@ def main():
     else:
         NSEXTENSIONPOINTIDENTIFIER = "com.apple.AudioUnit"
 
-    plistpath = (
-        projectpath + "/resources/" + config["BUNDLE_NAME"] + "-macOS-AUv3-Info.plist"
-    )
+    plistpath = resource_path("-macOS-AUv3-Info.plist")
 
     with open(plistpath, "rb") as f:
         auv3 = plistlib.load(f)
@@ -196,7 +203,7 @@ def main():
 
     # AAX
 
-    plistpath = projectpath + "/resources/" + config["BUNDLE_NAME"] + "-AAX-Info.plist"
+    plistpath = resource_path("-AAX-Info.plist")
     with open(plistpath, "rb") as f:
         aax = plistlib.load(f)
         aax["CFBundleExecutable"] = config["BUNDLE_NAME"]
@@ -220,9 +227,7 @@ def main():
 
     # APP
 
-    plistpath = (
-        projectpath + "/resources/" + config["BUNDLE_NAME"] + "-macOS-Info.plist"
-    )
+    plistpath = resource_path("-macOS-Info.plist")
 
     with open(plistpath, "rb") as f:
         macOSapp = plistlib.load(f)
@@ -244,7 +249,10 @@ def main():
         macOSapp["CFBundleSignature"] = config["PLUG_UNIQUE_ID"]
         macOSapp["CSResourcesFileMapped"] = CSResourcesFileMapped
         macOSapp["NSPrincipalClass"] = "SWELLApplication"
-        macOSapp["NSMainNibFile"] = config["BUNDLE_NAME"] + "-macOS-MainMenu"
+        bundle_nib_path = resource_path("-macOS-MainMenu.xib")
+        macOSapp["NSMainNibFile"] = (
+            os.path.splitext(os.path.basename(bundle_nib_path))[0]
+        )
         macOSapp["LSApplicationCategoryType"] = "public.app-category.music"
         macOSapp[
             "NSMicrophoneUsageDescription"
