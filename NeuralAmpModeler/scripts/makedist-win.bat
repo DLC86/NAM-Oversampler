@@ -138,9 +138,7 @@ echo Making Installer ...
   echo Making Zip File ...
 )
 
-FOR /F "tokens=* USEBACKQ" %%F IN (`call python scripts\makezip-win.py %DEMO% %ZIP%`) DO (
-SET ZIP_NAME=%%F
-)
+call python scripts\makezip-win.py %DEMO% %ZIP%
 if errorlevel 1 (
   echo Failed to make zip.
   exit /B 1
@@ -157,6 +155,6 @@ echo Usage: %0 [demo/full] [zip/installer]
 exit /B 1
 
 :SUCCESS
-echo %ZIP_NAME%
+echo Build distribution completed.
 
 exit /B 0

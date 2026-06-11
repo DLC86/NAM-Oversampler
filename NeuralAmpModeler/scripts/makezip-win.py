@@ -21,11 +21,30 @@ def add_dir(zf, path, arcroot=None):
     if not os.path.isdir(path):
         raise FileNotFoundError(path)
     arcroot = arcroot or os.path.basename(path)
+    count = 0
     for root, _, filenames in os.walk(path):
         for filename in filenames:
             fullpath = os.path.join(root, filename)
             relpath = os.path.relpath(fullpath, path)
             zf.write(fullpath, os.path.join(arcroot, relpath), zipfile.ZIP_DEFLATED)
+            count += 1
+    if count == 0:
+        raise RuntimeError("Directory is empty: " + path)
+
+
+def validate_inputs(files):
+    for path, _ in files:
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        if os.path.isdir(path) and not any(os.scandir(path)):
+            raise RuntimeError("Directory is empty: " + path)
+
+
+def first_existing(paths):
+    for path in paths:
+        if os.path.exists(path):
+            return path
+    return paths[0]
 
 
 def main():
@@ -61,36 +80,57 @@ def main():
             manual = os.path.join(projectpath, "manual", project_name + " manual.pdf")
 
         files = [
-            os.path.join(projectpath, installer),
-            os.path.join(projectpath, "installer", "changelog.txt"),
-            os.path.join(projectpath, "installer", "known-issues.txt"),
-            manual,
+            (os.path.join(projectpath, installer), None),
+            (os.path.join(projectpath, "installer", "changelog.txt"), None),
+            (os.path.join(projectpath, "installer", "known-issues.txt"), None),
+            (manual, None),
         ]
     else:
+        vst3 = first_existing(
+            [
+                os.path.join(projectpath, "build-win", bundle_name + ".vst3"),
+                os.path.join(
+                    projectpath,
+                    "build-win",
+                    "vst3",
+                    "x64",
+                    "Release",
+                    bundle_name + ".vst3",
+                ),
+            ]
+        )
+        app = first_existing(
+            [
+                os.path.join(projectpath, "build-win", bundle_name + "_x64.exe"),
+                os.path.join(
+                    projectpath,
+                    "build-win",
+                    "app",
+                    "x64",
+                    "Release",
+                    bundle_name + ".exe",
+                ),
+            ]
+        )
         files = [
-            os.path.join(projectpath, "build-win", bundle_name + ".vst3"),
-            os.path.join(projectpath, "build-win", bundle_name + "_x64.exe"),
+            (vst3, bundle_name + ".vst3"),
+            (app, bundle_name + "_x64.exe"),
         ]
 
     zipname = get_archive_name(projectpath, "win", "demo" if demo == 1 else "full")
+    zip_path = os.path.join(projectpath, "build-win", "out", zipname + ".zip")
+    pdb_zip_path = os.path.join(projectpath, "build-win", "out", zipname + "-pdbs.zip")
 
-    zf = zipfile.ZipFile(
-        projectpath + "\\build-win\\out\\" + zipname + ".zip", mode="w"
-    )
+    validate_inputs(files)
 
-    for f in files:
-        print("adding " + f)
-        if os.path.isdir(f):
-            add_dir(zf, f)
-        else:
-            add_file(zf, f)
-
-    zf.close()
+    with zipfile.ZipFile(zip_path, mode="w") as zf:
+        for f, arcname in files:
+            print("adding " + f)
+            if os.path.isdir(f):
+                add_dir(zf, f, arcname)
+            else:
+                add_file(zf, f, arcname)
     print("wrote " + zipname)
-
-    zf = zipfile.ZipFile(
-        projectpath + "\\build-win\\out\\" + zipname + "-pdbs.zip", mode="w"
-    )
 
     pdb_dir = os.path.join(projectpath, "build-win", "pdbs")
     files = []
@@ -103,13 +143,12 @@ def main():
 
     if not files:
         print("No PDB files found in " + pdb_dir)
-
-    for f in files:
-        print("adding " + f)
-        add_file(zf, f)
-
-    zf.close()
-    print("wrote " + zipname)
+    else:
+        with zipfile.ZipFile(pdb_zip_path, mode="w") as zf:
+            for f in files:
+                print("adding " + f)
+                add_file(zf, f)
+        print("wrote " + zipname + "-pdbs")
 
 
 if __name__ == "__main__":
