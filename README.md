@@ -22,7 +22,7 @@ https://arxiv.org/abs/2505.04082
 
 ## How to use oversampling
 
-Click on the logo in the upper-left corner, the Oversampling menu will appear and provide these options:
+Click on the logo in the upper-left corner, the Oversampling menu will appear and provide these options, for both realtime usage and offliine rendering:
 
 - OFF
 - 2x
@@ -33,8 +33,8 @@ Click on the logo in the upper-left corner, the Oversampling menu will appear an
 
 It also includes selectable anti-alias filter phase modes:
 
-- Min Phase
-- Linear Phase
+- Min Phase (0.7 ms latency)
+- Linear Phase (4.7 ms latency)
 
 ## Noise gate position
 
