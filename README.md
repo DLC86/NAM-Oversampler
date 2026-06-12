@@ -44,5 +44,3 @@ The noise gate trigger now works before the input gain control is applied. The i
 
 This keeps the gate behavior less affected by input gain changes while preserving the post-NAM gate gain stage.
 
-Idea inspired
-
