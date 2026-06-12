@@ -42,9 +42,4 @@ This fork also changes the input/gate staging.
 
 The noise gate trigger now works before the input gain control is applied. The input gain is applied after the gate trigger stage and before the NAM model.
 
-<<<<<<< HEAD
 This keeps the gate behavior less affected by input gain changes while preserving the post-NAM gate gain stage.
-
-=======
-This keeps the gate behavior less affected by input gain changes while preserving the post-NAM gate gain stage.
->>>>>>> a9babce (Release v1.1.1 oversampling fixes)
