@@ -51,6 +51,7 @@ enum EParams
   kSlim,
   kOversamplingFactor,
   kAntiAliasFilterPhase,
+  kOfflineOversamplingFactor,
   kNumParams
 };
 
@@ -72,6 +73,7 @@ enum ECtrlTags
   kCtrlTagOversamplingBox,
   kCtrlTagOversampling,
   kCtrlTagAntiAliasFilterPhase,
+  kCtrlTagOfflineOversampling,
   kNumCtrlTags
 };
 
@@ -321,6 +323,8 @@ private:
   void _SetInputGain();
   void _SetOutputGain();
   void _ApplySlimParamToLoadedNAMs();
+  int _GetActiveOversamplingFactor() const;
+  void _ApplyActiveOversamplingFactor();
 
   // See: Unserialization.cpp
   void _UnserializeApplyConfig(nlohmann::json& config);
@@ -381,6 +385,8 @@ private:
 
   // Oversampling factor (1, 2, 4, 8, 16, 32)
   int mOversamplingFactor = 1;
+  int mOfflineOversamplingFactor = 1;
+  int mAppliedOversamplingFactor = 1;
   dsp::EAntiAliasFilterPhase mAntiAliasFilterPhase = dsp::EAntiAliasFilterPhase::MinimumPhase;
 
   // Path to model's config.json or model.nam

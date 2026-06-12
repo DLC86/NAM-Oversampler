@@ -6,13 +6,13 @@
 	<array>
 		<dict>
 			<key>description</key>
-			<string>NeuralAmpModeler</string>
+			<string>NAM-Oversampler</string>
 			<key>factoryFunction</key>
 			<string>NeuralAmpModeler_Factory</string>
 			<key>manufacturer</key>
-			<string>SDAa</string>
+			<string>TTSc</string>
 			<key>name</key>
-			<string>Steven Atkinson: NeuralAmpModeler</string>
+			<string>The Tone Scientist: NAM-Oversampler</string>
 			<key>sandboxSafe</key>
 			<true/>
 			<key>subtype</key>
@@ -20,31 +20,31 @@
 			<key>type</key>
 			<string>aufx</string>
 			<key>version</key>
-			<integer>1807</integer>
+			<integer>65792</integer>
 		</dict>
 	</array>
 	<key>AudioUnit Version</key>
-	<string>0x0000070f</string>
+	<string>0x00010100</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
-	<string>NeuralAmpModeler</string>
+	<string>NAM-Oversampler</string>
 	<key>CFBundleGetInfoString</key>
-	<string>NeuralAmpModeler v0.7.15 Copyright 2022 Steven Atkinson</string>
+	<string>NAM-Oversampler v1.1.0 Copyright 2022 Steven Atkinson</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.StevenAtkinson.audiounit.NeuralAmpModeler</string>
+	<string>com.TheToneScientist.audiounit.NAM-Oversampler</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>NeuralAmpModeler</string>
+	<string>NAM-Oversampler</string>
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.7.15</string>
+	<string>1.1.0</string>
 	<key>CFBundleSignature</key>
 	<string>1YEo</string>
 	<key>CFBundleVersion</key>
-	<string>0.7.15</string>
+	<string>1.1.0</string>
 	<key>CSResourcesFileMapped</key>
 	<true/>
 	<key>LSMinimumSystemVersion</key>

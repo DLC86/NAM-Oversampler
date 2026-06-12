@@ -718,8 +718,8 @@ class AntiAliasFilterPhaseControl : public IVRadioButtonControl
 public:
   AntiAliasFilterPhaseControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
                               EDirection direction = EDirection::Vertical)
-  : IVRadioButtonControl(bounds, paramIdx, {"Min Phase", "Linear Phase"}, "", style, EVShape::Ellipse, direction,
-                         buttonSize) {};
+  : IVRadioButtonControl(bounds, paramIdx, {"Min Phase", "Linear Phase"}, "", style, EVShape::Ellipse,
+                         direction, buttonSize) {};
 };
 
 class NAMOversamplingPageControl : public IContainerBaseWithNamedChildren
@@ -780,20 +780,40 @@ public:
     const auto page = GetRECT();
     const auto content = page.GetPadded(-(pad + 10.0f));
     const auto titleArea = content.GetFromTop(50.0f);
-    const auto radioArea = content.GetCentredInside(430.0f, 54.0f).GetVShifted(-34.0f);
-    const auto filterArea = content.GetCentredInside(280.0f, 54.0f).GetVShifted(28.0f);
+    const auto rowsArea = content.GetCentredInside(540.0f, 138.0f).GetVShifted(-14.0f);
+    const auto realtimeRow = rowsArea.SubRectVertical(3, 0);
+    const auto offlineRow = rowsArea.SubRectVertical(3, 1);
+    const auto filterRow = rowsArea.SubRectVertical(3, 2);
+    const auto realtimeLabelArea = realtimeRow.GetFromLeft(100.0f);
+    const auto offlineLabelArea = offlineRow.GetFromLeft(100.0f);
+    const auto filterLabelArea = filterRow.GetFromLeft(100.0f);
+    const auto realtimeRadioArea = realtimeRow.GetFromRight(430.0f);
+    const auto offlineRadioArea = offlineRow.GetFromRight(430.0f);
+    const auto filterArea = filterRow.GetFromRight(430.0f).GetFromLeft(240.0f);
     const auto infoArea = content.GetFromBottom(72.0f).GetHPadded(-8.0f);
     const float buttonSize = 10.0f;
     const auto infoText = IText(12, EAlign::Center, PluginColors::HELP_TEXT);
     const auto infoStyle = mStyle.WithDrawFrame(false).WithValueText(infoText);
+    const auto rowLabelText = IText(11, EAlign::Center, PluginColors::HELP_TEXT);
+    const auto rowLabelStyle = mStyle.WithDrawFrame(false).WithValueText(rowLabelText);
 
     AddNamedChildControl(new IBitmapControl(page, mBitmap), mControlNames.bitmap)->SetIgnoreMouse(true);
     AddNamedChildControl(new IVLabelControl(titleArea, "OVERSAMPLING", titleStyle), mControlNames.title);
 
+    AddNamedChildControl(new IVLabelControl(realtimeLabelArea, "REALTIME", rowLabelStyle), mControlNames.realtimeLabel);
+    AddNamedChildControl(new IVLabelControl(offlineLabelArea, "OFFLINE", rowLabelStyle), mControlNames.offlineLabel);
+    AddNamedChildControl(new IVLabelControl(filterLabelArea, "FILTER", rowLabelStyle), mControlNames.filterLabel);
+
     auto* oversamplingControl = AddNamedChildControl(
-      new OversamplingControl(radioArea, kOversamplingFactor, mRadioButtonStyle, buttonSize, EDirection::Horizontal),
+      new OversamplingControl(realtimeRadioArea, kOversamplingFactor, mRadioButtonStyle, buttonSize, EDirection::Horizontal),
       mControlNames.oversampling, kCtrlTagOversampling);
-    oversamplingControl->SetTooltip("Oversampling factor");
+    oversamplingControl->SetTooltip("Realtime oversampling factor");
+
+    auto* offlineOversamplingControl =
+      AddNamedChildControl(new OversamplingControl(offlineRadioArea, kOfflineOversamplingFactor, mRadioButtonStyle,
+                                                   buttonSize, EDirection::Horizontal),
+                           mControlNames.offlineOversampling, kCtrlTagOfflineOversampling);
+    offlineOversamplingControl->SetTooltip("Offline/render oversampling factor");
 
     auto* filterPhaseControl =
       AddNamedChildControl(new AntiAliasFilterPhaseControl(filterArea, kAntiAliasFilterPhase, mRadioButtonStyle,
@@ -801,7 +821,7 @@ public:
                            mControlNames.filterPhase, kCtrlTagAntiAliasFilterPhase);
     filterPhaseControl->SetTooltip("Anti-alias filter phase");
 
-    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 0), "NAM-Oversampler v1.0.0", infoStyle),
+    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 0), "NAM-Oversampler v1.1.0", infoStyle),
                          mControlNames.version);
     AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 1), "The Tone Scientist", infoStyle),
                          mControlNames.author);
@@ -834,9 +854,13 @@ private:
     const std::string author = "Author";
     const std::string bitmap = "Bitmap";
     const std::string close = "Close";
+    const std::string filterLabel = "FilterLabel";
     const std::string filterPhase = "FilterPhase";
     const std::string github = "GitHub";
+    const std::string offlineLabel = "OfflineLabel";
+    const std::string offlineOversampling = "OfflineOversampling";
     const std::string oversampling = "Oversampling";
+    const std::string realtimeLabel = "RealtimeLabel";
     const std::string shop = "Shop";
     const std::string title = "Title";
     const std::string version = "Version";

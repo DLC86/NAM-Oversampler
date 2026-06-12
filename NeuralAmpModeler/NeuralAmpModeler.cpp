@@ -96,6 +96,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kSlim)->InitDouble("Slim", 1.0, 0.0, 1.0, 0.01);
   GetParam(kOversamplingFactor)->InitEnum("Oversampling", 0, {"OFF", "2x", "4x", "8x", "16x", "32x"});
   GetParam(kAntiAliasFilterPhase)->InitEnum("Filter Phase", 0, {"Min Phase", "Linear Phase"});
+  GetParam(kOfflineOversamplingFactor)->InitEnum("Offline Oversampling", 0, {"OFF", "2x", "4x", "8x", "16x", "32x"});
 
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
 
@@ -352,6 +353,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   // Input is collapsed to mono in preparation for the NAM.
   _ProcessInput(inputs, numFrames, numChannelsExternalIn, numChannelsInternal);
   _ApplyDSPStaging();
+  _ApplyActiveOversamplingFactor();
   const bool noiseGateActive = GetParam(kNoiseGateActive)->Value();
   const bool toneStackActive = GetParam(kEQActive)->Value();
 
@@ -546,8 +548,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
         int enumValue = static_cast<int>(GetParam(kOversamplingFactor)->Value());
         int factor = 1 << enumValue; // 2^enumValue
         mOversamplingFactor = factor;
-        if (mModel) mModel->SetOversamplingFactor(factor);
-        _UpdateLatency();
+        _ApplyActiveOversamplingFactor();
       }
       break;
     case kAntiAliasFilterPhase:
@@ -557,6 +558,13 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
                                                : dsp::EAntiAliasFilterPhase::LinearPhase;
         if (mModel) mModel->SetAntiAliasFilterPhase(mAntiAliasFilterPhase);
         _UpdateLatency();
+      }
+      break;
+    case kOfflineOversamplingFactor:
+      {
+        const int enumValue = static_cast<int>(GetParam(kOfflineOversamplingFactor)->Value());
+        mOfflineOversamplingFactor = 1 << enumValue;
+        _ApplyActiveOversamplingFactor();
       }
       break;
     default: break;
@@ -653,7 +661,8 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   {
     mModel = std::move(mStagedModel);
     mStagedModel = nullptr;
-    mModel->SetOversamplingFactor(mOversamplingFactor);
+    mAppliedOversamplingFactor = 0;
+    _ApplyActiveOversamplingFactor();
     mModel->SetAntiAliasFilterPhase(mAntiAliasFilterPhase);
     mNewModelLoadedInDSP = true;
     _UpdateLatency();
@@ -779,6 +788,25 @@ void NeuralAmpModeler::_ApplySlimParamToLoadedNAMs()
   };
   apply(mModel.get());
   apply(mStagedModel.get());
+}
+
+int NeuralAmpModeler::_GetActiveOversamplingFactor() const
+{
+  return GetRenderingOffline() ? mOfflineOversamplingFactor : mOversamplingFactor;
+}
+
+void NeuralAmpModeler::_ApplyActiveOversamplingFactor()
+{
+  const int factor = _GetActiveOversamplingFactor();
+  if (factor == mAppliedOversamplingFactor)
+    return;
+
+  mAppliedOversamplingFactor = factor;
+  if (mModel != nullptr)
+  {
+    mModel->SetOversamplingFactor(factor);
+    _UpdateLatency();
+  }
 }
 
 std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)

@@ -1,19 +1,19 @@
 [Setup]
-AppName=NeuralAmpModeler
+AppName=NAM-Oversampler
 AppContact=neuralampmodeler@gmail.com
 AppCopyright=Copyright (C) 2022 Steven Atkinson
 AppPublisher=Steven Atkinson
 AppPublisherURL=https://www.neuralampmodeler.com/
 AppSupportURL=https://www.neuralampmodeler.com/
-AppVersion=0.7.15
-VersionInfoVersion=0.7.15
-DefaultDirName={pf}\NeuralAmpModeler
-DefaultGroupName=NeuralAmpModeler
+AppVersion=1.1.0
+VersionInfoVersion=1.1.0
+DefaultDirName={pf}\NAM-Oversampler
+DefaultGroupName=NAM-Oversampler
 Compression=lzma2
 SolidCompression=yes
 OutputDir=.\..\build-win\installer
 ArchitecturesInstallIn64BitMode=x64
-OutputBaseFilename=NeuralAmpModeler Installer
+OutputBaseFilename=NAM-Oversampler Installer
 LicenseFile=license.rtf
 SetupLogging=yes
 ShowComponentSizes=no
@@ -25,8 +25,8 @@ Name: "full"; Description: "Full installation"
 Name: "custom"; Description: "Custom installation"; Flags: iscustom
 
 [Messages]
-WelcomeLabel1=Welcome to the NeuralAmpModeler installer
-SetupWindowTitle=NeuralAmpModeler installer
+WelcomeLabel1=Welcome to the NAM-Oversampler installer
+SetupWindowTitle=NAM-Oversampler installer
 SelectDirLabel3=The standalone application and supporting files will be installed in the following folder.
 SelectDirBrowseLabel=To continue, click Next. If you would like to select a different folder (not recommended), click Browse.
 
