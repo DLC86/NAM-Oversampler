@@ -821,7 +821,7 @@ public:
                            mControlNames.filterPhase, kCtrlTagAntiAliasFilterPhase);
     filterPhaseControl->SetTooltip("Anti-alias filter phase");
 
-    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 0), "NAM-Oversampler v1.1.0", infoStyle),
+    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 0), "NAM-Oversampler v1.1.1", infoStyle),
                          mControlNames.version);
     AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 1), "The Tone Scientist", infoStyle),
                          mControlNames.author);

@@ -353,7 +353,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   // Input is collapsed to mono in preparation for the NAM.
   _ProcessInput(inputs, numFrames, numChannelsExternalIn, numChannelsInternal);
   _ApplyDSPStaging();
-  _ApplyActiveOversamplingFactor();
+  _PrepareRealtimeDSPTransition(sampleRate);
   const bool noiseGateActive = GetParam(kNoiseGateActive)->Value();
   const bool toneStackActive = GetParam(kEQActive)->Value();
 
@@ -411,6 +411,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   // Let's get outta here
   // This is where we exit mono for whatever the output requires.
   _ProcessOutput(hpfPointers, outputs, numFrames, numChannelsInternal, numChannelsExternalOut);
+  _ApplyRealtimeDSPTransitionGain(outputs, numFrames, numChannelsExternalOut);
   // _ProcessOutput(lpfPointers, outputs, numFrames, numChannelsInternal, numChannelsExternalOut);
   // * Output of input leveling (inputs -> mInputPointers),
   // * Output of output leveling (mOutputPointers -> outputs)
@@ -431,6 +432,7 @@ void NeuralAmpModeler::OnReset()
   mOutputSender.Reset(sampleRate);
   // If there is a model or IR loaded, they need to be checked for resampling.
   _ResetModelAndIR(sampleRate, GetBlockSize());
+  _ApplyActiveDSPSettings(false);
   mToneStack->Reset(sampleRate, maxBlockSize);
   _UpdateLatency();
 }
@@ -548,23 +550,18 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
         int enumValue = static_cast<int>(GetParam(kOversamplingFactor)->Value());
         int factor = 1 << enumValue; // 2^enumValue
         mOversamplingFactor = factor;
-        _ApplyActiveOversamplingFactor();
       }
       break;
     case kAntiAliasFilterPhase:
       {
         const int enumValue = static_cast<int>(GetParam(kAntiAliasFilterPhase)->Value());
-        mAntiAliasFilterPhase = enumValue == 0 ? dsp::EAntiAliasFilterPhase::MinimumPhase
-                                               : dsp::EAntiAliasFilterPhase::LinearPhase;
-        if (mModel) mModel->SetAntiAliasFilterPhase(mAntiAliasFilterPhase);
-        _UpdateLatency();
+        mAntiAliasFilterPhaseIndex = enumValue == 0 ? 0 : 1;
       }
       break;
     case kOfflineOversamplingFactor:
       {
         const int enumValue = static_cast<int>(GetParam(kOfflineOversamplingFactor)->Value());
         mOfflineOversamplingFactor = 1 << enumValue;
-        _ApplyActiveOversamplingFactor();
       }
       break;
     default: break;
@@ -662,8 +659,8 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     mModel = std::move(mStagedModel);
     mStagedModel = nullptr;
     mAppliedOversamplingFactor = 0;
-    _ApplyActiveOversamplingFactor();
-    mModel->SetAntiAliasFilterPhase(mAntiAliasFilterPhase);
+    mAppliedAntiAliasFilterPhase = -1;
+    _ApplyActiveDSPSettings(false);
     mNewModelLoadedInDSP = true;
     _UpdateLatency();
     _SetInputGain();
@@ -792,20 +789,111 @@ void NeuralAmpModeler::_ApplySlimParamToLoadedNAMs()
 
 int NeuralAmpModeler::_GetActiveOversamplingFactor() const
 {
-  return GetRenderingOffline() ? mOfflineOversamplingFactor : mOversamplingFactor;
+  return GetRenderingOffline() ? mOfflineOversamplingFactor.load() : mOversamplingFactor.load();
 }
 
-void NeuralAmpModeler::_ApplyActiveOversamplingFactor()
+int NeuralAmpModeler::_GetAntiAliasFilterPhaseIndex() const
 {
-  const int factor = _GetActiveOversamplingFactor();
-  if (factor == mAppliedOversamplingFactor)
+  return mAntiAliasFilterPhaseIndex.load();
+}
+
+void NeuralAmpModeler::_ApplyImmediateDSPSettings(int oversamplingFactor, int filterPhaseIndex)
+{
+  if (mModel == nullptr)
     return;
 
-  mAppliedOversamplingFactor = factor;
-  if (mModel != nullptr)
+  if (oversamplingFactor != mAppliedOversamplingFactor)
   {
-    mModel->SetOversamplingFactor(factor);
-    _UpdateLatency();
+    mModel->SetOversamplingFactor(oversamplingFactor);
+    mAppliedOversamplingFactor = oversamplingFactor;
+  }
+
+  if (filterPhaseIndex != mAppliedAntiAliasFilterPhase)
+  {
+    const auto filterPhase = filterPhaseIndex == 0 ? dsp::EAntiAliasFilterPhase::MinimumPhase
+                                                   : dsp::EAntiAliasFilterPhase::LinearPhase;
+    mModel->SetAntiAliasFilterPhase(filterPhase);
+    mAppliedAntiAliasFilterPhase = filterPhaseIndex;
+  }
+
+  _UpdateLatency();
+}
+
+void NeuralAmpModeler::_ApplyActiveDSPSettings(bool allowSmoothRealtimeTransition)
+{
+  const int factor = _GetActiveOversamplingFactor();
+  const int filterPhaseIndex = _GetAntiAliasFilterPhaseIndex();
+
+  if (mModel == nullptr)
+    return;
+
+  if (factor == mAppliedOversamplingFactor && filterPhaseIndex == mAppliedAntiAliasFilterPhase)
+    return;
+
+  if (GetRenderingOffline() || !allowSmoothRealtimeTransition)
+  {
+    mPendingOversamplingFactor = 0;
+    mPendingAntiAliasFilterPhase = -1;
+    mRealtimeDSPTransitionFadingOut = false;
+    mRealtimeDSPTransitionFadingIn = false;
+    _ApplyImmediateDSPSettings(factor, filterPhaseIndex);
+    return;
+  }
+
+  mPendingOversamplingFactor = factor;
+  mPendingAntiAliasFilterPhase = filterPhaseIndex;
+  if (!mRealtimeDSPTransitionFadingOut && !mRealtimeDSPTransitionFadingIn)
+  {
+    mRealtimeDSPTransitionFadingOut = true;
+    mRealtimeDSPTransitionSamplesRemaining = mRealtimeDSPTransitionLength;
+  }
+}
+
+void NeuralAmpModeler::_PrepareRealtimeDSPTransition(const double sampleRate)
+{
+  mRealtimeDSPTransitionLength = std::max(32, static_cast<int>(0.01 * sampleRate));
+
+  if (mRealtimeDSPTransitionFadingOut && mRealtimeDSPTransitionSamplesRemaining <= 0)
+  {
+    const int pendingFactor = mPendingOversamplingFactor.exchange(0);
+    const int pendingFilterPhase = mPendingAntiAliasFilterPhase.exchange(-1);
+    if (pendingFactor > 0 && pendingFilterPhase >= 0)
+      _ApplyImmediateDSPSettings(pendingFactor, pendingFilterPhase);
+
+    mRealtimeDSPTransitionFadingOut = false;
+    mRealtimeDSPTransitionFadingIn = true;
+    mRealtimeDSPTransitionSamplesRemaining = mRealtimeDSPTransitionLength;
+  }
+
+  _ApplyActiveDSPSettings(true);
+}
+
+void NeuralAmpModeler::_ApplyRealtimeDSPTransitionGain(sample** outputs, const size_t nFrames, const size_t nChans)
+{
+  if (!mRealtimeDSPTransitionFadingOut && !mRealtimeDSPTransitionFadingIn)
+    return;
+
+  const int transitionLength = std::max(1, mRealtimeDSPTransitionLength);
+  for (size_t s = 0; s < nFrames; s++)
+  {
+    double gain = 1.0;
+    if (mRealtimeDSPTransitionFadingOut)
+      gain = static_cast<double>(mRealtimeDSPTransitionSamplesRemaining) / static_cast<double>(transitionLength);
+    else if (mRealtimeDSPTransitionFadingIn)
+      gain = 1.0 - static_cast<double>(mRealtimeDSPTransitionSamplesRemaining) / static_cast<double>(transitionLength);
+
+    gain = std::clamp(gain, 0.0, 1.0);
+    for (size_t c = 0; c < nChans; c++)
+      outputs[c][s] *= gain;
+
+    if (mRealtimeDSPTransitionSamplesRemaining > 0)
+      mRealtimeDSPTransitionSamplesRemaining--;
+  }
+
+  if (mRealtimeDSPTransitionSamplesRemaining <= 0)
+  {
+    if (mRealtimeDSPTransitionFadingIn)
+      mRealtimeDSPTransitionFadingIn = false;
   }
 }
 

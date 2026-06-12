@@ -14,6 +14,9 @@
 #include "IPlug_include_in_plug_hdr.h"
 #include "ISender.h"
 
+#include <algorithm>
+#include <atomic>
+#include <cmath>
 #include <mutex>
 
 
@@ -207,10 +210,12 @@ private:
     mMaxExternalBlockSize = maxBlockSize;
 
     const double renderingSampleRate = GetRenderingSampleRate(sampleRate);
+    const double encapsulatedSampleRate = GetEncapsulatedSampleRate();
     const bool resamplingActive = std::abs(renderingSampleRate - sampleRate) > 1.0e-6;
     const auto maxEncapsulatedBlockSize =
       static_cast<int>(std::ceil(maxBlockSize * renderingSampleRate / sampleRate)) + 1;
-    const int timeScale = mRequestedOversamplingFactor > 1 ? mRequestedOversamplingFactor : 1;
+    const int timeScale =
+      static_cast<int>(std::max(1.0, std::round(renderingSampleRate / encapsulatedSampleRate)));
 
     mEncapsulated->SetTimeScale(timeScale);
 
@@ -324,7 +329,11 @@ private:
   void _SetOutputGain();
   void _ApplySlimParamToLoadedNAMs();
   int _GetActiveOversamplingFactor() const;
-  void _ApplyActiveOversamplingFactor();
+  int _GetAntiAliasFilterPhaseIndex() const;
+  void _ApplyActiveDSPSettings(bool allowSmoothRealtimeTransition);
+  void _ApplyImmediateDSPSettings(int oversamplingFactor, int filterPhaseIndex);
+  void _PrepareRealtimeDSPTransition(const double sampleRate);
+  void _ApplyRealtimeDSPTransitionGain(iplug::sample** outputs, const size_t nFrames, const size_t nChans);
 
   // See: Unserialization.cpp
   void _UnserializeApplyConfig(nlohmann::json& config);
@@ -384,10 +393,17 @@ private:
   //  recursive_linear_filter::LowPass mLowPass;
 
   // Oversampling factor (1, 2, 4, 8, 16, 32)
-  int mOversamplingFactor = 1;
-  int mOfflineOversamplingFactor = 1;
+  std::atomic<int> mOversamplingFactor = 1;
+  std::atomic<int> mOfflineOversamplingFactor = 1;
   int mAppliedOversamplingFactor = 1;
-  dsp::EAntiAliasFilterPhase mAntiAliasFilterPhase = dsp::EAntiAliasFilterPhase::MinimumPhase;
+  int mAppliedAntiAliasFilterPhase = 0;
+  std::atomic<int> mAntiAliasFilterPhaseIndex = 0;
+  std::atomic<int> mPendingOversamplingFactor = 0;
+  std::atomic<int> mPendingAntiAliasFilterPhase = -1;
+  bool mRealtimeDSPTransitionFadingOut = false;
+  bool mRealtimeDSPTransitionFadingIn = false;
+  int mRealtimeDSPTransitionSamplesRemaining = 0;
+  int mRealtimeDSPTransitionLength = 480;
 
   // Path to model's config.json or model.nam
   WDL_String mNAMPath;
