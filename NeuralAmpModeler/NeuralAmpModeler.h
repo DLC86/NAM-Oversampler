@@ -21,8 +21,8 @@
 
 
 const int kNumPresets = 1;
-// The plugin is mono inside
-constexpr size_t kNumChannelsInternal = 1;
+constexpr size_t kNumChannelsMono = 1;
+constexpr size_t kNumChannelsStereo = 2;
 
 class NAMSender : public iplug::IPeakAvgSender<>
 {
@@ -55,6 +55,8 @@ enum EParams
   kOversamplingFactor,
   kAntiAliasFilterPhase,
   kOfflineOversamplingFactor,
+  kEQPostNAM,
+  kChannelMode,
   kNumParams
 };
 
@@ -77,6 +79,8 @@ enum ECtrlTags
   kCtrlTagOversampling,
   kCtrlTagAntiAliasFilterPhase,
   kCtrlTagOfflineOversampling,
+  kCtrlTagEQPostNAM,
+  kCtrlTagChannelMode,
   kNumCtrlTags
 };
 
@@ -299,6 +303,10 @@ private:
   size_t _GetBufferNumChannels() const;
   size_t _GetBufferNumFrames() const;
   void _InitToneStack();
+  bool _IsStereoRequested() const;
+  bool _CanProcessStereo(const size_t nChansIn, const size_t nChansOut) const;
+  void _SetStereoProcessingFromParam();
+  std::unique_ptr<ResamplingNAM> _CreateModel(const WDL_String& modelPath);
   // Loads a NAM model and stores it to mStagedNAM
   // Returns an empty string on success, or an error message on failure.
   std::string _StageModel(const WDL_String& dspFile);
@@ -373,11 +381,15 @@ private:
   dsp::noise_gate::Gain mNoiseGateGain;
   // The model actually being used:
   std::unique_ptr<ResamplingNAM> mModel;
+  std::unique_ptr<ResamplingNAM> mModelRight;
   // And the IR
   std::unique_ptr<dsp::ImpulseResponse> mIR;
+  std::unique_ptr<dsp::ImpulseResponse> mIRRight;
   // Manages switching what DSP is being used.
   std::unique_ptr<ResamplingNAM> mStagedModel;
+  std::unique_ptr<ResamplingNAM> mStagedModelRight;
   std::unique_ptr<dsp::ImpulseResponse> mStagedIR;
+  std::unique_ptr<dsp::ImpulseResponse> mStagedIRRight;
   // Flags to take away the modules at a safe time.
   std::atomic<bool> mShouldRemoveModel = false;
   std::atomic<bool> mShouldRemoveIR = false;
@@ -398,6 +410,8 @@ private:
   int mAppliedOversamplingFactor = 1;
   int mAppliedAntiAliasFilterPhase = 0;
   std::atomic<int> mAntiAliasFilterPhaseIndex = 0;
+  std::atomic<bool> mEQPostNAM = true;
+  std::atomic<bool> mStereoProcessing = false;
   std::atomic<int> mPendingOversamplingFactor = 0;
   std::atomic<int> mPendingAntiAliasFilterPhase = -1;
   bool mRealtimeDSPTransitionFadingOut = false;
@@ -413,6 +427,8 @@ private:
   WDL_String mHighLightColor{PluginColors::NAM_THEMECOLOR.ToColorCode()};
 
   std::unordered_map<std::string, double> mNAMParams = {{"Input", 0.0}, {"Output", 0.0}};
+
+  iplug::sample* mStereoIRPointers[kNumChannelsStereo] = {nullptr, nullptr};
 
   NAMSender mInputSender, mOutputSender;
 };

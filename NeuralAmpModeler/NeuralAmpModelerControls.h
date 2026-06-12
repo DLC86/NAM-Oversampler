@@ -92,6 +92,43 @@ public:
   }
 };
 
+class NAMChannelModeControl : public IControl
+{
+public:
+  NAMChannelModeControl(const IRECT& bounds, int paramIdx)
+  : IControl(bounds)
+  {
+    SetParamIdx(paramIdx);
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    if (mMouseIsOver)
+      g.FillEllipse(PluginColors::MOUSEOVER, mRECT.GetCentredInside(26.0f, 26.0f));
+
+    const IColor blue = IColor(255, 70, 155, 255);
+    const float radius = 6.0f;
+    const float stroke = 1.8f;
+    const float cx = mRECT.MW();
+    const float cy = mRECT.MH();
+
+    if (GetValue() > 0.5)
+    {
+      g.DrawCircle(blue, cx - 4.2f, cy, radius, nullptr, stroke);
+      g.DrawCircle(blue, cx + 4.2f, cy, radius, nullptr, stroke);
+    }
+    else
+    {
+      g.DrawCircle(blue, cx, cy, radius, nullptr, stroke);
+    }
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    SetValueFromUserInput(GetValue() > 0.5 ? 0.0 : 1.0);
+  }
+};
+
 /// Full-window dim layer; click dismisses (used for Slim overlay).
 class NAMSlimOverlayBackdropControl : public IControl
 {
@@ -821,7 +858,7 @@ public:
                            mControlNames.filterPhase, kCtrlTagAntiAliasFilterPhase);
     filterPhaseControl->SetTooltip("Anti-alias filter phase");
 
-    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 0), "NAM-Oversampler v1.1.1", infoStyle),
+    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 0), "NAM-Oversampler v1.2.0", infoStyle),
                          mControlNames.version);
     AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 1), "The Tone Scientist", infoStyle),
                          mControlNames.author);

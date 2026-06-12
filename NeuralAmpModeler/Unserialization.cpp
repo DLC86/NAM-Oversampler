@@ -97,11 +97,113 @@ void _RenameKeys(nlohmann::json& j, std::unordered_map<std::string, std::string>
   }
 }
 
+// v1.2.0
+
+void _UpdateConfigFrom_1_2_0(nlohmann::json& config)
+{
+  // Current format.
+  if (!config.contains("Channel Mode"))
+    config["Channel Mode"] = 0.0;
+}
+
+int _GetConfigFrom_1_2_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Slim",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling",
+                                      "EQ Post",
+                                      "Channel Mode"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_2_0(config);
+  return pos;
+}
+
+// v1.1.1
+
+void _UpdateConfigFrom_1_1_1(nlohmann::json& config)
+{
+  config["EQ Post"] = 1.0;
+  _UpdateConfigFrom_1_2_0(config);
+}
+
+int _GetConfigFrom_1_1_1(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Slim",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_1_1(config);
+  return pos;
+}
+
+// v1.1.0
+
+void _UpdateConfigFrom_1_1_0(nlohmann::json& config)
+{
+  config["EQ Post"] = 1.0;
+  _UpdateConfigFrom_1_2_0(config);
+}
+
+int _GetConfigFrom_1_1_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Slim",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_1_0(config);
+  return pos;
+}
+
 // v0.7.14
 
 void _UpdateConfigFrom_0_7_14(nlohmann::json& config)
 {
-  // Fill me in once something changes!
+  config["Oversampling"] = 0.0;
+  config["Filter Phase"] = 0.0;
+  config["Offline Oversampling"] = 0.0;
+  _UpdateConfigFrom_1_1_0(config);
 }
 
 int _GetConfigFrom_0_7_14(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
@@ -277,7 +379,19 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   _Version version(versionStr);
   // Act accordingly
   nlohmann::json config;
-  if (version >= _Version(0, 7, 14))
+  if (version >= _Version(1, 2, 0))
+  {
+    pos = _GetConfigFrom_1_2_0(chunk, pos, config);
+  }
+  else if (version >= _Version(1, 1, 1))
+  {
+    pos = _GetConfigFrom_1_1_1(chunk, pos, config);
+  }
+  else if (version >= _Version(1, 1, 0))
+  {
+    pos = _GetConfigFrom_1_1_0(chunk, pos, config);
+  }
+  else if (version >= _Version(0, 7, 14))
   {
     pos = _GetConfigFrom_0_7_14(chunk, pos, config);
   }
