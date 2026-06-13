@@ -22,7 +22,24 @@ set(SMTG_ENABLE_VSTGUI_SUPPORT OFF CACHE BOOL "" FORCE)
 set(SMTG_CREATE_PLUGIN_LINK OFF CACHE BOOL "" FORCE)
 set(SMTG_CXX_STANDARD 20 CACHE STRING "" FORCE)
 
-add_subdirectory("${VST3_SDK_ROOT}" "${CMAKE_BINARY_DIR}/vst3sdk")
+list(APPEND CMAKE_MODULE_PATH "${VST3_SDK_ROOT}/cmake/modules")
+include(SMTG_VST3_SDK)
+
+smtg_setup_platform_toolset()
+smtg_setup_symbol_visibility()
+
+set(ROOT "${VST3_SDK_ROOT}")
+set(SDK_ROOT "${VST3_SDK_ROOT}")
+set(public_sdk_SOURCE_DIR "${SDK_ROOT}/public.sdk")
+set(pluginterfaces_SOURCE_DIR "${SDK_ROOT}/pluginterfaces")
+set(SDK_IDE_LIBS_FOLDER FOLDER "Libraries")
+
+include_directories("${ROOT}" "${SDK_ROOT}")
+
+smtg_create_lib_base_target()
+smtg_create_pluginterfaces_target()
+smtg_create_public_sdk_common_target()
+smtg_create_public_sdk_target()
 
 file(GLOB NAM_CORE_SOURCES
   "${NAM_CORE_ROOT}/NAM/*.cpp"
