@@ -27,9 +27,9 @@
 #define PLUG_DOES_MPE 0
 #define PLUG_DOES_STATE_CHUNKS 0
 #ifdef NAM_HEADLESS_LINUX
-  #define PLUG_HAS_UI 0
+#define PLUG_HAS_UI 0
 #else
-  #define PLUG_HAS_UI 1
+#define PLUG_HAS_UI 1
 #endif
 #define PLUG_WIDTH 600
 #define PLUG_HEIGHT 400
