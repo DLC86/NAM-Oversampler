@@ -4,7 +4,6 @@
 #include <iostream>
 #include <utility>
 
-#include "Colors.h"
 #include "../NeuralAmpModelerCore/NAM/activations.h"
 #include "../NeuralAmpModelerCore/NAM/get_dsp.h"
 // clang-format off
@@ -16,6 +15,7 @@
 #include "architecture.hpp"
 
 #if PLUG_HAS_UI
+  #include "Colors.h"
   #include "NeuralAmpModelerControls.h"
 #endif
 
