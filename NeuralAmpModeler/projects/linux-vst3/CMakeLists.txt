@@ -20,6 +20,7 @@ set(SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SMTG_ENABLE_VSTGUI_SUPPORT OFF CACHE BOOL "" FORCE)
 set(SMTG_CREATE_PLUGIN_LINK OFF CACHE BOOL "" FORCE)
+set(SMTG_CREATE_MODULE_INFO OFF CACHE BOOL "" FORCE)
 set(SMTG_CXX_STANDARD 20 CACHE STRING "" FORCE)
 
 list(APPEND CMAKE_MODULE_PATH "${VST3_SDK_ROOT}/cmake/modules")
@@ -40,10 +41,6 @@ smtg_create_lib_base_target()
 smtg_create_pluginterfaces_target()
 smtg_create_public_sdk_common_target()
 smtg_create_public_sdk_target()
-smtg_create_public_sdk_hosting_target()
-
-set(SDK_IDE_UTILITIES_FOLDER FOLDER "Utilities")
-add_subdirectory("${VST3_SDK_ROOT}/public.sdk/samples/vst-utilities/moduleinfotool" moduleinfotool)
 
 file(GLOB NAM_CORE_SOURCES
   "${NAM_CORE_ROOT}/NAM/*.cpp"
