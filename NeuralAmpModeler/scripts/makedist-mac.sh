@@ -185,6 +185,9 @@ fi
 if [ "${BUILD_STATUS}" -ne "0" ]; then
   echo "ERROR: build failed, aborting"
   echo ""
+  echo "Raw xcodebuild errors:"
+  grep -n -E "error:|fatal error:|undefined symbol|Command CompileC failed|Command PhaseScriptExecution failed" build-mac.log || true
+  echo ""
   cat build-mac.log
   exit 1
 else
