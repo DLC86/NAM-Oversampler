@@ -910,7 +910,11 @@ public:
                            mControlNames.offlineFilterPhase, kCtrlTagOfflineAntiAliasFilterPhase);
     offlineFilterPhaseControl->SetTooltip("Offline/render anti-alias filter phase");
 
-    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 0), "NAM-Oversampler v0.7.15", infoStyle),
+    WDL_String verStr, oversamplingVersionStr;
+    PLUG()->GetPluginVersionStr(verStr);
+    oversamplingVersionStr.SetFormatted(100, "NAM-Oversampler v%s", verStr.Get());
+
+    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 0), oversamplingVersionStr.Get(), infoStyle),
                          mControlNames.version);
     AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 1), "The Tone Scientist", infoStyle),
                          mControlNames.author);
@@ -1192,10 +1196,8 @@ private:
 
     void OnAttached() override
     {
-      WDL_String verStr, buildInfoStr;
-      PLUG()->GetPluginVersionStr(verStr);
-
-      buildInfoStr.SetFormatted(100, "Version %s %s %s", verStr.Get(), PLUG()->GetArchStr(), PLUG()->GetAPIStr());
+      WDL_String buildInfoStr;
+      buildInfoStr.SetFormatted(100, "Version 0.7.15 %s %s", PLUG()->GetArchStr(), PLUG()->GetAPIStr());
 
       AddChildControl(new IURLControl(GetRECT().SubRectVertical(5, 0), "NEURAL AMP MODELER",
                                       "https://www.neuralampmodeler.com", mText, COLOR_TRANSPARENT,
