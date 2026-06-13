@@ -50,6 +50,7 @@ file(GLOB NAM_CORE_SOURCES
 
 set(PLUGIN_SOURCES
   "${PLUGIN_ROOT}/NeuralAmpModeler.cpp"
+  "${PLUGIN_ROOT}/ToneStack.cpp"
   "${IPLUG2_ROOT}/IPlug/IPlugAPIBase.cpp"
   "${IPLUG2_ROOT}/IPlug/IPlugParameter.cpp"
   "${IPLUG2_ROOT}/IPlug/IPlugPaths.cpp"
