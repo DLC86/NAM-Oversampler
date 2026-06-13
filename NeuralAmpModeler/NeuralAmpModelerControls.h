@@ -910,7 +910,7 @@ public:
                            mControlNames.offlineFilterPhase, kCtrlTagOfflineAntiAliasFilterPhase);
     offlineFilterPhaseControl->SetTooltip("Offline/render anti-alias filter phase");
 
-    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 0), "NAM-Oversampler v1.3.0", infoStyle),
+    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 0), "NAM-Oversampler v0.7.15", infoStyle),
                          mControlNames.version);
     AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 1), "The Tone Scientist", infoStyle),
                          mControlNames.author);
