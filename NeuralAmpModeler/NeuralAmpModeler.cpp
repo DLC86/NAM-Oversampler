@@ -15,13 +15,18 @@
 // clang-format on
 #include "architecture.hpp"
 
-#include "NeuralAmpModelerControls.h"
+#if PLUG_HAS_UI
+  #include "NeuralAmpModelerControls.h"
+#endif
 
 using namespace iplug;
+#if PLUG_HAS_UI
 using namespace igraphics;
+#endif
 
 const double kDCBlockerFrequency = 5.0;
 
+#if PLUG_HAS_UI
 // Styles
 const IVColorSpec colorSpec{
   DEFAULT_BGCOLOR, // Background
@@ -68,6 +73,7 @@ EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char
   return pGraphics->ShowMessageBox(str, caption, type);
 #endif
 }
+#endif
 
 const std::string kCalibrateInputParamName = "CalibrateInput";
 const bool kDefaultCalibrateInput = false;
@@ -95,13 +101,17 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     ->InitDouble(kInputCalibrationLevelParamName.c_str(), kDefaultInputCalibrationLevel, -60.0, 60.0, 0.1, "dBu");
   GetParam(kSlim)->InitDouble("Slim", 1.0, 0.0, 1.0, 0.01);
   GetParam(kOversamplingFactor)->InitEnum("Oversampling", 0, {"OFF", "2x", "4x", "8x", "16x", "32x"});
-  GetParam(kAntiAliasFilterPhase)->InitEnum("Filter Phase", 0, {"Min Phase", "Linear Phase"});
+  GetParam(kAntiAliasFilterPhase)
+    ->InitEnum("Filter Phase", 0, {"Min Phase IIR", "Min Phase FIR", "Polyphase FIR", "Linear Phase FIR"});
   GetParam(kOfflineOversamplingFactor)->InitEnum("Offline Oversampling", 0, {"OFF", "2x", "4x", "8x", "16x", "32x"});
+  GetParam(kOfflineAntiAliasFilterPhase)
+    ->InitEnum("Offline Filter Phase", 0, {"Min Phase IIR", "Min Phase FIR", "Polyphase FIR", "Linear Phase FIR"});
   GetParam(kEQPostNAM)->InitBool("EQ Post", true);
   GetParam(kChannelMode)->InitEnum("Channel Mode", 0, {"Mono", "Stereo"});
 
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
 
+#if PLUG_HAS_UI
   mMakeGraphicsFunc = [&]() {
 
 #ifdef OS_IOS
@@ -147,7 +157,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto mainArea = b.GetPadded(-20);
     const auto contentArea = mainArea.GetPadded(-10);
     const auto titleHeight = 50.0f;
-    const auto titleArea = contentArea.GetFromTop(titleHeight);
+    const auto titleArea = contentArea.GetFromTop(titleHeight).GetVShifted(-4.0f);
 
     // Areas for knobs
     const auto knobsPad = 20.0f;
@@ -191,6 +201,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // Misc Areas
     const auto settingsButtonArea = CornerButtonArea(b);
     const auto oversamplingButtonArea = LeftCornerButtonArea(b, 42.0f).GetTranslated(8.0f, 10.0f);
+    const auto oversamplingIndicatorArea =
+      oversamplingButtonArea.GetTranslated(34.0f, 0.0f).GetCentredInside(38.0f, 22.0f);
 
     // Model loader button
     auto loadModelCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
@@ -228,7 +240,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     pGraphics->AttachBackground(BACKGROUND_FN);
     pGraphics->AttachControl(new IBitmapControl(b, linesBitmap));
-    pGraphics->AttachControl(new IVLabelControl(titleArea, "NAM-OVERSAMPLER", titleStyle));
+    pGraphics->AttachControl(new IVLabelControl(titleArea, "NAM OVERSAMPLER", titleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
 
 #ifdef NAM_PICK_DIRECTORY
@@ -307,6 +319,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         pGraphics->GetControlWithTag(kCtrlTagOversamplingBox)->As<NAMOversamplingPageControl>()->HideAnimated(false);
       },
       ttsLogoBitmap));
+    pGraphics->AttachControl(new NAMOversamplingIndicatorControl(oversamplingIndicatorArea, kOversamplingFactor,
+                                                                 kOfflineOversamplingFactor),
+                             kCtrlTagOversamplingIndicator);
 
     pGraphics->AttachControl(new NAMCircleButtonControl(
       settingsButtonArea,
@@ -341,6 +356,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // pGraphics->GetControlWithTag(kCtrlTagOutNorm)->SetMouseEventsWhenDisabled(false);
     // pGraphics->GetControlWithTag(kCtrlTagCalibrateInput)->SetMouseEventsWhenDisabled(false);
   };
+#endif
 }
 
 NeuralAmpModeler::~NeuralAmpModeler()
@@ -350,10 +366,16 @@ NeuralAmpModeler::~NeuralAmpModeler()
 
 void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outputs, int nFrames)
 {
-  const size_t numChannelsExternalIn = (size_t)NInChansConnected();
-  const size_t numChannelsExternalOut = (size_t)NOutChansConnected();
-  const size_t numChannelsInternal =
-    _CanProcessStereo(numChannelsExternalIn, numChannelsExternalOut) ? kNumChannelsStereo : kNumChannelsMono;
+  const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNumChannelsMono);
+  const size_t numChannelsConnectedOut = std::max((size_t)NOutChansConnected(), kNumChannelsMono);
+  const size_t numChannelsAvailableIn = std::max(
+    numChannelsConnectedIn, std::min((size_t)MaxNChannels(ERoute::kInput), (size_t)kNumChannelsStereo));
+  const size_t numChannelsAvailableOut = std::max(
+    numChannelsConnectedOut, std::min((size_t)MaxNChannels(ERoute::kOutput), (size_t)kNumChannelsStereo));
+  const bool processStereo = _CanProcessStereo(numChannelsAvailableIn, numChannelsAvailableOut);
+  const size_t numChannelsInternal = processStereo ? kNumChannelsStereo : kNumChannelsMono;
+  const size_t numChannelsExternalIn = processStereo ? kNumChannelsStereo : numChannelsConnectedIn;
+  const size_t numChannelsExternalOut = processStereo ? kNumChannelsStereo : numChannelsConnectedOut;
   const size_t numFrames = (size_t)nFrames;
   const double sampleRate = GetSampleRate();
 
@@ -363,7 +385,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   disable_denormals();
 
   _PrepareBuffers(numChannelsInternal, numFrames);
-  // Input is collapsed to mono in preparation for the NAM.
+  // Mono mode sums the input; stereo mode keeps left/right chains separate.
   _ProcessInput(inputs, numFrames, numChannelsExternalIn, numChannelsInternal);
   _ApplyDSPStaging();
   _PrepareRealtimeDSPTransition(sampleRate);
@@ -482,6 +504,7 @@ void NeuralAmpModeler::OnReset()
 
 void NeuralAmpModeler::OnIdle()
 {
+#if PLUG_HAS_UI
   mInputSender.TransmitData(*this);
   mOutputSender.TransmitData(*this);
 
@@ -510,6 +533,7 @@ void NeuralAmpModeler::OnIdle()
       mModelCleared = false;
     }
   }
+#endif
 }
 
 bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
@@ -547,6 +571,7 @@ int NeuralAmpModeler::UnserializeState(const IByteChunk& chunk, int startPos)
 
 void NeuralAmpModeler::OnUIOpen()
 {
+#if PLUG_HAS_UI
   Plugin::OnUIOpen();
 
   if (mNAMPath.GetLength())
@@ -569,6 +594,7 @@ void NeuralAmpModeler::OnUIOpen()
   {
     _UpdateControlsFromModel();
   }
+#endif
 }
 
 void NeuralAmpModeler::OnParamChange(int paramIdx)
@@ -598,13 +624,19 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kAntiAliasFilterPhase:
       {
         const int enumValue = static_cast<int>(GetParam(kAntiAliasFilterPhase)->Value());
-        mAntiAliasFilterPhaseIndex = enumValue == 0 ? 0 : 1;
+        mAntiAliasFilterPhaseIndex = std::clamp(enumValue, 0, 3);
       }
       break;
     case kOfflineOversamplingFactor:
       {
         const int enumValue = static_cast<int>(GetParam(kOfflineOversamplingFactor)->Value());
         mOfflineOversamplingFactor = 1 << enumValue;
+      }
+      break;
+    case kOfflineAntiAliasFilterPhase:
+      {
+        const int enumValue = static_cast<int>(GetParam(kOfflineAntiAliasFilterPhase)->Value());
+        mOfflineAntiAliasFilterPhaseIndex = std::clamp(enumValue, 0, 3);
       }
       break;
     case kEQPostNAM: mEQPostNAM = GetParam(kEQPostNAM)->Bool(); break;
@@ -615,6 +647,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
 
 void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 {
+#if PLUG_HAS_UI
   if (auto pGraphics = GetUI())
   {
     bool active = GetParam(paramIdx)->Bool();
@@ -630,6 +663,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       default: break;
     }
   }
+#endif
 }
 
 bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData)
@@ -642,6 +676,7 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
     {
       mHighLightColor.Set((const char*)pData);
 
+#if PLUG_HAS_UI
       if (GetUI())
       {
         GetUI()->ForStandardControlsFunc([&](IControl* pControl) {
@@ -657,6 +692,7 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
           pControl->GetUI()->SetAllControlsDirty();
         });
       }
+#endif
 
       return true;
     }
@@ -860,7 +896,7 @@ int NeuralAmpModeler::_GetActiveOversamplingFactor() const
 
 int NeuralAmpModeler::_GetAntiAliasFilterPhaseIndex() const
 {
-  return mAntiAliasFilterPhaseIndex.load();
+  return GetRenderingOffline() ? mOfflineAntiAliasFilterPhaseIndex.load() : mAntiAliasFilterPhaseIndex.load();
 }
 
 void NeuralAmpModeler::_ApplyImmediateDSPSettings(int oversamplingFactor, int filterPhaseIndex)
@@ -878,8 +914,10 @@ void NeuralAmpModeler::_ApplyImmediateDSPSettings(int oversamplingFactor, int fi
 
   if (filterPhaseIndex != mAppliedAntiAliasFilterPhase)
   {
-    const auto filterPhase = filterPhaseIndex == 0 ? dsp::EAntiAliasFilterPhase::MinimumPhase
-                                                   : dsp::EAntiAliasFilterPhase::LinearPhase;
+    const auto filterPhase = filterPhaseIndex == 0 ? dsp::EAntiAliasFilterPhase::MinimumPhaseIIR
+                             : filterPhaseIndex == 1 ? dsp::EAntiAliasFilterPhase::MinimumPhaseFIR
+                             : filterPhaseIndex == 2 ? dsp::EAntiAliasFilterPhase::PolyphaseFIR
+                                                     : dsp::EAntiAliasFilterPhase::LinearPhaseFIR;
     mModel->SetAntiAliasFilterPhase(filterPhase);
     if (mModelRight != nullptr)
       mModelRight->SetAntiAliasFilterPhase(filterPhase);
@@ -1215,6 +1253,7 @@ void NeuralAmpModeler::_ProcessOutput(iplug::sample** inputs, iplug::sample** ou
 
 void NeuralAmpModeler::_UpdateControlsFromModel()
 {
+#if PLUG_HAS_UI
   if (mModel == nullptr)
   {
     return;
@@ -1246,6 +1285,7 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
       pSlimIcon->Hide(!show);
     }
   }
+#endif
 }
 
 void NeuralAmpModeler::_UpdateLatency()

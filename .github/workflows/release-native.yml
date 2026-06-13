@@ -39,12 +39,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-2022]
+        os: [macos-latest, windows-2022, ubuntu-latest]
         include:
           - os: macos-latest
             build_dir: build-mac
           - os: windows-2022
             build_dir: build-win
+          - os: ubuntu-latest
+            build_dir: build-linux
 
     steps:
     - name: Check out repository
@@ -78,6 +80,29 @@ jobs:
         cd ${{env.PROJECT_NAME}}/scripts
         ./makedist-mac.sh full installer
       shell: bash
+
+    - name: Build Linux VST3
+      if: matrix.os == 'ubuntu-latest'
+      id: linux_build_step
+      run: |
+        cd ${{env.PROJECT_NAME}}/scripts
+        bash ./makedist-linux.sh
+        ZIP_PATH="$(find ../build-linux/out -maxdepth 1 -name '*-linux-vst3.zip' -print -quit)"
+        test -n "$ZIP_PATH"
+        echo "zip_path=$ZIP_PATH" >> $GITHUB_OUTPUT
+        echo "zip_name=$(basename "$ZIP_PATH")" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Upload Linux VST3 release asset
+      if: matrix.os == 'ubuntu-latest'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+      with:
+        upload_url: ${{needs.create_release.outputs.upload_url}}
+        asset_path: ${{steps.linux_build_step.outputs.zip_path}}
+        asset_name: ${{steps.linux_build_step.outputs.zip_name}}
+        asset_content_type: application/zip
 
     - name: Upload mac DSYMs release asset
       if: matrix.os == 'macos-latest'

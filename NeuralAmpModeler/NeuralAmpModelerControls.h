@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm> // std::max, std::min
 #include <cmath> // std::round
 #include <cstdio> // FILE, fclose
 #include <sstream> // std::stringstream
@@ -73,6 +74,31 @@ public:
       g.FillRoundRect(PluginColors::MOUSEOVER, mRECT.GetPadded(-3.0f), 2.f);
     g.DrawFittedBitmap(mBitmap, mRECT);
   }
+};
+
+class NAMOversamplingIndicatorControl : public IControl
+{
+public:
+  NAMOversamplingIndicatorControl(const IRECT& bounds, int realtimeParamIdx, int offlineParamIdx)
+  : IControl(bounds, {realtimeParamIdx, offlineParamIdx})
+  , mRealtimeParamIdx(realtimeParamIdx)
+  , mOfflineParamIdx(offlineParamIdx)
+  {
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const char* labels[] = {"OFF", "2x", "4x", "8x", "16x", "32x"};
+    const int paramIdx = PLUG()->GetRenderingOffline() ? mOfflineParamIdx : mRealtimeParamIdx;
+    const int idx = std::max(0, std::min(5, PLUG()->GetParam(paramIdx)->Int()));
+    const IText text(11.0f, PluginColors::NAM_THEMEFONTCOLOR, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    g.DrawText(text, "OS", mRECT.GetFromTop(mRECT.H() * 0.5f));
+    g.DrawText(text, labels[idx], mRECT.GetFromBottom(mRECT.H() * 0.5f));
+  }
+
+private:
+  int mRealtimeParamIdx = kNoParameter;
+  int mOfflineParamIdx = kNoParameter;
 };
 
 class NAMCircleButtonControl : public ISVGButtonControl
@@ -755,8 +781,9 @@ class AntiAliasFilterPhaseControl : public IVRadioButtonControl
 public:
   AntiAliasFilterPhaseControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
                               EDirection direction = EDirection::Vertical)
-  : IVRadioButtonControl(bounds, paramIdx, {"Min Phase", "Linear Phase"}, "", style, EVShape::Ellipse,
-                         direction, buttonSize) {};
+  : IVRadioButtonControl(bounds, paramIdx,
+                         {"Min Phase IIR", "Min Phase FIR", "Polyphase FIR", "Linear Phase FIR"}, "", style,
+                         EVShape::Ellipse, direction, buttonSize) {};
 };
 
 class NAMOversamplingPageControl : public IContainerBaseWithNamedChildren
@@ -817,48 +844,73 @@ public:
     const auto page = GetRECT();
     const auto content = page.GetPadded(-(pad + 10.0f));
     const auto titleArea = content.GetFromTop(50.0f);
-    const auto rowsArea = content.GetCentredInside(540.0f, 138.0f).GetVShifted(-14.0f);
-    const auto realtimeRow = rowsArea.SubRectVertical(3, 0);
-    const auto offlineRow = rowsArea.SubRectVertical(3, 1);
-    const auto filterRow = rowsArea.SubRectVertical(3, 2);
-    const auto realtimeLabelArea = realtimeRow.GetFromLeft(100.0f);
-    const auto offlineLabelArea = offlineRow.GetFromLeft(100.0f);
-    const auto filterLabelArea = filterRow.GetFromLeft(100.0f);
-    const auto realtimeRadioArea = realtimeRow.GetFromRight(430.0f);
-    const auto offlineRadioArea = offlineRow.GetFromRight(430.0f);
-    const auto filterArea = filterRow.GetFromRight(430.0f).GetFromLeft(240.0f);
+    const auto rowsArea =
+      content.GetReducedFromTop(58.0f).GetReducedFromBottom(96.0f).GetCentredInside(540.0f, 163.0f).GetVShifted(-10.0f);
+    const float rowHeight = 25.0f;
+    const float sectionGap = 20.0f;
+    const auto realtimeTitleRow = IRECT(rowsArea.L, rowsArea.T, rowsArea.R, rowsArea.T + rowHeight);
+    const auto realtimeOSRow =
+      IRECT(rowsArea.L, realtimeTitleRow.B, rowsArea.R, realtimeTitleRow.B + rowHeight);
+    const auto realtimeFilterRow = IRECT(rowsArea.L, realtimeOSRow.B, rowsArea.R, realtimeOSRow.B + rowHeight);
+    const auto offlineTitleRow =
+      IRECT(rowsArea.L, realtimeFilterRow.B + sectionGap, rowsArea.R, realtimeFilterRow.B + sectionGap + rowHeight);
+    const auto offlineOSRow = IRECT(rowsArea.L, offlineTitleRow.B, rowsArea.R, offlineTitleRow.B + rowHeight);
+    const auto offlineFilterRow = IRECT(rowsArea.L, offlineOSRow.B, rowsArea.R, offlineOSRow.B + rowHeight);
+    const auto rowLabelWidth = 58.0f;
+    const auto realtimeOSLabelArea = realtimeOSRow.GetFromLeft(rowLabelWidth);
+    const auto realtimeFilterLabelArea = realtimeFilterRow.GetFromLeft(rowLabelWidth);
+    const auto offlineOSLabelArea = offlineOSRow.GetFromLeft(rowLabelWidth);
+    const auto offlineFilterLabelArea = offlineFilterRow.GetFromLeft(rowLabelWidth);
+    const auto realtimeRadioArea = realtimeOSRow.GetFromRight(rowsArea.W() - rowLabelWidth);
+    const auto realtimeFilterArea = realtimeFilterRow.GetFromRight(rowsArea.W() - rowLabelWidth);
+    const auto offlineRadioArea = offlineOSRow.GetFromRight(rowsArea.W() - rowLabelWidth);
+    const auto offlineFilterArea = offlineFilterRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto infoArea = content.GetFromBottom(72.0f).GetHPadded(-8.0f);
     const float buttonSize = 10.0f;
     const auto infoText = IText(12, EAlign::Center, PluginColors::HELP_TEXT);
     const auto infoStyle = mStyle.WithDrawFrame(false).WithValueText(infoText);
     const auto rowLabelText = IText(11, EAlign::Center, PluginColors::HELP_TEXT);
     const auto rowLabelStyle = mStyle.WithDrawFrame(false).WithValueText(rowLabelText);
+    const auto radioButtonStyle =
+      mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));
 
     AddNamedChildControl(new IBitmapControl(page, mBitmap), mControlNames.bitmap)->SetIgnoreMouse(true);
     AddNamedChildControl(new IVLabelControl(titleArea, "OVERSAMPLING", titleStyle), mControlNames.title);
 
-    AddNamedChildControl(new IVLabelControl(realtimeLabelArea, "REALTIME", rowLabelStyle), mControlNames.realtimeLabel);
-    AddNamedChildControl(new IVLabelControl(offlineLabelArea, "OFFLINE", rowLabelStyle), mControlNames.offlineLabel);
-    AddNamedChildControl(new IVLabelControl(filterLabelArea, "FILTER", rowLabelStyle), mControlNames.filterLabel);
+    AddNamedChildControl(new IVLabelControl(realtimeTitleRow, "REALTIME", rowLabelStyle), mControlNames.realtimeLabel);
+    AddNamedChildControl(new IVLabelControl(realtimeOSLabelArea, "OS", rowLabelStyle), mControlNames.realtimeOSLabel);
+    AddNamedChildControl(new IVLabelControl(realtimeFilterLabelArea, "FILTER", rowLabelStyle),
+                         mControlNames.realtimeFilterLabel);
+    AddNamedChildControl(new IVLabelControl(offlineTitleRow, "OFFLINE RENDERING", rowLabelStyle),
+                         mControlNames.offlineLabel);
+    AddNamedChildControl(new IVLabelControl(offlineOSLabelArea, "OS", rowLabelStyle), mControlNames.offlineOSLabel);
+    AddNamedChildControl(new IVLabelControl(offlineFilterLabelArea, "FILTER", rowLabelStyle),
+                         mControlNames.offlineFilterLabel);
 
     auto* oversamplingControl = AddNamedChildControl(
-      new OversamplingControl(realtimeRadioArea, kOversamplingFactor, mRadioButtonStyle, buttonSize, EDirection::Horizontal),
+      new OversamplingControl(realtimeRadioArea, kOversamplingFactor, radioButtonStyle, buttonSize, EDirection::Horizontal),
       mControlNames.oversampling, kCtrlTagOversampling);
     oversamplingControl->SetTooltip("Realtime oversampling factor");
 
     auto* offlineOversamplingControl =
-      AddNamedChildControl(new OversamplingControl(offlineRadioArea, kOfflineOversamplingFactor, mRadioButtonStyle,
+      AddNamedChildControl(new OversamplingControl(offlineRadioArea, kOfflineOversamplingFactor, radioButtonStyle,
                                                    buttonSize, EDirection::Horizontal),
                            mControlNames.offlineOversampling, kCtrlTagOfflineOversampling);
     offlineOversamplingControl->SetTooltip("Offline/render oversampling factor");
 
     auto* filterPhaseControl =
-      AddNamedChildControl(new AntiAliasFilterPhaseControl(filterArea, kAntiAliasFilterPhase, mRadioButtonStyle,
+      AddNamedChildControl(new AntiAliasFilterPhaseControl(realtimeFilterArea, kAntiAliasFilterPhase, radioButtonStyle,
                                                            buttonSize, EDirection::Horizontal),
                            mControlNames.filterPhase, kCtrlTagAntiAliasFilterPhase);
-    filterPhaseControl->SetTooltip("Anti-alias filter phase");
+    filterPhaseControl->SetTooltip("Realtime anti-alias filter phase");
 
-    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 0), "NAM-Oversampler v1.2.0", infoStyle),
+    auto* offlineFilterPhaseControl =
+      AddNamedChildControl(new AntiAliasFilterPhaseControl(offlineFilterArea, kOfflineAntiAliasFilterPhase,
+                                                           radioButtonStyle, buttonSize, EDirection::Horizontal),
+                           mControlNames.offlineFilterPhase, kCtrlTagOfflineAntiAliasFilterPhase);
+    offlineFilterPhaseControl->SetTooltip("Offline/render anti-alias filter phase");
+
+    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 0), "NAM-Oversampler v1.3.0", infoStyle),
                          mControlNames.version);
     AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 1), "The Tone Scientist", infoStyle),
                          mControlNames.author);
@@ -891,13 +943,17 @@ private:
     const std::string author = "Author";
     const std::string bitmap = "Bitmap";
     const std::string close = "Close";
-    const std::string filterLabel = "FilterLabel";
+    const std::string realtimeFilterLabel = "RealtimeFilterLabel";
     const std::string filterPhase = "FilterPhase";
     const std::string github = "GitHub";
     const std::string offlineLabel = "OfflineLabel";
+    const std::string offlineFilterLabel = "OfflineFilterLabel";
+    const std::string offlineFilterPhase = "OfflineFilterPhase";
     const std::string offlineOversampling = "OfflineOversampling";
+    const std::string offlineOSLabel = "OfflineOSLabel";
     const std::string oversampling = "Oversampling";
     const std::string realtimeLabel = "RealtimeLabel";
+    const std::string realtimeOSLabel = "RealtimeOSLabel";
     const std::string shop = "Shop";
     const std::string title = "Title";
     const std::string version = "Version";

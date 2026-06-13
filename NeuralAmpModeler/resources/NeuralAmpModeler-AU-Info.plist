@@ -24,13 +24,13 @@
 		</dict>
 	</array>
 	<key>AudioUnit Version</key>
-	<string>0x00010200</string>
+	<string>0x00010300</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
 	<string>NAM-Oversampler</string>
 	<key>CFBundleGetInfoString</key>
-	<string>NAM-Oversampler v1.2.0 Copyright 2022 Steven Atkinson</string>
+	<string>NAM-Oversampler v1.3.0 Copyright 2022 Steven Atkinson</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.TheToneScientist.audiounit.NAM-Oversampler</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -40,11 +40,11 @@
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.2.0</string>
+	<string>1.3.0</string>
 	<key>CFBundleSignature</key>
 	<string>1YEo</string>
 	<key>CFBundleVersion</key>
-	<string>1.2.0</string>
+	<string>1.3.0</string>
 	<key>CSResourcesFileMapped</key>
 	<true/>
 	<key>LSMinimumSystemVersion</key>

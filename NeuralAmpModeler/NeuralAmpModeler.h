@@ -57,6 +57,7 @@ enum EParams
   kOfflineOversamplingFactor,
   kEQPostNAM,
   kChannelMode,
+  kOfflineAntiAliasFilterPhase,
   kNumParams
 };
 
@@ -79,8 +80,10 @@ enum ECtrlTags
   kCtrlTagOversampling,
   kCtrlTagAntiAliasFilterPhase,
   kCtrlTagOfflineOversampling,
+  kCtrlTagOfflineAntiAliasFilterPhase,
   kCtrlTagEQPostNAM,
   kCtrlTagChannelMode,
+  kCtrlTagOversamplingIndicator,
   kNumCtrlTags
 };
 
@@ -152,8 +155,7 @@ public:
     std::lock_guard<std::mutex> lock(mStateMutex);
 
     if (num_frames > mMaxExternalBlockSize)
-      // We can afford to be careful
-      throw std::runtime_error("More frames were provided than the max expected!");
+      ResetUnlocked(mExternalSampleRate, num_frames);
 
     if (!IsResamplingActive())
     {
@@ -225,11 +227,13 @@ private:
 
     if (resamplingActive)
     {
-      if (mResamplingContainer == nullptr || std::abs(mRenderingSampleRate - renderingSampleRate) > 1.0e-6)
+      if (mResamplingContainer == nullptr || std::abs(mRenderingSampleRate - renderingSampleRate) > 1.0e-6
+          || std::abs(mResamplingBandwidthSampleRate - encapsulatedSampleRate) > 1.0e-6)
       {
-        mResamplingContainer =
-          std::make_unique<dsp::ResamplingContainer<NAM_SAMPLE, 1, 32>>(renderingSampleRate, mAntiAliasFilterPhase);
+        mResamplingContainer = std::make_unique<dsp::ResamplingContainer<NAM_SAMPLE, 1, 32>>(
+          renderingSampleRate, mAntiAliasFilterPhase, encapsulatedSampleRate);
         mRenderingSampleRate = renderingSampleRate;
+        mResamplingBandwidthSampleRate = encapsulatedSampleRate;
       }
       mResamplingContainer->SetAntiAliasFilterPhase(mAntiAliasFilterPhase);
       mResamplingContainer->Reset(sampleRate, maxBlockSize);
@@ -244,9 +248,13 @@ private:
   };
   double GetRenderingSampleRate(double externalSampleRate) const
   {
-    if (mRequestedOversamplingFactor > 1)
-      return externalSampleRate * static_cast<double>(mRequestedOversamplingFactor);
-    return GetEncapsulatedSampleRate();
+    const double encapsulatedSampleRate = GetEncapsulatedSampleRate();
+    if (mRequestedOversamplingFactor <= 1)
+      return encapsulatedSampleRate;
+
+    const double requestedRenderingSampleRate = externalSampleRate * static_cast<double>(mRequestedOversamplingFactor);
+    const double timeScale = std::max(1.0, std::round(requestedRenderingSampleRate / encapsulatedSampleRate));
+    return encapsulatedSampleRate * timeScale;
   }
 
   bool IsResamplingActive() const { return mResamplingContainer != nullptr; };
@@ -258,13 +266,14 @@ private:
   // Stateful real-time resampler for model sample-rate matching and user oversampling.
   std::unique_ptr<dsp::ResamplingContainer<NAM_SAMPLE, 1, 32>> mResamplingContainer;
   double mRenderingSampleRate = 0.0;
+  double mResamplingBandwidthSampleRate = 0.0;
 
   // Used to check that we don't get too large a block to process.
   int mMaxExternalBlockSize = 0;
 
   // The requested oversampling factor (can override model's natural resampling)
   int mRequestedOversamplingFactor = 1;
-  dsp::EAntiAliasFilterPhase mAntiAliasFilterPhase = dsp::EAntiAliasFilterPhase::MinimumPhase;
+  dsp::EAntiAliasFilterPhase mAntiAliasFilterPhase = dsp::EAntiAliasFilterPhase::MinimumPhaseIIR;
   double mExternalSampleRate = 48000.0;
 };
 
@@ -410,6 +419,7 @@ private:
   int mAppliedOversamplingFactor = 1;
   int mAppliedAntiAliasFilterPhase = 0;
   std::atomic<int> mAntiAliasFilterPhaseIndex = 0;
+  std::atomic<int> mOfflineAntiAliasFilterPhaseIndex = 0;
   std::atomic<bool> mEQPostNAM = true;
   std::atomic<bool> mStereoProcessing = false;
   std::atomic<int> mPendingOversamplingFactor = 0;

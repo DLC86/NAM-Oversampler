@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-2022]
+        os: [macos-latest, windows-2022, ubuntu-latest]
         include:
           - os: macos-latest
             build_dir: build-mac
@@ -27,6 +27,9 @@ jobs:
           - os: windows-2022
             build_dir: build-win
             artifact_ext: win
+          - os: ubuntu-latest
+            build_dir: build-linux
+            artifact_ext: linux
 
     steps:
     - name: Check out repository
@@ -51,6 +54,13 @@ jobs:
       run: |
         cd ${{env.PROJECT_NAME}}/scripts
         ./makedist-mac.sh full zip
+      shell: bash
+
+    - name: Build Linux VST3
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        cd ${{env.PROJECT_NAME}}/scripts
+        bash ./makedist-linux.sh
       shell: bash
 
     - name: Add msbuild to PATH (Windows)

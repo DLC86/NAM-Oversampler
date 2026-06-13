@@ -81,7 +81,10 @@ int _UnserializePathsAndExpectedKeys(const iplug::IByteChunk& chunk, int startPo
   for (auto it = paramNames.begin(); it != paramNames.end(); ++it)
   {
     double v = 0.0;
-    pos = chunk.Get(&v, pos);
+    const int nextPos = chunk.Get(&v, pos);
+    if (nextPos < 0)
+      break;
+    pos = nextPos;
     config[*it] = v;
   }
   return pos;
@@ -97,13 +100,57 @@ void _RenameKeys(nlohmann::json& j, std::unordered_map<std::string, std::string>
   }
 }
 
+// v1.2.1
+
+void _UpdateConfigFrom_1_2_1(nlohmann::json& config)
+{
+  // Current format.
+  if (!config.contains("Offline Filter Phase"))
+  {
+    if (config.contains("Filter Phase"))
+      config["Offline Filter Phase"] = config["Filter Phase"];
+    else
+      config["Offline Filter Phase"] = 0.0;
+  }
+}
+
+int _GetConfigFrom_1_2_1(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Slim",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling",
+                                      "EQ Post",
+                                      "Channel Mode",
+                                      "Offline Filter Phase"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_2_1(config);
+  return pos;
+}
+
 // v1.2.0
 
 void _UpdateConfigFrom_1_2_0(nlohmann::json& config)
 {
-  // Current format.
   if (!config.contains("Channel Mode"))
     config["Channel Mode"] = 0.0;
+  if (config.contains("Filter Phase") && static_cast<double>(config["Filter Phase"]) >= 1.0)
+    config["Filter Phase"] = 3.0;
+  config["Offline Filter Phase"] = config["Filter Phase"];
+  _UpdateConfigFrom_1_2_1(config);
 }
 
 int _GetConfigFrom_1_2_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
@@ -379,7 +426,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   _Version version(versionStr);
   // Act accordingly
   nlohmann::json config;
-  if (version >= _Version(1, 2, 0))
+  if (version >= _Version(1, 2, 1))
+  {
+    pos = _GetConfigFrom_1_2_1(chunk, pos, config);
+  }
+  else if (version >= _Version(1, 2, 0))
   {
     pos = _GetConfigFrom_1_2_0(chunk, pos, config);
   }
