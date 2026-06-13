@@ -81,7 +81,9 @@ target_include_directories(NAM-Oversampler
   PRIVATE
     "${PLUGIN_ROOT}"
     "${IPLUG2_ROOT}"
+    "${IPLUG2_ROOT}/IGraphics"
     "${IPLUG2_ROOT}/IPlug"
+    "${IPLUG2_ROOT}/IPlug/Extras"
     "${IPLUG2_ROOT}/IPlug/VST3"
     "${IPLUG2_ROOT}/WDL"
     "${VST3_SDK_ROOT}"
@@ -109,6 +111,7 @@ target_compile_options(NAM-Oversampler
     -Wno-unused-parameter
     -Wno-missing-field-initializers
     -Wno-deprecated-declarations
+    -include cstdlib
     $<$<CONFIG:Release>:-O3>
 )
 
