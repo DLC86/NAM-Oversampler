@@ -81,6 +81,7 @@ target_include_directories(NAM-Oversampler
   PRIVATE
     "${PLUGIN_ROOT}"
     "${IPLUG2_ROOT}"
+    "${IPLUG2_ROOT}/Dependencies/IGraphics/NanoSVG/src"
     "${IPLUG2_ROOT}/IGraphics"
     "${IPLUG2_ROOT}/IPlug"
     "${IPLUG2_ROOT}/IPlug/Extras"
