@@ -718,6 +718,8 @@ void NeuralAmpModeler::_AllocateIOPointers(const size_t nChans)
 
 void NeuralAmpModeler::_ApplyDSPStaging()
 {
+  std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+
   // Remove marked modules
   if (mShouldRemoveModel)
   {
@@ -793,6 +795,8 @@ void NeuralAmpModeler::_FallbackDSP(iplug::sample** inputs, iplug::sample** outp
 
 void NeuralAmpModeler::_ResetModelAndIR(const double sampleRate, const int maxBlockSize)
 {
+  std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+
   // Model
   if (mStagedModel != nullptr)
   {
@@ -1056,25 +1060,30 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
   WDL_String previousNAMPath = mNAMPath;
   try
   {
-    mStagedModel = _CreateModel(modelPath);
-    mStagedModelRight = _CreateModel(modelPath);
+    auto stagedModel = _CreateModel(modelPath);
+    auto stagedModelRight = _CreateModel(modelPath);
 
-    mNAMPath = modelPath;
-    SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
+    WDL_String loadedNAMPath;
+    {
+      std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+      mStagedModel = std::move(stagedModel);
+      mStagedModelRight = std::move(stagedModelRight);
+      mNAMPath = modelPath;
+      loadedNAMPath = mNAMPath;
+    }
+    SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, loadedNAMPath.GetLength(),
+                               loadedNAMPath.Get());
   }
   catch (std::runtime_error& e)
   {
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadFailed);
 
-    if (mStagedModel != nullptr)
     {
+      std::lock_guard<std::mutex> lock(mDSPStagingMutex);
       mStagedModel = nullptr;
-    }
-    if (mStagedModelRight != nullptr)
-    {
       mStagedModelRight = nullptr;
+      mNAMPath = previousNAMPath;
     }
-    mNAMPath = previousNAMPath;
     std::cerr << "Failed to read DSP module" << std::endl;
     std::cerr << e.what() << std::endl;
     return e.what();
@@ -1089,15 +1098,15 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
   WDL_String previousIRPath = mIRPath;
   const double sampleRate = GetSampleRate();
   dsp::wav::LoadReturnCode wavState = dsp::wav::LoadReturnCode::ERROR_OTHER;
+  std::unique_ptr<dsp::ImpulseResponse> stagedIR;
+  std::unique_ptr<dsp::ImpulseResponse> stagedIRRight;
   try
   {
     auto irPathU8 = std::filesystem::u8path(irPath.Get());
-    mStagedIR = std::make_unique<dsp::ImpulseResponse>(irPathU8.string().c_str(), sampleRate);
-    wavState = mStagedIR->GetWavState();
+    stagedIR = std::make_unique<dsp::ImpulseResponse>(irPathU8.string().c_str(), sampleRate);
+    wavState = stagedIR->GetWavState();
     if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
-      mStagedIRRight = std::make_unique<dsp::ImpulseResponse>(mStagedIR->GetData(), sampleRate);
-    else
-      mStagedIRRight = nullptr;
+      stagedIRRight = std::make_unique<dsp::ImpulseResponse>(stagedIR->GetData(), sampleRate);
   }
   catch (std::runtime_error& e)
   {
@@ -1108,20 +1117,24 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
 
   if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
   {
-    mIRPath = irPath;
-    SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, mIRPath.GetLength(), mIRPath.Get());
+    WDL_String loadedIRPath;
+    {
+      std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+      mStagedIR = std::move(stagedIR);
+      mStagedIRRight = std::move(stagedIRRight);
+      mIRPath = irPath;
+      loadedIRPath = mIRPath;
+    }
+    SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, loadedIRPath.GetLength(), loadedIRPath.Get());
   }
   else
   {
-    if (mStagedIR != nullptr)
     {
+      std::lock_guard<std::mutex> lock(mDSPStagingMutex);
       mStagedIR = nullptr;
-    }
-    if (mStagedIRRight != nullptr)
-    {
       mStagedIRRight = nullptr;
+      mIRPath = previousIRPath;
     }
-    mIRPath = previousIRPath;
     SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadFailed);
   }
 

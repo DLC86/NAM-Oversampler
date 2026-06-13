@@ -398,6 +398,7 @@ private:
   std::unique_ptr<ResamplingNAM> mStagedModelRight;
   std::unique_ptr<dsp::ImpulseResponse> mStagedIR;
   std::unique_ptr<dsp::ImpulseResponse> mStagedIRRight;
+  std::mutex mDSPStagingMutex;
   // Flags to take away the modules at a safe time.
   std::atomic<bool> mShouldRemoveModel = false;
   std::atomic<bool> mShouldRemoveIR = false;

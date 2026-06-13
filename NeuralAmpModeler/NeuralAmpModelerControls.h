@@ -869,7 +869,7 @@ public:
     const float buttonSize = 10.0f;
     const auto infoText = IText(12, EAlign::Center, PluginColors::HELP_TEXT);
     const auto infoStyle = mStyle.WithDrawFrame(false).WithValueText(infoText);
-    const auto rowLabelText = IText(11, EAlign::Center, PluginColors::HELP_TEXT);
+    const auto rowLabelText = IText(13, EAlign::Center, PluginColors::HELP_TEXT);
     const auto rowLabelStyle = mStyle.WithDrawFrame(false).WithValueText(rowLabelText);
     const auto radioButtonStyle =
       mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));
@@ -910,15 +910,19 @@ public:
                            mControlNames.offlineFilterPhase, kCtrlTagOfflineAntiAliasFilterPhase);
     offlineFilterPhaseControl->SetTooltip("Offline/render anti-alias filter phase");
 
-    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 0), "NAM-Oversampler v1.3.0", infoStyle),
+    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 0), "NAM-Oversampler v1.3.0", infoStyle),
                          mControlNames.version);
-    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(4, 1), "The Tone Scientist", infoStyle),
+    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 1), "The Tone Scientist", infoStyle),
                          mControlNames.author);
-    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(4, 2), "https://github.com/DLC86/NAM-Oversampler",
+    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 2), "https://github.com/DLC86/NAM-Oversampler",
                                          "https://github.com/DLC86/NAM-Oversampler", infoText, COLOR_TRANSPARENT,
                                          PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
                          mControlNames.github);
-    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(4, 3), "https://shop.thetonescientist.com",
+    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 3), "https://youtube.com/@ToneScientist",
+                                         "https://youtube.com/@ToneScientist", infoText, COLOR_TRANSPARENT,
+                                         PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
+                         mControlNames.youtube);
+    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 4), "https://shop.thetonescientist.com",
                                          "https://shop.thetonescientist.com", infoText, COLOR_TRANSPARENT,
                                          PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
                          mControlNames.shop);
@@ -957,6 +961,7 @@ private:
     const std::string shop = "Shop";
     const std::string title = "Title";
     const std::string version = "Version";
+    const std::string youtube = "YouTube";
   } mControlNames;
 };
 
