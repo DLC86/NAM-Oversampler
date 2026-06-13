@@ -31,10 +31,20 @@ Click on the logo in the upper-left corner, the Oversampling menu will appear an
 - 16x
 - 32x
 
-It also includes selectable anti-alias filter phase modes:
+It also includes selectable anti-alias filter phase modes, separate for realtime and offline rendering:
 
-- Min Phase (0.7 ms latency)
-- Linear Phase (4.7 ms latency)
+- Min Phase IIR (0.8 ms latency)
+- Min Phase FIR (0.8 ms latency)
+- Polyphase FIR (3.5 ms latency)
+- Linear Phase (3.5 ms latency)
+
+## Pre/post EQ
+
+This fork adds a switch to move the EQ pre or post NAM.
+
+## Stereo processing
+
+This fork adds a little button (below the input gain control) to choose between mono and stereo processing. For the moment it just uses the same NAM model and IR for both channels, but in the future I'll add the possibility to load two different models and IRs.
 
 ## Noise gate position
 
