@@ -272,7 +272,7 @@ private:
 
   // The requested oversampling factor (can override model's natural resampling)
   int mRequestedOversamplingFactor = 1;
-  dsp::EAntiAliasFilterPhase mAntiAliasFilterPhase = dsp::EAntiAliasFilterPhase::MinimumPhaseIIR;
+  dsp::EAntiAliasFilterPhase mAntiAliasFilterPhase = dsp::EAntiAliasFilterPhase::MinimumPhaseCascadedFIR;
   double mExternalSampleRate = 48000.0;
 };
 
@@ -419,7 +419,10 @@ private:
   int mAppliedOversamplingFactor = 1;
   int mAppliedAntiAliasFilterPhase = 0;
   std::atomic<int> mAntiAliasFilterPhaseIndex = 0;
-  std::atomic<int> mOfflineAntiAliasFilterPhaseIndex = 0;
+  std::atomic<int> mOfflineAntiAliasFilterPhaseIndex = 2;
+  // Tracks the last known offline-rendering state so that DSP settings/latency are refreshed on transitions.
+  bool mOfflineRenderLatencyArmed = false;
+
   std::atomic<bool> mEQPostNAM = true;
   std::atomic<bool> mStereoProcessing = false;
   std::atomic<int> mPendingOversamplingFactor = 0;

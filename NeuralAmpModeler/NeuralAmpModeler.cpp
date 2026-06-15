@@ -102,12 +102,13 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kSlim)->InitDouble("Slim", 1.0, 0.0, 1.0, 0.01);
   GetParam(kOversamplingFactor)->InitEnum("Oversampling", 0, {"OFF", "2x", "4x", "8x", "16x", "32x"});
   GetParam(kAntiAliasFilterPhase)
-    ->InitEnum("Filter Phase", 0, {"Min Phase IIR", "Min Phase FIR", "Polyphase FIR", "Linear Phase FIR"});
+    ->InitEnum("Filter Phase", 0, {"Minimum Phase", "Linear Phase (short)", "Linear Phase (long)"});
   GetParam(kOfflineOversamplingFactor)->InitEnum("Offline Oversampling", 0, {"OFF", "2x", "4x", "8x", "16x", "32x"});
   GetParam(kOfflineAntiAliasFilterPhase)
-    ->InitEnum("Offline Filter Phase", 0, {"Min Phase IIR", "Min Phase FIR", "Polyphase FIR", "Linear Phase FIR"});
+    ->InitEnum("Offline Filter Phase", 2, {"Minimum Phase", "Linear Phase (short)", "Linear Phase (long)"});
   GetParam(kEQPostNAM)->InitBool("EQ Post", true);
   GetParam(kChannelMode)->InitEnum("Channel Mode", 0, {"Mono", "Stereo"});
+  MakeDefaultPreset("Default");
 
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
 
@@ -366,7 +367,21 @@ NeuralAmpModeler::~NeuralAmpModeler()
 
 void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outputs, int nFrames)
 {
-  const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNumChannelsMono);
+  // OFFLINE_RENDER_STATE_SYNC
+  // Always use offline settings while the host reports offline rendering.
+  // If the state changes without OnReset(), update DSP and latency immediately.
+  const bool offlineNow = GetRenderingOffline();
+  if (mOfflineRenderLatencyArmed != offlineNow)
+  {
+    mOfflineRenderLatencyArmed = offlineNow;
+    mAppliedOversamplingFactor = 0;
+    mAppliedAntiAliasFilterPhase = -1;
+    _ApplyActiveDSPSettings(false);
+    _UpdateLatency();
+  }
+
+
+const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNumChannelsMono);
   const size_t numChannelsConnectedOut = std::max((size_t)NOutChansConnected(), kNumChannelsMono);
   const size_t numChannelsAvailableIn = std::max(
     numChannelsConnectedIn, std::min((size_t)MaxNChannels(ERoute::kInput), (size_t)kNumChannelsStereo));
@@ -485,6 +500,15 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
 
 void NeuralAmpModeler::OnReset()
 {
+  const bool offlineNow = GetRenderingOffline();
+
+  if (mOfflineRenderLatencyArmed != offlineNow)
+  {
+    mOfflineRenderLatencyArmed = offlineNow;
+    mAppliedOversamplingFactor = 0;
+    mAppliedAntiAliasFilterPhase = -1;
+  }
+
   const auto sampleRate = GetSampleRate();
   const int maxBlockSize = GetBlockSize();
 
@@ -495,10 +519,14 @@ void NeuralAmpModeler::OnReset()
   SetTailSize(tailCycles * (int)(sampleRate / kDCBlockerFrequency));
   mInputSender.Reset(sampleRate);
   mOutputSender.Reset(sampleRate);
-  // If there is a model or IR loaded, they need to be checked for resampling.
+
+  // Reset the model/IR first, then apply the active realtime/offline oversampling/filter settings.
   _ResetModelAndIR(sampleRate, GetBlockSize());
   _ApplyActiveDSPSettings(false);
+
   mToneStack->Reset(sampleRate, maxBlockSize);
+
+  // This must be called after the selected filter has been applied, otherwise the host can see stale PDC.
   _UpdateLatency();
 }
 
@@ -601,44 +629,68 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
 {
   switch (paramIdx)
   {
-    // Changes to the input gain
     case kCalibrateInput:
     case kInputCalibrationLevel:
     case kInputLevel: _SetInputGain(); break;
-    // Changes to the output gain
+
     case kOutputLevel:
     case kOutputMode: _SetOutputGain(); break;
-    // Tone stack:
+
     case kToneBass: mToneStack->SetParam("bass", GetParam(paramIdx)->Value()); break;
     case kToneMid: mToneStack->SetParam("middle", GetParam(paramIdx)->Value()); break;
     case kToneTreble: mToneStack->SetParam("treble", GetParam(paramIdx)->Value()); break;
     case kSlim: _ApplySlimParamToLoadedNAMs(); break;
+
     case kOversamplingFactor:
+    {
+      const int enumValue = static_cast<int>(GetParam(kOversamplingFactor)->Value());
+      mOversamplingFactor = 1 << enumValue;
+      if (!GetRenderingOffline())
       {
-        // Convert enum value (0-5) to factor (1, 2, 4, 8, 16, 32)
-        int enumValue = static_cast<int>(GetParam(kOversamplingFactor)->Value());
-        int factor = 1 << enumValue; // 2^enumValue
-        mOversamplingFactor = factor;
+        _ApplyActiveDSPSettings(true);
+        _UpdateLatency();
       }
       break;
+    }
+
     case kAntiAliasFilterPhase:
+    {
+      const int enumValue = static_cast<int>(GetParam(kAntiAliasFilterPhase)->Value());
+      mAntiAliasFilterPhaseIndex = std::clamp(enumValue, 0, 2);
+      if (!GetRenderingOffline())
       {
-        const int enumValue = static_cast<int>(GetParam(kAntiAliasFilterPhase)->Value());
-        mAntiAliasFilterPhaseIndex = std::clamp(enumValue, 0, 3);
+        _ApplyActiveDSPSettings(true);
+        _UpdateLatency();
       }
       break;
+    }
+
     case kOfflineOversamplingFactor:
+    {
+      const int enumValue = static_cast<int>(GetParam(kOfflineOversamplingFactor)->Value());
+      mOfflineOversamplingFactor = 1 << enumValue;
+      if (GetRenderingOffline())
       {
-        const int enumValue = static_cast<int>(GetParam(kOfflineOversamplingFactor)->Value());
-        mOfflineOversamplingFactor = 1 << enumValue;
+        mAppliedOversamplingFactor = 0;
+        _ApplyActiveDSPSettings(false);
+        _UpdateLatency();
       }
       break;
+    }
+
     case kOfflineAntiAliasFilterPhase:
+    {
+      const int enumValue = static_cast<int>(GetParam(kOfflineAntiAliasFilterPhase)->Value());
+      mOfflineAntiAliasFilterPhaseIndex = std::clamp(enumValue, 0, 2);
+      if (GetRenderingOffline())
       {
-        const int enumValue = static_cast<int>(GetParam(kOfflineAntiAliasFilterPhase)->Value());
-        mOfflineAntiAliasFilterPhaseIndex = std::clamp(enumValue, 0, 3);
+        mAppliedAntiAliasFilterPhase = -1;
+        _ApplyActiveDSPSettings(false);
+        _UpdateLatency();
       }
       break;
+    }
+
     case kEQPostNAM: mEQPostNAM = GetParam(kEQPostNAM)->Bool(); break;
     case kChannelMode: _SetStereoProcessingFromParam(); break;
     default: break;
@@ -918,10 +970,9 @@ void NeuralAmpModeler::_ApplyImmediateDSPSettings(int oversamplingFactor, int fi
 
   if (filterPhaseIndex != mAppliedAntiAliasFilterPhase)
   {
-    const auto filterPhase = filterPhaseIndex == 0 ? dsp::EAntiAliasFilterPhase::MinimumPhaseIIR
-                             : filterPhaseIndex == 1 ? dsp::EAntiAliasFilterPhase::MinimumPhaseFIR
-                             : filterPhaseIndex == 2 ? dsp::EAntiAliasFilterPhase::PolyphaseFIR
-                                                     : dsp::EAntiAliasFilterPhase::LinearPhaseFIR;
+    const auto filterPhase = filterPhaseIndex == 0 ? dsp::EAntiAliasFilterPhase::MinimumPhaseCascadedFIR
+                           : filterPhaseIndex == 1 ? dsp::EAntiAliasFilterPhase::LinearCascadedFIRShort
+                                                   : dsp::EAntiAliasFilterPhase::LinearCascadedFIRLong;
     mModel->SetAntiAliasFilterPhase(filterPhase);
     if (mModelRight != nullptr)
       mModelRight->SetAntiAliasFilterPhase(filterPhase);

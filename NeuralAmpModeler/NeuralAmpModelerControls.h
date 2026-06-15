@@ -782,7 +782,7 @@ public:
   AntiAliasFilterPhaseControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
                               EDirection direction = EDirection::Vertical)
   : IVRadioButtonControl(bounds, paramIdx,
-                         {"Min Phase IIR", "Min Phase FIR", "Polyphase FIR", "Linear Phase FIR"}, "", style,
+                         {"Minimum Phase", "Linear Phase (short)", "Linear Phase (long)"}, "", style,
                          EVShape::Ellipse, direction, buttonSize) {};
 };
 

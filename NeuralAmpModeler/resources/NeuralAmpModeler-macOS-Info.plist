@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>NAM-Oversampler</string>
 	<key>CFBundleGetInfoString</key>
-	<string>NAM-Oversampler v1.3.1 Copyright 2022 Steven Atkinson</string>
+	<string>1.4.0</string>
 	<key>CFBundleIconFile</key>
 	<string>NeuralAmpModeler.icns</string>
 	<key>CFBundleIdentifier</key>
@@ -19,11 +19,11 @@
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.3.1</string>
+	<string>1.4.0</string>
 	<key>CFBundleSignature</key>
 	<string>1YEo</string>
 	<key>CFBundleVersion</key>
-	<string>1.3.1</string>
+	<string>1.4.0</string>
 	<key>CSResourcesFileMapped</key>
 	<true/>
 	<key>LSApplicationCategoryType</key>
