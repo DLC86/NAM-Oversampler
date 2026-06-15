@@ -912,7 +912,7 @@ public:
 
     WDL_String verStr, oversamplingVersionStr;
     PLUG()->GetPluginVersionStr(verStr);
-    oversamplingVersionStr.SetFormatted(100, "NAM-Oversampler v%s", verStr.Get());
+    oversamplingVersionStr.SetFormatted(100, "NAM-Oversampler %s", verStr.Get());
 
     AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 0), oversamplingVersionStr.Get(), infoStyle),
                          mControlNames.version);
@@ -1372,3 +1372,4 @@ private:
     IText mText;
   };
 };
+
