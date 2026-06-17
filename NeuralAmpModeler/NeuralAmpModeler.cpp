@@ -106,8 +106,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kOfflineOversamplingFactor)->InitEnum("Offline Oversampling", 0, {"OFF", "2x", "4x", "8x", "16x", "32x"});
   GetParam(kOfflineAntiAliasFilterPhase)
     ->InitEnum("Offline Filter Phase", 2, {"Minimum Phase", "Linear Phase (short)", "Linear Phase (long)"});
+  GetParam(kPhaseMulticoreEnabled)->InitBool("OS Multi-Core", true);
+  GetParam(kPhaseMulticoreThreadCount)
+    ->InitEnum("OS Threads", 0, {"Auto", "1", "2", "4", "8", "12", "16", "20", "24", "32"});
   GetParam(kEQPostNAM)->InitBool("EQ Post", true);
   GetParam(kChannelMode)->InitEnum("Channel Mode", 0, {"Mono", "Stereo"});
+  NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
   MakeDefaultPreset("Default");
 
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
@@ -678,6 +682,13 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
       break;
     }
 
+    case kPhaseMulticoreEnabled:
+    case kPhaseMulticoreThreadCount:
+    {
+      _SetPhaseMulticoreSettingsFromParams();
+      break;
+    }
+
     case kOfflineAntiAliasFilterPhase:
     {
       const int enumValue = static_cast<int>(GetParam(kOfflineAntiAliasFilterPhase)->Value());
@@ -936,8 +947,7 @@ void NeuralAmpModeler::_ApplySlimParamToLoadedNAMs()
   auto apply = [v](ResamplingNAM* p) {
     if (p == nullptr)
       return;
-    if (nam::SlimmableModel* s = p->GetSlimmableModel())
-      s->SetSlimmableSize(v);
+    p->SetSlimmableSize(v);
   };
   apply(mModel.get());
   apply(mStagedModel.get());
@@ -948,6 +958,41 @@ void NeuralAmpModeler::_ApplySlimParamToLoadedNAMs()
 int NeuralAmpModeler::_GetActiveOversamplingFactor() const
 {
   return GetRenderingOffline() ? mOfflineOversamplingFactor.load() : mOversamplingFactor.load();
+}
+
+
+int NeuralAmpModeler::_GetPhaseMulticoreThreadCountFromParam() const
+{
+  static constexpr int kThreadCounts[] = {0, 1, 2, 4, 8, 12, 16, 20, 24, 32};
+  const int maxIndex = static_cast<int>(sizeof(kThreadCounts) / sizeof(kThreadCounts[0])) - 1;
+  const int idx = std::clamp(static_cast<int>(GetParam(kPhaseMulticoreThreadCount)->Value()), 0, maxIndex);
+  return kThreadCounts[idx];
+}
+
+void NeuralAmpModeler::_SetPhaseMulticoreSettingsFromParams()
+{
+  const bool enabled = GetParam(kPhaseMulticoreEnabled)->Bool();
+  const int requestedThreads = _GetPhaseMulticoreThreadCountFromParam();
+
+  mPhaseMulticoreEnabledParam = enabled;
+  mPhaseMulticoreRequestedThreadsParam = requestedThreads;
+
+  NAMSetPhaseMulticoreRuntimeSettings(enabled, requestedThreads, 4);
+
+  auto apply = [enabled, requestedThreads](ResamplingNAM* p) {
+    if (p != nullptr)
+      p->SetPhaseMulticoreSettings(enabled, requestedThreads);
+  };
+
+  apply(mModel.get());
+  apply(mStagedModel.get());
+  apply(mModelRight.get());
+  apply(mStagedModelRight.get());
+
+  mAppliedOversamplingFactor = 0;
+  mAppliedAntiAliasFilterPhase = -1;
+  _ApplyActiveDSPSettings(false);
+  _UpdateLatency();
 }
 
 int NeuralAmpModeler::_GetAntiAliasFilterPhaseIndex() const
@@ -1093,18 +1138,28 @@ std::unique_ptr<ResamplingNAM> NeuralAmpModeler::_CreateModel(const WDL_String& 
     throw std::runtime_error("Model must have 1 output channel, but has " + std::to_string(model->NumOutputChannels()));
   }
 
-  std::unique_ptr<ResamplingNAM> temp = std::make_unique<ResamplingNAM>(std::move(model), GetSampleRate());
+  std::unique_ptr<ResamplingNAM> temp = std::make_unique<ResamplingNAM>(std::move(model), GetSampleRate(), dspPath);
   temp->Reset(GetSampleRate(), GetBlockSize());
-  if (nam::SlimmableModel* slimmable = temp->GetSlimmableModel())
-    slimmable->SetSlimmableSize(GetParam(kSlim)->Value());
+  temp->SetPhaseMulticoreSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load());
+  temp->SetSlimmableSize(GetParam(kSlim)->Value());
 
   return temp;
 }
 
 void NeuralAmpModeler::_SetStereoProcessingFromParam()
 {
-  mStereoProcessing = _IsStereoRequested();
+  const bool stereoRequested = _IsStereoRequested();
+
+  // Keep the right NAM/IR cached and prepared even when mono processing is selected.
+  // Mono mode disables the right processing path only; it must not unload or reset
+  // the right model on every stereo toggle. A different .nam file still replaces
+  // both left/right models through _StageModel().
+  mStereoProcessing = stereoRequested && (mModel == nullptr || mModelRight != nullptr)
+                      && (mIR == nullptr || !GetParam(kIRToggle)->Value() || mIRRight != nullptr);
 }
+
+
+
 
 std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
 {

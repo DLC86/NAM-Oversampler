@@ -7,7 +7,8 @@ on:
       - "v*"
 
 env:
-  PROJECT_NAME: NeuralAmpModeler
+  PROJECT_DIR: NeuralAmpModeler
+  ARTIFACT_NAME: NAM-Oversampler
 
 jobs:
   create_release:
@@ -30,7 +31,7 @@ jobs:
           draft: true
           tag_name: ${{github.ref}}
           release_name: Release ${{github.ref}}
-          body_path: ${{env.PROJECT_NAME}}/installer/changelog.txt
+          body_path: ${{env.PROJECT_DIR}}/installer/changelog.txt
 
   build:
     name: Build
@@ -70,14 +71,14 @@ jobs:
       id: mac_archivename_step
       if: matrix.os == 'macos-latest'
       run: |
-        ARCHIVE_NAME=`python3 iPlug2/Scripts/get_archive_name.py ${{env.PROJECT_NAME}} mac full`
+        ARCHIVE_NAME=`python3 iPlug2/Scripts/get_archive_name.py ${{env.PROJECT_DIR}} mac full`
         echo "archive_name=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
       shell: bash
 
     - name: Build macOS
       if: matrix.os == 'macos-latest'
       run: |
-        cd ${{env.PROJECT_NAME}}/scripts
+        cd ${{env.PROJECT_DIR}}/scripts
         ./makedist-mac.sh full installer
       shell: bash
 
@@ -85,7 +86,7 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       id: linux_build_step
       run: |
-        cd ${{env.PROJECT_NAME}}/scripts
+        cd ${{env.PROJECT_DIR}}/scripts
         bash ./makedist-linux.sh
         ZIP_PATH="$(find ../build-linux/out -maxdepth 1 -name '*-linux-vst3.zip' -print -quit)"
         test -n "$ZIP_PATH"
@@ -111,7 +112,7 @@ jobs:
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
       with:
         upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-dSYMs.zip
+        asset_path: ${{env.PROJECT_DIR}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-dSYMs.zip
         asset_name: ${{steps.mac_archivename_step.outputs.archive_name}}-dSYMs.zip
         asset_content_type: application/zip
 
@@ -122,7 +123,7 @@ jobs:
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
       with:
         upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}.dmg
+        asset_path: ${{env.PROJECT_DIR}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}.dmg
         asset_name: ${{steps.mac_archivename_step.outputs.archive_name}}.dmg
         asset_content_type: application/octet-stream
 
@@ -141,14 +142,14 @@ jobs:
       id: win_archivename_step
       if: matrix.os == 'windows-2022'
       run: |
-        ARCHIVE_NAME=`python.exe iPlug2/Scripts/get_archive_name.py ${{env.PROJECT_NAME}} win full`
+        ARCHIVE_NAME=`python.exe iPlug2/Scripts/get_archive_name.py ${{env.PROJECT_DIR}} win full`
         echo "archive_name=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
       shell: bash
 
     - name: Build Windows
       if: matrix.os == 'windows-2022'
       run: |
-        cd ${{env.PROJECT_NAME}}\scripts
+        cd ${{env.PROJECT_DIR}}\scripts
         .\makedist-win.bat full installer
       shell: pwsh
 
@@ -159,7 +160,7 @@ jobs:
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
       with:
         upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.win_archivename_step.outputs.archive_name}}-pdbs.zip
+        asset_path: ${{env.PROJECT_DIR}}/${{matrix.build_dir}}/out/${{steps.win_archivename_step.outputs.archive_name}}-pdbs.zip
         asset_name: ${{steps.win_archivename_step.outputs.archive_name}}-pdbs.zip
         asset_content_type: application/zip
 
@@ -170,6 +171,6 @@ jobs:
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
       with:
         upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{env.PROJECT_NAME}}/${{matrix.build_dir}}/out/${{steps.win_archivename_step.outputs.archive_name}}.zip
+        asset_path: ${{env.PROJECT_DIR}}/${{matrix.build_dir}}/out/${{steps.win_archivename_step.outputs.archive_name}}.zip
         asset_name: ${{steps.win_archivename_step.outputs.archive_name}}.zip
         asset_content_type: application/zip

@@ -786,6 +786,24 @@ public:
                          EVShape::Ellipse, direction, buttonSize) {};
 };
 
+
+class PhaseMulticoreControl : public IVRadioButtonControl
+{
+public:
+  PhaseMulticoreControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
+                        EDirection direction = EDirection::Vertical)
+  : IVRadioButtonControl(bounds, paramIdx, {"OFF", "ON"}, "", style, EVShape::Ellipse, direction, buttonSize) {};
+};
+
+class PhaseThreadControl : public IVRadioButtonControl
+{
+public:
+  PhaseThreadControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
+                     EDirection direction = EDirection::Vertical)
+  : IVRadioButtonControl(bounds, paramIdx, {"Auto", "1", "2", "4", "8", "12", "16", "20", "24", "32"}, "", style,
+                         EVShape::Ellipse, direction, buttonSize) {};
+};
+
 class NAMOversamplingPageControl : public IContainerBaseWithNamedChildren
 {
 public:
@@ -845,24 +863,36 @@ public:
     const auto content = page.GetPadded(-(pad + 10.0f));
     const auto titleArea = content.GetFromTop(50.0f);
     const auto rowsArea =
-      content.GetReducedFromTop(58.0f).GetReducedFromBottom(96.0f).GetCentredInside(540.0f, 163.0f).GetVShifted(-10.0f);
-    const float rowHeight = 25.0f;
-    const float sectionGap = 20.0f;
+      content.GetReducedFromTop(52.0f).GetReducedFromBottom(82.0f).GetCentredInside(540.0f, 214.0f).GetVShifted(-10.0f);
+    const float rowHeight = 23.0f;
+    const float sectionGap = 12.0f;
+    const float multicoreGap = 16.0f;
+
     const auto realtimeTitleRow = IRECT(rowsArea.L, rowsArea.T, rowsArea.R, rowsArea.T + rowHeight);
     const auto realtimeOSRow =
       IRECT(rowsArea.L, realtimeTitleRow.B, rowsArea.R, realtimeTitleRow.B + rowHeight);
     const auto realtimeFilterRow = IRECT(rowsArea.L, realtimeOSRow.B, rowsArea.R, realtimeOSRow.B + rowHeight);
+
     const auto offlineTitleRow =
       IRECT(rowsArea.L, realtimeFilterRow.B + sectionGap, rowsArea.R, realtimeFilterRow.B + sectionGap + rowHeight);
     const auto offlineOSRow = IRECT(rowsArea.L, offlineTitleRow.B, rowsArea.R, offlineTitleRow.B + rowHeight);
     const auto offlineFilterRow = IRECT(rowsArea.L, offlineOSRow.B, rowsArea.R, offlineOSRow.B + rowHeight);
-    const auto rowLabelWidth = 58.0f;
+
+    const auto realtimeMulticoreRow =
+      IRECT(rowsArea.L, offlineFilterRow.B + multicoreGap, rowsArea.R, offlineFilterRow.B + multicoreGap + rowHeight);
+    const auto realtimeThreadsRow =
+      IRECT(rowsArea.L, realtimeMulticoreRow.B, rowsArea.R, realtimeMulticoreRow.B + rowHeight);
+    const auto rowLabelWidth = 82.0f;
     const auto realtimeOSLabelArea = realtimeOSRow.GetFromLeft(rowLabelWidth);
     const auto realtimeFilterLabelArea = realtimeFilterRow.GetFromLeft(rowLabelWidth);
+    const auto realtimeMulticoreLabelArea = realtimeMulticoreRow.GetFromLeft(rowLabelWidth);
+    const auto realtimeThreadsLabelArea = realtimeThreadsRow.GetFromLeft(rowLabelWidth);
     const auto offlineOSLabelArea = offlineOSRow.GetFromLeft(rowLabelWidth);
     const auto offlineFilterLabelArea = offlineFilterRow.GetFromLeft(rowLabelWidth);
     const auto realtimeRadioArea = realtimeOSRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto realtimeFilterArea = realtimeFilterRow.GetFromRight(rowsArea.W() - rowLabelWidth);
+    const auto realtimeMulticoreArea = realtimeMulticoreRow.GetFromRight(rowsArea.W() - rowLabelWidth);
+    const auto realtimeThreadsArea = realtimeThreadsRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto offlineRadioArea = offlineOSRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto offlineFilterArea = offlineFilterRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto infoArea = content.GetFromBottom(72.0f).GetHPadded(-8.0f);
@@ -881,6 +911,10 @@ public:
     AddNamedChildControl(new IVLabelControl(realtimeOSLabelArea, "OS", rowLabelStyle), mControlNames.realtimeOSLabel);
     AddNamedChildControl(new IVLabelControl(realtimeFilterLabelArea, "FILTER", rowLabelStyle),
                          mControlNames.realtimeFilterLabel);
+    AddNamedChildControl(new IVLabelControl(realtimeMulticoreLabelArea, "MULTI-CORE", rowLabelStyle),
+                         mControlNames.phaseMulticoreLabel);
+    AddNamedChildControl(new IVLabelControl(realtimeThreadsLabelArea, "THREADS", rowLabelStyle),
+                         mControlNames.phaseThreadsLabel);
     AddNamedChildControl(new IVLabelControl(offlineTitleRow, "OFFLINE RENDERING", rowLabelStyle),
                          mControlNames.offlineLabel);
     AddNamedChildControl(new IVLabelControl(offlineOSLabelArea, "OS", rowLabelStyle), mControlNames.offlineOSLabel);
@@ -903,6 +937,18 @@ public:
                                                            buttonSize, EDirection::Horizontal),
                            mControlNames.filterPhase, kCtrlTagAntiAliasFilterPhase);
     filterPhaseControl->SetTooltip("Realtime anti-alias filter phase");
+
+    auto* phaseMulticoreControl =
+      AddNamedChildControl(new PhaseMulticoreControl(realtimeMulticoreArea, kPhaseMulticoreEnabled, radioButtonStyle,
+                                                     buttonSize, EDirection::Horizontal),
+                           mControlNames.phaseMulticore, kCtrlTagPhaseMulticoreEnabled);
+    phaseMulticoreControl->SetTooltip("Enable phase-parallel oversampling multicore");
+
+    auto* phaseThreadsControl =
+      AddNamedChildControl(new PhaseThreadControl(realtimeThreadsArea, kPhaseMulticoreThreadCount, radioButtonStyle,
+                                                  buttonSize, EDirection::Horizontal),
+                           mControlNames.phaseThreads, kCtrlTagPhaseMulticoreThreadCount);
+    phaseThreadsControl->SetTooltip("Phase multicore worker count. Auto leaves CPU headroom.");
 
     auto* offlineFilterPhaseControl =
       AddNamedChildControl(new AntiAliasFilterPhaseControl(offlineFilterArea, kOfflineAntiAliasFilterPhase,
@@ -954,6 +1000,10 @@ private:
     const std::string realtimeFilterLabel = "RealtimeFilterLabel";
     const std::string filterPhase = "FilterPhase";
     const std::string github = "GitHub";
+    const std::string phaseMulticoreLabel = "PhaseMulticoreLabel";
+    const std::string phaseMulticore = "PhaseMulticore";
+    const std::string phaseThreadsLabel = "PhaseThreadsLabel";
+    const std::string phaseThreads = "PhaseThreads";
     const std::string offlineLabel = "OfflineLabel";
     const std::string offlineFilterLabel = "OfflineFilterLabel";
     const std::string offlineFilterPhase = "OfflineFilterPhase";
