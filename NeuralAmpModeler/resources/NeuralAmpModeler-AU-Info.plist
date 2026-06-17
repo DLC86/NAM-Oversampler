@@ -50,6 +50,6 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>10.15.0</string>
 	<key>NSPrincipalClass</key>
-	<string>NeuralAmpModeler_View</string>
+	<string>NAMOversampler_View</string>
 </dict>
 </plist>
