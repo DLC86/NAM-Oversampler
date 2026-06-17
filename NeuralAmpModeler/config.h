@@ -42,8 +42,8 @@
 #define AUV2_ENTRY NeuralAmpModeler_Entry
 #define AUV2_ENTRY_STR "NeuralAmpModeler_Entry"
 #define AUV2_FACTORY NeuralAmpModeler_Factory
-#define AUV2_VIEW_CLASS NeuralAmpModeler_View
-#define AUV2_VIEW_CLASS_STR "NeuralAmpModeler_View"
+#define AUV2_VIEW_CLASS NAMOversampler_View
+#define AUV2_VIEW_CLASS_STR "NAMOversampler_View"
 
 #define AAX_TYPE_IDS 'ITP1'
 #define AAX_TYPE_IDS_AUDIOSUITE 'ITA1'
