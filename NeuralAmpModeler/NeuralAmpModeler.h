@@ -623,25 +623,60 @@ public:
   void process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames) override
   {
     std::lock_guard<std::mutex> lock(mStateMutex);
+    ProcessUnlocked(input, output, num_frames);
+  };
 
-    if (num_frames > mMaxExternalBlockSize)
-      ResetUnlocked(mExternalSampleRate, num_frames);
+  void process_stereo(ResamplingNAM& right,
+                      NAM_SAMPLE** leftInput,
+                      NAM_SAMPLE** leftOutput,
+                      NAM_SAMPLE** rightInput,
+                      NAM_SAMPLE** rightOutput,
+                      const int numFrames)
+  {
+    std::scoped_lock lock(mStateMutex, right.mStateMutex);
 
-    if (!IsResamplingActive())
+    if (numFrames > mMaxExternalBlockSize)
+      ResetUnlocked(mExternalSampleRate, numFrames);
+    if (numFrames > right.mMaxExternalBlockSize)
+      right.ResetUnlocked(right.mExternalSampleRate, numFrames);
+
+    if (!CanProcessStereoPhaseMulticoreUnlocked(right))
     {
-      mEncapsulated->process(input, output, num_frames);
+      ProcessUnlocked(leftInput, leftOutput, numFrames);
+      right.ProcessUnlocked(rightInput, rightOutput, numFrames);
       return;
     }
 
+    // The cascaded power-of-two resamplers invoke their DSP callbacks exactly
+    // once per external block. Nesting the right callback exposes both
+    // oversampled buffers at the same time, allowing one combined phase barrier.
     mResamplingContainer->ProcessBlock(
-      input, output, num_frames,
-      [this](NAM_SAMPLE** resampledInput, NAM_SAMPLE** resampledOutput, int resampledFrames) {
-        if (mPhaseMulticoreActive)
-          ProcessPhaseMulticoreUnlocked(resampledInput, resampledOutput, resampledFrames);
-        else
-          mEncapsulated->process(resampledInput, resampledOutput, resampledFrames);
+      leftInput, leftOutput, numFrames,
+      [this, &right, rightInput, rightOutput, numFrames](
+        NAM_SAMPLE** leftResampledInput, NAM_SAMPLE** leftResampledOutput, int leftResampledFrames) {
+        right.mResamplingContainer->ProcessBlock(
+          rightInput, rightOutput, numFrames,
+          [this, &right, leftResampledInput, leftResampledOutput, leftResampledFrames](
+            NAM_SAMPLE** rightResampledInput, NAM_SAMPLE** rightResampledOutput, int rightResampledFrames) {
+            if (leftResampledFrames == rightResampledFrames)
+            {
+              ProcessStereoPhaseMulticoreUnlocked(
+                right,
+                leftResampledInput,
+                leftResampledOutput,
+                rightResampledInput,
+                rightResampledOutput,
+                leftResampledFrames);
+            }
+            else
+            {
+              // Defensive fallback for unexpected resampler-state divergence.
+              ProcessPhaseMulticoreUnlocked(leftResampledInput, leftResampledOutput, leftResampledFrames);
+              right.ProcessPhaseMulticoreUnlocked(rightResampledInput, rightResampledOutput, rightResampledFrames);
+            }
+          });
       });
-  };
+  }
 
   int GetLatency() const
   {
@@ -703,6 +738,27 @@ public:
   }
 
 private:
+  void ProcessUnlocked(NAM_SAMPLE** input, NAM_SAMPLE** output, const int numFrames)
+  {
+    if (numFrames > mMaxExternalBlockSize)
+      ResetUnlocked(mExternalSampleRate, numFrames);
+
+    if (!IsResamplingActive())
+    {
+      mEncapsulated->process(input, output, numFrames);
+      return;
+    }
+
+    mResamplingContainer->ProcessBlock(
+      input, output, numFrames,
+      [this](NAM_SAMPLE** resampledInput, NAM_SAMPLE** resampledOutput, int resampledFrames) {
+        if (mPhaseMulticoreActive)
+          ProcessPhaseMulticoreUnlocked(resampledInput, resampledOutput, resampledFrames);
+        else
+          mEncapsulated->process(resampledInput, resampledOutput, resampledFrames);
+      });
+  }
+
   void ResetUnlocked(const double sampleRate, const int maxBlockSize)
   {
     mExpectedSampleRate = sampleRate;
@@ -903,6 +959,101 @@ private:
     return phase == 0 ? mEncapsulated.get() : mPhaseModels[static_cast<size_t>(phase - 1)].get();
   }
 
+  bool CanProcessStereoPhaseMulticoreUnlocked(const ResamplingNAM& right) const
+  {
+    return mPhaseMulticoreActive && right.mPhaseMulticoreActive && mPhaseCount > 1
+           && mPhaseCount == right.mPhaseCount
+           && PhaseMulticoreThreadCountUnlocked() == right.PhaseMulticoreThreadCountUnlocked()
+           && mResamplingContainer != nullptr && right.mResamplingContainer != nullptr
+           && mResamplingContainer->HasSingleProcessCallbackPerBlock()
+           && right.mResamplingContainer->HasSingleProcessCallbackPerBlock()
+           && std::abs(mRenderingSampleRate - right.mRenderingSampleRate) < 1.0e-6;
+  }
+
+  void ProcessPhaseRangeUnlocked(NAM_SAMPLE** resampledInput,
+                                 NAM_SAMPLE** resampledOutput,
+                                 int resampledFrames,
+                                 int phaseBegin,
+                                 int phaseEnd)
+  {
+    const int phaseCount = mPhaseCount;
+
+    for (int phase = phaseBegin; phase < phaseEnd; phase++)
+    {
+      const int phaseFrames =
+        phase < resampledFrames ? ((resampledFrames - phase + phaseCount - 1) / phaseCount) : 0;
+      if (phaseFrames <= 0)
+        continue;
+
+      nam::DSP* phaseModel = GetPhaseModelUnlocked(phase);
+
+      if (phaseModel && phaseModel->SupportsStridedProcess())
+      {
+        phaseModel->process_strided(
+          resampledInput[0] + phase, phaseCount, resampledOutput[0] + phase, phaseCount, phaseFrames);
+        continue;
+      }
+
+      auto& phaseInput = mPhaseInputBuffers[static_cast<size_t>(phase)];
+      auto& phaseOutput = mPhaseOutputBuffers[static_cast<size_t>(phase)];
+
+      for (int i = 0; i < phaseFrames; i++)
+        phaseInput[static_cast<size_t>(i)] = resampledInput[0][phase + i * phaseCount];
+
+      NAM_SAMPLE* phaseInputPtrs[1] = {phaseInput.data()};
+      NAM_SAMPLE* phaseOutputPtrs[1] = {phaseOutput.data()};
+      phaseModel->process(phaseInputPtrs, phaseOutputPtrs, phaseFrames);
+
+      for (int i = 0; i < phaseFrames; i++)
+        resampledOutput[0][phase + i * phaseCount] = phaseOutput[static_cast<size_t>(i)];
+    }
+  }
+
+  void ProcessStereoPhaseMulticoreUnlocked(ResamplingNAM& right,
+                                           NAM_SAMPLE** leftResampledInput,
+                                           NAM_SAMPLE** leftResampledOutput,
+                                           NAM_SAMPLE** rightResampledInput,
+                                           NAM_SAMPLE** rightResampledOutput,
+                                           int resampledFrames)
+  {
+    const int phaseCount = mPhaseCount;
+    const int totalPhaseTasks = phaseCount * 2;
+    const int requestedThreads = PhaseMulticoreThreadCountUnlocked();
+    auto pool = GetPhaseMulticorePoolForThreadCount(requestedThreads);
+    pool->SetAudioWorkgroup(mAudioWorkgroup.load(std::memory_order_acquire));
+
+    const int availableThreads = pool->RecommendedThreadCount();
+    const int jobCount =
+      std::max(1, std::min(std::min(requestedThreads, availableThreads), totalPhaseTasks));
+    const int tasksPerJob = (totalPhaseTasks + jobCount - 1) / jobCount;
+
+    pool->ParallelFor(jobCount, [this,
+                                 &right,
+                                 leftResampledInput,
+                                 leftResampledOutput,
+                                 rightResampledInput,
+                                 rightResampledOutput,
+                                 resampledFrames,
+                                 phaseCount,
+                                 totalPhaseTasks,
+                                 tasksPerJob](int jobIndex) {
+      const int taskBegin = jobIndex * tasksPerJob;
+      const int taskEnd = std::min(totalPhaseTasks, taskBegin + tasksPerJob);
+
+      const int leftBegin = std::min(taskBegin, phaseCount);
+      const int leftEnd = std::min(taskEnd, phaseCount);
+      if (leftBegin < leftEnd)
+        ProcessPhaseRangeUnlocked(
+          leftResampledInput, leftResampledOutput, resampledFrames, leftBegin, leftEnd);
+
+      const int rightBegin = std::max(0, taskBegin - phaseCount);
+      const int rightEnd = std::max(0, taskEnd - phaseCount);
+      if (rightBegin < rightEnd)
+        right.ProcessPhaseRangeUnlocked(
+          rightResampledInput, rightResampledOutput, resampledFrames, rightBegin, rightEnd);
+    });
+  }
+
 
 
 
@@ -935,39 +1086,7 @@ private:
                                  phaseCount, phasesPerJob](int jobIndex) {
       const int phaseBegin = jobIndex * phasesPerJob;
       const int phaseEnd = std::min(phaseCount, phaseBegin + phasesPerJob);
-
-      for (int phase = phaseBegin; phase < phaseEnd; phase++)
-      {
-        const int phaseFrames =
-          phase < resampledFrames ? ((resampledFrames - phase + phaseCount - 1) / phaseCount) : 0;
-        if (phaseFrames <= 0)
-          continue;
-
-        nam::DSP* phaseModel = GetPhaseModelUnlocked(phase);
-
-        if (phaseModel && phaseModel->SupportsStridedProcess())
-        {
-          // Phase-aware backends can read/write the interleaved oversampled
-          // buffer directly. This removes the extra deinterleave/interleave
-          // copies from the phase-parallel wrapper.
-          phaseModel->process_strided(
-            resampledInput[0] + phase, phaseCount, resampledOutput[0] + phase, phaseCount, phaseFrames);
-          continue;
-        }
-
-        auto& phaseInput = mPhaseInputBuffers[static_cast<size_t>(phase)];
-        auto& phaseOutput = mPhaseOutputBuffers[static_cast<size_t>(phase)];
-
-        for (int i = 0; i < phaseFrames; i++)
-          phaseInput[static_cast<size_t>(i)] = resampledInput[0][phase + i * phaseCount];
-
-        NAM_SAMPLE* phaseInputPtrs[1] = {phaseInput.data()};
-        NAM_SAMPLE* phaseOutputPtrs[1] = {phaseOutput.data()};
-        phaseModel->process(phaseInputPtrs, phaseOutputPtrs, phaseFrames);
-
-        for (int i = 0; i < phaseFrames; i++)
-          resampledOutput[0][phase + i * phaseCount] = phaseOutput[static_cast<size_t>(i)];
-      }
+      ProcessPhaseRangeUnlocked(resampledInput, resampledOutput, resampledFrames, phaseBegin, phaseEnd);
     });
   }
 

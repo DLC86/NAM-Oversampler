@@ -447,8 +447,8 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
       sample* modelOutputLeft[1] = {mOutputPointers[0]};
       sample* modelInputRight[1] = {modelInputPointers[1]};
       sample* modelOutputRight[1] = {mOutputPointers[1]};
-      mModel->process(modelInputLeft, modelOutputLeft, nFrames);
-      mModelRight->process(modelInputRight, modelOutputRight, nFrames);
+      mModel->process_stereo(
+        *mModelRight, modelInputLeft, modelOutputLeft, modelInputRight, modelOutputRight, nFrames);
     }
     else
     {
