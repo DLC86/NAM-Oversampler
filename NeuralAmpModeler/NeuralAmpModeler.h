@@ -44,7 +44,12 @@
 
 #if defined(__APPLE__)
 #include <pthread.h>
-#include <qos/qos.h>
+#if __has_include(<pthread/qos.h>)
+#include <pthread/qos.h>
+#define NAM_HAS_PTHREAD_QOS 1
+#else
+#define NAM_HAS_PTHREAD_QOS 0
+#endif
 #endif
 
 
@@ -214,7 +219,9 @@ static inline void NAMConfigurePhaseWorkerThread(int workerJobIndex)
   // std::thread workers without explicit QoS may be scheduled as lower-priority
   // work. Since the audio thread waits for these phase workers, mark them as
   // interactive work to reduce E-core / low-priority scheduling issues.
+#if NAM_HAS_PTHREAD_QOS
   pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
 #endif
 }
 
