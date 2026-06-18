@@ -40,6 +40,12 @@
 #include <filesystem>
 #include <cstdlib>
 #include <condition_variable>
+#include <memory>
+
+#if defined(__APPLE__)
+#include <pthread.h>
+#include <qos/qos.h>
+#endif
 
 
 const int kNumPresets = 1;
@@ -169,12 +175,15 @@ static inline void NAMConfigurePhaseWorkerThread(int workerJobIndex)
 {
   (void)workerJobIndex;
 
+  if (NAMPhaseMulticoreEnvEnabled("NAM_PHASE_MULTICORE_QOS_DISABLE"))
+    return;
+
 #if defined(_WIN32)
-  // Experimental GatewayOS-style scheduling hint. This does not "fake" the DAW CPU
-  // meter; it gives persistent phase workers a Pro Audio MMCSS class so the audio
-  // thread waits less often for worker wake-up/scheduling.
-  //
-  // Enabled by default. Set NAM_PHASE_MULTICORE_MMCSS_DISABLE=1 to disable.
+  // Windows / Intel hybrid CPUs:
+  // MMCSS gives the worker a Pro Audio scheduling class. In addition, explicitly
+  // opt out of EcoQoS / execution-speed throttling so phase workers are less
+  // likely to be treated as efficiency/background work while the audio thread
+  // is waiting for them.
   if (!NAMPhaseMulticoreEnvEnabled("NAM_PHASE_MULTICORE_MMCSS_DISABLE"))
   {
     DWORD taskIndex = 0;
@@ -187,6 +196,25 @@ static inline void NAMConfigurePhaseWorkerThread(int workerJobIndex)
 
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
   }
+
+#if defined(THREAD_POWER_THROTTLING_CURRENT_VERSION) && defined(THREAD_POWER_THROTTLING_EXECUTION_SPEED)
+  THREAD_POWER_THROTTLING_STATE powerThrottling = {};
+  powerThrottling.Version = THREAD_POWER_THROTTLING_CURRENT_VERSION;
+  powerThrottling.ControlMask = THREAD_POWER_THROTTLING_EXECUTION_SPEED;
+  powerThrottling.StateMask = 0;
+
+  SetThreadInformation(GetCurrentThread(),
+                       ThreadPowerThrottling,
+                       &powerThrottling,
+                       sizeof(powerThrottling));
+#endif
+
+#elif defined(__APPLE__)
+  // Apple Silicon / macOS:
+  // std::thread workers without explicit QoS may be scheduled as lower-priority
+  // work. Since the audio thread waits for these phase workers, mark them as
+  // interactive work to reduce E-core / low-priority scheduling issues.
+  pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 #endif
 }
 
@@ -438,9 +466,31 @@ static inline int NAMPhaseMulticoreThreadCount()
   return NAMPhaseMulticoreConfiguredThreadCount();
 }
 
-static inline NAMPhaseMulticorePool& NAMGetPhaseMulticorePool()
+static inline std::shared_ptr<NAMPhaseMulticorePool> NAMGetPhaseMulticorePoolForThreadCount(int totalThreads)
 {
-  static NAMPhaseMulticorePool pool(NAMPhaseMulticoreMaxPoolThreadCount());
+  // Pool+:
+  // Keep one persistent pool per effective total thread count.
+  //
+  // This avoids the previous "max hardware pool" behavior where OS Threads = 4
+  // could still notify/wake many inactive worker threads on every audio block.
+  //
+  // Pools are cached instead of destroyed/recreated, so changing thread count
+  // during testing does not repeatedly tear down worker threads.
+  const int maxThreads = NAMPhaseMulticoreMaxPoolThreadCount();
+  const int clampedThreads = NAMPhaseMulticoreClampInt(totalThreads, 1, maxThreads);
+
+  static std::mutex poolsMutex;
+  static std::vector<std::shared_ptr<NAMPhaseMulticorePool>> pools;
+
+  std::lock_guard<std::mutex> lock(poolsMutex);
+
+  if (static_cast<int>(pools.size()) <= clampedThreads)
+    pools.resize(static_cast<size_t>(clampedThreads + 1));
+
+  auto& pool = pools[static_cast<size_t>(clampedThreads)];
+  if (!pool)
+    pool = std::make_shared<NAMPhaseMulticorePool>(clampedThreads);
+
   return pool;
 }
 
@@ -754,12 +804,13 @@ mPhaseMulticoreActive = phaseMulticoreRequested && !useA2FrameOMPBackend;
     // Important: do NOT schedule one job per phase. At 32x this creates 32 tiny
     // jobs per audio block. Gateway-style phase processing should schedule one
     // coarse job per worker, and each worker processes several phases sequentially.
-    const int availableThreads = NAMGetPhaseMulticorePool().ThreadCount();
+    auto pool = NAMGetPhaseMulticorePoolForThreadCount(requestedThreads);
+    const int availableThreads = pool->ThreadCount();
     const int jobCount = std::max(1, std::min(std::min(requestedThreads, availableThreads), phaseCount));
     const int phasesPerJob = (phaseCount + jobCount - 1) / jobCount;
 
-    NAMGetPhaseMulticorePool().ParallelFor(jobCount, [this, resampledInput, resampledOutput, resampledFrames,
-                                                       phaseCount, phasesPerJob](int jobIndex) {
+    pool->ParallelFor(jobCount, [this, resampledInput, resampledOutput, resampledFrames,
+                                 phaseCount, phasesPerJob](int jobIndex) {
       const int phaseBegin = jobIndex * phasesPerJob;
       const int phaseEnd = std::min(phaseCount, phaseBegin + phasesPerJob);
 
