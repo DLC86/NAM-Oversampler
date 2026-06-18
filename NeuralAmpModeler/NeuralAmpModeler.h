@@ -34,9 +34,9 @@
 #include <mutex>
 #include <vector>
 #include <thread>
+#include <type_traits>
 #include <string>
 #include <stdexcept>
-#include <functional>
 #include <filesystem>
 #include <cstdlib>
 #include <condition_variable>
@@ -44,11 +44,19 @@
 
 #if defined(__APPLE__)
 #include <pthread.h>
+#include <sys/sysctl.h>
 #if __has_include(<pthread/qos.h>)
 #include <pthread/qos.h>
 #define NAM_HAS_PTHREAD_QOS 1
 #else
 #define NAM_HAS_PTHREAD_QOS 0
+#endif
+#if __has_include(<os/workgroup.h>)
+#include <os/workgroup.h>
+#include <os/object.h>
+#define NAM_HAS_AUDIO_WORKGROUP 1
+#else
+#define NAM_HAS_AUDIO_WORKGROUP 0
 #endif
 #endif
 
@@ -251,6 +259,20 @@ static inline int NAMPhaseMulticoreHardwareThreads()
   return hw > 0 ? static_cast<int>(hw) : 8;
 }
 
+static inline int NAMPhaseMulticoreApplePerformanceCoreCount()
+{
+#if defined(__APPLE__) && (defined(__arm64__) || defined(__aarch64__))
+  int logicalPerformanceCores = 0;
+  size_t size = sizeof(logicalPerformanceCores);
+
+  if (sysctlbyname("hw.perflevel0.logicalcpu", &logicalPerformanceCores, &size, nullptr, 0) == 0
+      && logicalPerformanceCores > 0)
+    return logicalPerformanceCores;
+#endif
+
+  return 0;
+}
+
 static inline bool NAMPhaseMulticoreIsAppleSilicon()
 {
 #if defined(__APPLE__) && (defined(__arm64__) || defined(__aarch64__))
@@ -296,8 +318,11 @@ static inline int NAMPhaseMulticoreSmartAutoThreadCount()
     //
     // Override for testing:
     //   NAM_PHASE_MULTICORE_APPLE_SILICON_AUTO_CAP=12
+    const int performanceCores = NAMPhaseMulticoreApplePerformanceCoreCount();
+    const int topologyAwareCap =
+      performanceCores > 1 ? performanceCores - 1 : (performanceCores == 1 ? 1 : 8);
     const int appleAutoCap =
-      NAMPhaseMulticoreEnvInt("NAM_PHASE_MULTICORE_APPLE_SILICON_AUTO_CAP", 8, 1, 64);
+      NAMPhaseMulticoreEnvInt("NAM_PHASE_MULTICORE_APPLE_SILICON_AUTO_CAP", topologyAwareCap, 1, 64);
 
     total = std::min(total, appleAutoCap);
 
@@ -350,6 +375,10 @@ public:
       const int workerJobIndex = i + 1;
       mWorkers.emplace_back([this, workerJobIndex] { WorkerLoop(workerJobIndex); });
     }
+
+#if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
+    mRecommendedThreadCount = ThreadCount();
+#endif
   }
 
   ~NAMPhaseMulticorePool()
@@ -366,9 +395,54 @@ public:
       if (t.joinable())
         t.join();
     }
+
+#if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
+    if (mAudioWorkgroup != nullptr)
+      os_release(mAudioWorkgroup);
+#endif
   }
 
   int ThreadCount() const { return static_cast<int>(mWorkers.size()) + 1; }
+
+  void SetAudioWorkgroup(void* workgroup)
+  {
+#if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
+    std::lock_guard<std::mutex> lock(mMutex);
+    os_workgroup_t newWorkgroup = static_cast<os_workgroup_t>(workgroup);
+    if (newWorkgroup == mAudioWorkgroup)
+      return;
+
+    if (newWorkgroup != nullptr)
+      os_retain(newWorkgroup);
+
+    if (mAudioWorkgroup != nullptr)
+      os_release(mAudioWorkgroup);
+
+    mAudioWorkgroup = newWorkgroup;
+    mRecommendedThreadCount = ThreadCount();
+
+    if (mAudioWorkgroup != nullptr)
+    {
+      if (__builtin_available(macOS 11.0, iOS 14.0, *))
+      {
+        const int recommended = os_workgroup_max_parallel_threads(mAudioWorkgroup, nullptr);
+        if (recommended > 0)
+          mRecommendedThreadCount = std::min(recommended, ThreadCount());
+      }
+    }
+#else
+    (void)workgroup;
+#endif
+  }
+
+  int RecommendedThreadCount() const
+  {
+#if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
+    return mRecommendedThreadCount;
+#endif
+
+    return ThreadCount();
+  }
 
   template <typename Fn>
   void ParallelFor(int jobCount, Fn&& fn)
@@ -385,10 +459,15 @@ public:
     // previous mutex/queue contention on every tiny audio block.
     const int clampedJobCount = std::max(1, std::min(jobCount, ThreadCount()));
     const int workerJobs = std::max(0, clampedJobCount - 1);
+    using JobType = std::remove_reference_t<Fn>;
+    JobType job = std::forward<Fn>(fn);
 
     {
       std::lock_guard<std::mutex> lock(mMutex);
-      mJob = std::forward<Fn>(fn);
+      mJobContext = &job;
+      mJobInvoker = [](void* context, int jobIndex) {
+        (*static_cast<JobType*>(context))(jobIndex);
+      };
       mJobCount = clampedJobCount;
       mRemainingWorkers = workerJobs;
       mDone = workerJobs == 0;
@@ -398,7 +477,7 @@ public:
     mCV.notify_all();
 
     // The audio thread participates and processes job 0.
-    mJob(0);
+    job(0);
 
     if (workerJobs > 0)
     {
@@ -408,21 +487,25 @@ public:
 
     {
       std::lock_guard<std::mutex> lock(mMutex);
-      mJob = nullptr;
+      mJobContext = nullptr;
+      mJobInvoker = nullptr;
     }
   }
 
 private:
   void WorkerLoop(int workerJobIndex)
   {
-    
     NAMConfigurePhaseWorkerThread(workerJobIndex);
-int seenGeneration = 0;
+    int seenGeneration = 0;
 
     for (;;)
     {
-      std::function<void(int)> job;
+      void* jobContext = nullptr;
+      void (*jobInvoker)(void*, int) = nullptr;
       bool shouldRun = false;
+#if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
+      os_workgroup_t audioWorkgroup = nullptr;
+#endif
 
       {
         std::unique_lock<std::mutex> lock(mMutex);
@@ -432,15 +515,36 @@ int seenGeneration = 0;
           return;
 
         seenGeneration = mGeneration;
-        shouldRun = workerJobIndex < mJobCount && static_cast<bool>(mJob);
+        shouldRun = workerJobIndex < mJobCount && mJobContext != nullptr && mJobInvoker != nullptr;
         if (shouldRun)
-          job = mJob;
+        {
+          jobContext = mJobContext;
+          jobInvoker = mJobInvoker;
+#if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
+          audioWorkgroup = mAudioWorkgroup;
+#endif
+        }
       }
 
       if (!shouldRun)
         continue;
 
-      job(workerJobIndex);
+#if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
+      os_workgroup_join_token_s workgroupToken {};
+      bool joinedWorkgroup = false;
+      if (audioWorkgroup != nullptr)
+      {
+        if (__builtin_available(macOS 11.0, iOS 14.0, *))
+          joinedWorkgroup = os_workgroup_join(audioWorkgroup, &workgroupToken) == 0;
+      }
+#endif
+
+      jobInvoker(jobContext, workerJobIndex);
+
+#if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
+      if (joinedWorkgroup)
+        os_workgroup_leave(audioWorkgroup, &workgroupToken);
+#endif
 
       {
         std::lock_guard<std::mutex> lock(mMutex);
@@ -460,45 +564,22 @@ int seenGeneration = 0;
   std::mutex mMutex;
   std::condition_variable mCV;
   std::condition_variable mDoneCV;
-  std::function<void(int)> mJob;
+  void* mJobContext = nullptr;
+  void (*mJobInvoker)(void*, int) = nullptr;
   int mJobCount = 0;
   int mRemainingWorkers = 0;
   int mGeneration = 0;
   bool mDone = true;
   bool mStop = false;
+#if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
+  os_workgroup_t mAudioWorkgroup = nullptr;
+  int mRecommendedThreadCount = 1;
+#endif
 };
 
 static inline int NAMPhaseMulticoreThreadCount()
 {
   return NAMPhaseMulticoreConfiguredThreadCount();
-}
-
-static inline std::shared_ptr<NAMPhaseMulticorePool> NAMGetPhaseMulticorePoolForThreadCount(int totalThreads)
-{
-  // Pool+:
-  // Keep one persistent pool per effective total thread count.
-  //
-  // This avoids the previous "max hardware pool" behavior where OS Threads = 4
-  // could still notify/wake many inactive worker threads on every audio block.
-  //
-  // Pools are cached instead of destroyed/recreated, so changing thread count
-  // during testing does not repeatedly tear down worker threads.
-  const int maxThreads = NAMPhaseMulticoreMaxPoolThreadCount();
-  const int clampedThreads = NAMPhaseMulticoreClampInt(totalThreads, 1, maxThreads);
-
-  static std::mutex poolsMutex;
-  static std::vector<std::shared_ptr<NAMPhaseMulticorePool>> pools;
-
-  std::lock_guard<std::mutex> lock(poolsMutex);
-
-  if (static_cast<int>(pools.size()) <= clampedThreads)
-    pools.resize(static_cast<size_t>(clampedThreads + 1));
-
-  auto& pool = pools[static_cast<size_t>(clampedThreads)];
-  if (!pool)
-    pool = std::make_shared<NAMPhaseMulticorePool>(clampedThreads);
-
-  return pool;
 }
 
 class ResamplingNAM : public nam::DSP
@@ -586,6 +667,11 @@ public:
       ResetUnlocked(mExternalSampleRate, mMaxExternalBlockSize);
   }
 
+  void SetAudioWorkgroup(void* workgroup)
+  {
+    mAudioWorkgroup.store(workgroup, std::memory_order_release);
+  }
+
   void SetAntiAliasFilterPhase(dsp::EAntiAliasFilterPhase filterPhase)
   {
     std::lock_guard<std::mutex> lock(mStateMutex);
@@ -647,13 +733,16 @@ private:
 #endif
 
     const bool useA2FrameOMPBackend = isA2FastModel;
-mPhaseMulticoreActive = phaseMulticoreRequested && !useA2FrameOMPBackend;
+    mPhaseMulticoreActive = phaseMulticoreRequested && !useA2FrameOMPBackend;
     mPhaseCount = mPhaseMulticoreActive ? timeScale : 1;
+
+    if (mPhaseMulticoreActive)
+      GetPhaseMulticorePoolForThreadCount(PhaseMulticoreThreadCountUnlocked());
 
 #if defined(NAM_ENABLE_A2_FAST)
     nam::wavenet::a2_fast::SetFrameOMPRuntimeConfig(
       useA2FrameOMPBackend,
-      useA2FrameOMPBackend ? NAMPhaseMulticoreThreadCount() : 0,
+      useA2FrameOMPBackend ? PhaseMulticoreThreadCountUnlocked() : 0,
       1024,
       128);
 #endif
@@ -705,7 +794,32 @@ mPhaseMulticoreActive = phaseMulticoreRequested && !useA2FrameOMPBackend;
   bool ShouldUsePhaseMulticoreUnlocked(int timeScale, bool resamplingActive) const
   {
     return resamplingActive && mRequestedOversamplingFactor > 1 && timeScale > 1 && !mModelPath.empty()
-           && NAMPhaseMulticoreRuntimeEnabled();
+           && mPhaseMulticoreEnabled;
+  }
+
+  int PhaseMulticoreThreadCountUnlocked() const
+  {
+    return mPhaseMulticoreRequestedThreads > 0
+             ? NAMPhaseMulticoreClampInt(mPhaseMulticoreRequestedThreads, 1, 64)
+             : NAMPhaseMulticoreSmartAutoThreadCount();
+  }
+
+  std::shared_ptr<NAMPhaseMulticorePool> GetPhaseMulticorePoolForThreadCount(int totalThreads)
+  {
+    // Pools must be per plug-in/model instance. Sharing a static barrier between
+    // simultaneously-rendered plug-in instances races their jobs and prevents
+    // each instance from following its host audio workgroup.
+    const int maxThreads = NAMPhaseMulticoreMaxPoolThreadCount();
+    const int clampedThreads = NAMPhaseMulticoreClampInt(totalThreads, 1, maxThreads);
+
+    if (static_cast<int>(mPhasePools.size()) <= clampedThreads)
+      mPhasePools.resize(static_cast<size_t>(clampedThreads + 1));
+
+    auto& pool = mPhasePools[static_cast<size_t>(clampedThreads)];
+    if (!pool)
+      pool = std::make_shared<NAMPhaseMulticorePool>(clampedThreads);
+
+    return pool;
   }
 
   std::unique_ptr<nam::DSP> CreatePhaseModelCloneUnlocked(double encapsulatedSampleRate, int maxPhaseBlockSize)
@@ -806,13 +920,14 @@ mPhaseMulticoreActive = phaseMulticoreRequested && !useA2FrameOMPBackend;
     }
 
     const int phaseCount = mPhaseCount;
-    const int requestedThreads = NAMPhaseMulticoreThreadCount();
+    const int requestedThreads = PhaseMulticoreThreadCountUnlocked();
 
     // Important: do NOT schedule one job per phase. At 32x this creates 32 tiny
     // jobs per audio block. Gateway-style phase processing should schedule one
     // coarse job per worker, and each worker processes several phases sequentially.
-    auto pool = NAMGetPhaseMulticorePoolForThreadCount(requestedThreads);
-    const int availableThreads = pool->ThreadCount();
+    auto pool = GetPhaseMulticorePoolForThreadCount(requestedThreads);
+    pool->SetAudioWorkgroup(mAudioWorkgroup.load(std::memory_order_acquire));
+    const int availableThreads = pool->RecommendedThreadCount();
     const int jobCount = std::max(1, std::min(std::min(requestedThreads, availableThreads), phaseCount));
     const int phasesPerJob = (phaseCount + jobCount - 1) / jobCount;
 
@@ -881,6 +996,8 @@ double GetRenderingSampleRate(double externalSampleRate) const
   std::vector<std::unique_ptr<nam::DSP>> mPhaseModels;
   std::vector<std::vector<NAM_SAMPLE>> mPhaseInputBuffers;
   std::vector<std::vector<NAM_SAMPLE>> mPhaseOutputBuffers;
+  std::vector<std::shared_ptr<NAMPhaseMulticorePool>> mPhasePools;
+  std::atomic<void*> mAudioWorkgroup {nullptr};
   mutable std::mutex mStateMutex;
 
   // Stateful real-time resampler for model sample-rate matching and user oversampling.
@@ -909,6 +1026,7 @@ public:
   void ProcessBlock(iplug::sample** inputs, iplug::sample** outputs, int nFrames) override;
   void OnReset() override;
   void OnIdle() override;
+  void OnAudioWorkgroupChanged(void* workgroup) override { mAudioWorkgroup.store(workgroup, std::memory_order_release); }
 
   bool SerializeState(iplug::IByteChunk& chunk) const override;
   int UnserializeState(const iplug::IByteChunk& chunk, int startPos) override;
@@ -1048,6 +1166,7 @@ private:
   std::atomic<int> mOfflineAntiAliasFilterPhaseIndex = 2;
   std::atomic<bool> mPhaseMulticoreEnabledParam = true;
   std::atomic<int> mPhaseMulticoreRequestedThreadsParam = 0; // 0 = Smart Auto
+  std::atomic<void*> mAudioWorkgroup {nullptr};
   // Tracks the last known offline-rendering state so that DSP settings/latency are refreshed on transitions.
   bool mOfflineRenderLatencyArmed = false;
 

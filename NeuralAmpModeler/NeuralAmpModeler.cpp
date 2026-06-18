@@ -433,6 +433,12 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
   if (toneStackActive && !toneStackPostNAM && mToneStack != nullptr)
     modelInputPointers = mToneStack->Process(mInputPointers, numChannelsInternal, nFrames);
 
+  void* audioWorkgroup = mAudioWorkgroup.load(std::memory_order_acquire);
+  if (mModel != nullptr)
+    mModel->SetAudioWorkgroup(audioWorkgroup);
+  if (mModelRight != nullptr)
+    mModelRight->SetAudioWorkgroup(audioWorkgroup);
+
   if (mModel != nullptr)
   {
     if (numChannelsInternal == kNumChannelsStereo)
