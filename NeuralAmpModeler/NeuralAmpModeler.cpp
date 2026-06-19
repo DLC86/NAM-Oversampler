@@ -542,6 +542,19 @@ void NeuralAmpModeler::OnReset()
 
 void NeuralAmpModeler::OnIdle()
 {
+  std::unique_ptr<ResamplingNAM> retiredModel;
+  std::unique_ptr<ResamplingNAM> retiredModelRight;
+  {
+    std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+    retiredModel = std::move(mRetiredModel);
+    retiredModelRight = std::move(mRetiredModelRight);
+  }
+  retiredModel.reset();
+  retiredModelRight.reset();
+
+  if (mCoreModelRestageRequested.exchange(false) && mNAMPath.GetLength())
+    _StageModel(mNAMPath);
+
 #if PLUG_HAS_UI
   mInputSender.TransmitData(*this);
   mOutputSender.TransmitData(*this);
@@ -657,7 +670,11 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
       mOversamplingFactor = 1 << enumValue;
       if (!GetRenderingOffline())
       {
-        _ApplyActiveDSPSettings(true);
+        _RequestCoreModelRestage();
+        if (mModel != nullptr && mModel->UsesCorePolyphase())
+          mAppliedOversamplingFactor = mOversamplingFactor.load();
+        else
+          _ApplyActiveDSPSettings(true);
         _UpdateLatency();
       }
       break;
@@ -811,6 +828,9 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   // Move things from staged to live
   if (mStagedModel != nullptr)
   {
+    // Keep destruction (including worker joins) off the host audio thread.
+    mRetiredModel = std::move(mModel);
+    mRetiredModelRight = std::move(mModelRight);
     mModel = std::move(mStagedModel);
     mModelRight = std::move(mStagedModelRight);
     mStagedModel = nullptr;
@@ -984,9 +1004,10 @@ void NeuralAmpModeler::_SetPhaseMulticoreSettingsFromParams()
   mPhaseMulticoreRequestedThreadsParam = requestedThreads;
 
   NAMSetPhaseMulticoreRuntimeSettings(enabled, requestedThreads, 4);
+  _RequestCoreModelRestage();
 
   auto apply = [enabled, requestedThreads](ResamplingNAM* p) {
-    if (p != nullptr)
+    if (p != nullptr && !p->UsesCorePolyphase())
       p->SetPhaseMulticoreSettings(enabled, requestedThreads);
   };
 
@@ -1013,10 +1034,15 @@ void NeuralAmpModeler::_ApplyImmediateDSPSettings(int oversamplingFactor, int fi
 
   if (oversamplingFactor != mAppliedOversamplingFactor)
   {
-    mModel->SetOversamplingFactor(oversamplingFactor);
-    if (mModelRight != nullptr)
-      mModelRight->SetOversamplingFactor(oversamplingFactor);
-    mAppliedOversamplingFactor = oversamplingFactor;
+    const bool coreFactorMatches =
+      !mModel->UsesCorePolyphase() || mModel->GetCorePolyphaseFactor() == oversamplingFactor;
+    if (coreFactorMatches)
+    {
+      mModel->SetOversamplingFactor(oversamplingFactor);
+      if (mModelRight != nullptr)
+        mModelRight->SetOversamplingFactor(oversamplingFactor);
+      mAppliedOversamplingFactor = oversamplingFactor;
+    }
   }
 
   if (filterPhaseIndex != mAppliedAntiAliasFilterPhase)
@@ -1116,6 +1142,12 @@ bool NeuralAmpModeler::_IsStereoRequested() const
   return GetParam(kChannelMode)->Int() == 1;
 }
 
+void NeuralAmpModeler::_RequestCoreModelRestage()
+{
+  if (mNAMPath.GetLength())
+    mCoreModelRestageRequested.store(true, std::memory_order_release);
+}
+
 bool NeuralAmpModeler::_CanProcessStereo(const size_t nChansIn, const size_t nChansOut) const
 {
   if (!mStereoProcessing.load() || nChansIn < kNumChannelsStereo || nChansOut < kNumChannelsStereo)
@@ -1130,10 +1162,24 @@ bool NeuralAmpModeler::_CanProcessStereo(const size_t nChansIn, const size_t nCh
   return true;
 }
 
-std::unique_ptr<ResamplingNAM> NeuralAmpModeler::_CreateModel(const WDL_String& modelPath)
+std::unique_ptr<ResamplingNAM> NeuralAmpModeler::_CreateModel(const WDL_String& modelPath, int oversamplingFactor)
 {
   auto dspPath = std::filesystem::u8path(modelPath.Get());
-  std::unique_ptr<nam::DSP> model = nam::get_dsp(dspPath);
+  const int requestedFactor = oversamplingFactor > 0 ? oversamplingFactor : _GetActiveOversamplingFactor();
+  const bool phaseMulticoreEnabled = mPhaseMulticoreEnabledParam.load();
+
+  nam::DSPLoadOptions loadOptions;
+  loadOptions.oversampleFactor = phaseMulticoreEnabled ? std::max(1, requestedFactor) : 1;
+  loadOptions.oversampleEngine = nam::OversampleEngine::Polyphase;
+
+  const int requestedThreads = mPhaseMulticoreRequestedThreadsParam.load();
+  const int configuredThreads =
+    requestedThreads > 0 ? requestedThreads : NAMPhaseMulticoreSmartAutoThreadCount();
+  loadOptions.oversampleThreads =
+    phaseMulticoreEnabled ? std::clamp(configuredThreads, 1, loadOptions.oversampleFactor) : 1;
+
+  std::unique_ptr<nam::DSP> model =
+    loadOptions.oversampleFactor > 1 ? nam::get_dsp(dspPath, loadOptions) : nam::get_dsp(dspPath);
 
   if (model->NumInputChannels() != 1)
   {
@@ -1144,10 +1190,15 @@ std::unique_ptr<ResamplingNAM> NeuralAmpModeler::_CreateModel(const WDL_String& 
     throw std::runtime_error("Model must have 1 output channel, but has " + std::to_string(model->NumOutputChannels()));
   }
 
-  std::unique_ptr<ResamplingNAM> temp = std::make_unique<ResamplingNAM>(std::move(model), GetSampleRate(), dspPath);
+  const double slimSize = GetParam(kSlim)->Value();
+  if (nam::SlimmableModel* slimmable = dynamic_cast<nam::SlimmableModel*>(model.get()))
+    slimmable->SetSlimmableSize(slimSize);
+
+  std::unique_ptr<ResamplingNAM> temp =
+    std::make_unique<ResamplingNAM>(std::move(model), GetSampleRate(), dspPath);
   temp->Reset(GetSampleRate(), GetBlockSize());
   temp->SetPhaseMulticoreSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load());
-  temp->SetSlimmableSize(GetParam(kSlim)->Value());
+  temp->SetSlimmableSize(slimSize);
 
   return temp;
 }

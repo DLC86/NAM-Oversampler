@@ -17,6 +17,7 @@
 #include "../AudioDSPTools/dsp/ResamplingContainer/ResamplingContainer.h"
 #include "../NeuralAmpModelerCore/NAM/dsp.h"
 #include "../NeuralAmpModelerCore/NAM/get_dsp.h"
+#include "../NeuralAmpModelerCore/NAM/polyphase.h"
 #include "../NeuralAmpModelerCore/NAM/slimmable.h"
 
 #if defined(NAM_ENABLE_A2_FAST)
@@ -39,6 +40,7 @@
 #include <stdexcept>
 #include <filesystem>
 #include <cstdlib>
+#include <chrono>
 #include <condition_variable>
 #include <memory>
 
@@ -369,6 +371,17 @@ static inline int NAMPhaseMulticoreMaxPoolThreadCount()
   return NAMPhaseMulticoreClampInt(maxThreads, 1, 64);
 }
 
+static inline void NAMPhaseMulticoreRealtimePause()
+{
+#if defined(__APPLE__) && (defined(__arm64__) || defined(__aarch64__))
+  __asm__ __volatile__("yield");
+#elif defined(_WIN32)
+  YieldProcessor();
+#else
+  std::this_thread::yield();
+#endif
+}
+
 class NAMPhaseMulticorePool
 {
 public:
@@ -488,7 +501,8 @@ public:
       int spins = 0;
       while (mCompletedWorkers.load(std::memory_order_acquire) < workerJobs)
       {
-        if (++spins >= 256)
+        NAMPhaseMulticoreRealtimePause();
+        if (++spins >= 16384)
         {
           spins = 0;
           std::this_thread::yield();
@@ -508,6 +522,7 @@ private:
     // Starting from zero also prevents a newly-created worker from missing the
     // first job if the audio thread publishes immediately after construction.
     unsigned seenGeneration = 0;
+    int idleSpins = 0;
     for (;;)
     {
       void* jobContext = nullptr;
@@ -523,15 +538,33 @@ private:
         if (mStop.load(std::memory_order_acquire))
           return;
 
+#if defined(__APPLE__) && (defined(__arm64__) || defined(__aarch64__))
+        // Avoid a kernel wake-up on every tiny audio block. The timed sleep is
+        // only a fallback for stopped or inactive playback.
+        if (idleSpins++ < 262144)
+        {
+          NAMPhaseMulticoreRealtimePause();
+          continue;
+        }
+
+        std::unique_lock<std::mutex> lock(mMutex);
+        mCV.wait_for(lock, std::chrono::microseconds(500), [this, seenGeneration] {
+          return mStop.load(std::memory_order_acquire)
+                 || mGeneration.load(std::memory_order_acquire) != seenGeneration;
+        });
+        idleSpins = 0;
+#else
         std::unique_lock<std::mutex> lock(mMutex);
         mCV.wait(lock, [this, &seenGeneration] {
           return mStop.load(std::memory_order_acquire)
                  || mGeneration.load(std::memory_order_acquire) != seenGeneration;
         });
+#endif
         continue;
       }
 
       seenGeneration = generation;
+      idleSpins = 0;
       if (mStop.load(std::memory_order_acquire))
         return;
 
@@ -715,6 +748,8 @@ public:
   void SetAudioWorkgroup(void* workgroup)
   {
     mAudioWorkgroup.store(workgroup, std::memory_order_release);
+    if (auto* polyphase = dynamic_cast<nam::PolyphaseOversampledDSP*>(mEncapsulated.get()))
+      polyphase->SetAudioWorkgroup(workgroup);
   }
 
   void SetAntiAliasFilterPhase(dsp::EAntiAliasFilterPhase filterPhase)
@@ -733,6 +768,13 @@ public:
 
   // So that we can let the world know if we're resampling (useful for debugging)
   double GetEncapsulatedSampleRate() const { return GetNAMSampleRate(mEncapsulated); };
+  int GetCorePolyphaseFactor() const
+  {
+    if (const auto* polyphase = dynamic_cast<const nam::PolyphaseOversampledDSP*>(mEncapsulated.get()))
+      return polyphase->GetFactor();
+    return 1;
+  }
+  bool UsesCorePolyphase() const { return GetCorePolyphaseFactor() > 1; }
 
   nam::SlimmableModel* GetSlimmableModel() { return dynamic_cast<nam::SlimmableModel*>(mEncapsulated.get()); }
   const nam::SlimmableModel* GetSlimmableModel() const
@@ -792,6 +834,7 @@ private:
     // are independent and require one barrier for the whole block.
     mPhaseMulticoreActive = phaseMulticoreRequested;
     mPhaseCount = mPhaseMulticoreActive ? timeScale : 1;
+    mPhaseOffset = 0;
 
     // Create the worker pool lazily in the processing path. In stereo the left
     // instance owns the combined barrier; an eager right-side pool would remain
@@ -864,6 +907,9 @@ private:
 
   bool ShouldUsePhaseMulticoreUnlocked(int timeScale, bool resamplingActive) const
   {
+    if (dynamic_cast<const nam::PolyphaseOversampledDSP*>(mEncapsulated.get()) != nullptr)
+      return false;
+
     // Two real phase lanes avoid the doubled ring-buffer lookback/cache stride
     // of the time-scaled single-model path at 2x.
     return resamplingActive && mRequestedOversamplingFactor >= 2 && timeScale >= 2 && !mModelPath.empty()
@@ -978,6 +1024,8 @@ private:
   {
     mPhaseInputBuffers.resize(static_cast<size_t>(mPhaseCount));
     mPhaseOutputBuffers.resize(static_cast<size_t>(mPhaseCount));
+    mPhaseFrameCounts.assign(static_cast<size_t>(mPhaseCount), 0);
+    mPhaseOutputCursors.assign(static_cast<size_t>(mPhaseCount), 0);
 
     for (int phase = 0; phase < mPhaseCount; phase++)
     {
@@ -993,6 +1041,8 @@ private:
     mPhaseModels.clear();
     mPhaseInputBuffers.clear();
     mPhaseOutputBuffers.clear();
+    mPhaseFrameCounts.clear();
+    mPhaseOutputCursors.clear();
   }
 
   nam::DSP* GetPhaseModelUnlocked(int phase)
@@ -1011,49 +1061,41 @@ private:
            && std::abs(mRenderingSampleRate - right.mRenderingSampleRate) < 1.0e-6;
   }
 
-  int PhaseFrameCountUnlocked(int phase, int resampledFrames) const
-  {
-    return phase < resampledFrames ? ((resampledFrames - phase + mPhaseCount - 1) / mPhaseCount) : 0;
-  }
-
   void DeinterleavePhaseInputsUnlocked(NAM_SAMPLE** resampledInput, int resampledFrames)
   {
-    for (int phase = 0; phase < mPhaseCount; phase++)
+    std::fill(mPhaseFrameCounts.begin(), mPhaseFrameCounts.end(), 0);
+
+    int phase = mPhaseOffset;
+    for (int frame = 0; frame < resampledFrames; frame++)
     {
-      const int phaseFrames = PhaseFrameCountUnlocked(phase, resampledFrames);
-      if (phaseFrames <= 0)
-        continue;
-
       auto& phaseInput = mPhaseInputBuffers[static_cast<size_t>(phase)];
-
-      for (int i = 0; i < phaseFrames; i++)
-        phaseInput[static_cast<size_t>(i)] = resampledInput[0][phase + i * mPhaseCount];
+      int& phaseFrames = mPhaseFrameCounts[static_cast<size_t>(phase)];
+      phaseInput[static_cast<size_t>(phaseFrames++)] = resampledInput[0][frame];
+      if (++phase == mPhaseCount)
+        phase = 0;
     }
   }
 
   void ReinterleavePhaseOutputsUnlocked(NAM_SAMPLE** resampledOutput, int resampledFrames)
   {
-    for (int phase = 0; phase < mPhaseCount; phase++)
-    {
-      const int phaseFrames = PhaseFrameCountUnlocked(phase, resampledFrames);
-      if (phaseFrames <= 0)
-        continue;
+    std::fill(mPhaseOutputCursors.begin(), mPhaseOutputCursors.end(), 0);
 
+    int phase = mPhaseOffset;
+    for (int frame = 0; frame < resampledFrames; frame++)
+    {
       const auto& phaseOutput = mPhaseOutputBuffers[static_cast<size_t>(phase)];
-      for (int i = 0; i < phaseFrames; i++)
-        resampledOutput[0][phase + i * mPhaseCount] = phaseOutput[static_cast<size_t>(i)];
+      int& cursor = mPhaseOutputCursors[static_cast<size_t>(phase)];
+      resampledOutput[0][frame] = phaseOutput[static_cast<size_t>(cursor++)];
+      if (++phase == mPhaseCount)
+        phase = 0;
     }
   }
 
-  void ProcessPhaseLaneBufferedUnlocked(NAM_SAMPLE** resampledInput,
-                                        int resampledFrames,
-                                        int laneIndex,
-                                        int laneCount,
-                                        bool inputsAreDeinterleaved)
+  void ProcessPhaseLaneBufferedUnlocked(int laneIndex, int laneCount)
   {
     for (int phase = laneIndex; phase < mPhaseCount; phase += laneCount)
     {
-      const int phaseFrames = PhaseFrameCountUnlocked(phase, resampledFrames);
+      const int phaseFrames = mPhaseFrameCounts[static_cast<size_t>(phase)];
       if (phaseFrames <= 0)
         continue;
 
@@ -1061,27 +1103,10 @@ private:
       auto& phaseInput = mPhaseInputBuffers[static_cast<size_t>(phase)];
       auto& phaseOutput = mPhaseOutputBuffers[static_cast<size_t>(phase)];
 
-      if (!inputsAreDeinterleaved && phaseModel->SupportsStridedProcess())
-      {
-        phaseModel->process_strided(
-          resampledInput[0] + phase, mPhaseCount, phaseOutput.data(), 1, phaseFrames);
-        continue;
-      }
-
       NAM_SAMPLE* phaseInputPtrs[1] = {phaseInput.data()};
       NAM_SAMPLE* phaseOutputPtrs[1] = {phaseOutput.data()};
       phaseModel->process(phaseInputPtrs, phaseOutputPtrs, phaseFrames);
     }
-  }
-
-  bool PhaseModelsSupportStridedUnlocked() const
-  {
-    if (!mEncapsulated || !mEncapsulated->SupportsStridedProcess())
-      return false;
-    for (const auto& model : mPhaseModels)
-      if (!model || !model->SupportsStridedProcess())
-        return false;
-    return true;
   }
 
   void ProcessStereoPhaseMulticoreUnlocked(ResamplingNAM& right,
@@ -1100,32 +1125,20 @@ private:
     const int availableThreads = pool->RecommendedThreadCount();
     const int jobCount = std::min(laneCount, availableThreads);
 
-    // Keep every worker on private contiguous buffers. Direct strided writes
-    // make different phase workers modify the same cache lines, which severely
-    // limits multicore scaling at high oversampling factors.
-    const bool leftNeedsDeinterleave = !PhaseModelsSupportStridedUnlocked();
-    const bool rightNeedsDeinterleave = !right.PhaseModelsSupportStridedUnlocked();
-    if (leftNeedsDeinterleave)
-      DeinterleavePhaseInputsUnlocked(leftResampledInput, resampledFrames);
-    if (rightNeedsDeinterleave)
-      right.DeinterleavePhaseInputsUnlocked(rightResampledInput, resampledFrames);
+    // Gateway-style polyphase staging: every model receives a contiguous
+    // native-rate buffer. This avoids high-stride reads in A2Fast at 8x-32x.
+    DeinterleavePhaseInputsUnlocked(leftResampledInput, resampledFrames);
+    right.DeinterleavePhaseInputsUnlocked(rightResampledInput, resampledFrames);
 
-    pool->ParallelFor(jobCount, [this,
-                                 &right,
-                                 leftResampledInput,
-                                 rightResampledInput,
-                                 resampledFrames,
-                                 jobCount,
-                                 leftNeedsDeinterleave,
-                                 rightNeedsDeinterleave](int jobIndex) {
-      ProcessPhaseLaneBufferedUnlocked(
-        leftResampledInput, resampledFrames, jobIndex, jobCount, leftNeedsDeinterleave);
-      right.ProcessPhaseLaneBufferedUnlocked(
-        rightResampledInput, resampledFrames, jobIndex, jobCount, rightNeedsDeinterleave);
+    pool->ParallelFor(jobCount, [this, &right, jobCount](int jobIndex) {
+      ProcessPhaseLaneBufferedUnlocked(jobIndex, jobCount);
+      right.ProcessPhaseLaneBufferedUnlocked(jobIndex, jobCount);
     });
 
     ReinterleavePhaseOutputsUnlocked(leftResampledOutput, resampledFrames);
     right.ReinterleavePhaseOutputsUnlocked(rightResampledOutput, resampledFrames);
+    mPhaseOffset = (mPhaseOffset + resampledFrames) % mPhaseCount;
+    right.mPhaseOffset = (right.mPhaseOffset + resampledFrames) % right.mPhaseCount;
   }
 
 
@@ -1155,16 +1168,14 @@ private:
     const int availableThreads = pool->RecommendedThreadCount();
     const int jobCount = std::max(1, std::min(laneCount, availableThreads));
 
-    const bool needsDeinterleave = !PhaseModelsSupportStridedUnlocked();
-    if (needsDeinterleave)
-      DeinterleavePhaseInputsUnlocked(resampledInput, resampledFrames);
+    DeinterleavePhaseInputsUnlocked(resampledInput, resampledFrames);
 
-    pool->ParallelFor(jobCount, [this, resampledInput, resampledFrames, jobCount, needsDeinterleave](int jobIndex) {
-      ProcessPhaseLaneBufferedUnlocked(
-        resampledInput, resampledFrames, jobIndex, jobCount, needsDeinterleave);
+    pool->ParallelFor(jobCount, [this, jobCount](int jobIndex) {
+      ProcessPhaseLaneBufferedUnlocked(jobIndex, jobCount);
     });
 
     ReinterleavePhaseOutputsUnlocked(resampledOutput, resampledFrames);
+    mPhaseOffset = (mPhaseOffset + resampledFrames) % mPhaseCount;
   }
 
 double GetRenderingSampleRate(double externalSampleRate) const
@@ -1188,10 +1199,13 @@ double GetRenderingSampleRate(double externalSampleRate) const
   std::filesystem::path mModelPath;
   bool mPhaseMulticoreActive = false;
   int mPhaseCount = 1;
+  int mPhaseOffset = 0;
   double mSlimmableSize = 1.0;
   std::vector<std::unique_ptr<nam::DSP>> mPhaseModels;
   std::vector<std::vector<NAM_SAMPLE>> mPhaseInputBuffers;
   std::vector<std::vector<NAM_SAMPLE>> mPhaseOutputBuffers;
+  std::vector<int> mPhaseFrameCounts;
+  std::vector<int> mPhaseOutputCursors;
   std::shared_ptr<NAMPhaseMulticorePool> mPhasePool;
   int mPhasePoolThreadCount = 0;
   std::atomic<void*> mAudioWorkgroup {nullptr};
@@ -1255,7 +1269,8 @@ private:
   bool _IsStereoRequested() const;
   bool _CanProcessStereo(const size_t nChansIn, const size_t nChansOut) const;
   void _SetStereoProcessingFromParam();
-  std::unique_ptr<ResamplingNAM> _CreateModel(const WDL_String& modelPath);
+  void _RequestCoreModelRestage();
+  std::unique_ptr<ResamplingNAM> _CreateModel(const WDL_String& modelPath, int oversamplingFactor = 0);
   // Loads a NAM model and stores it to mStagedNAM
   // Returns an empty string on success, or an error message on failure.
   std::string _StageModel(const WDL_String& dspFile);
@@ -1339,6 +1354,10 @@ private:
   // Manages switching what DSP is being used.
   std::unique_ptr<ResamplingNAM> mStagedModel;
   std::unique_ptr<ResamplingNAM> mStagedModelRight;
+  // Models replaced by the audio thread are destroyed later from OnIdle so
+  // persistent worker shutdown/join never runs in ProcessBlock().
+  std::unique_ptr<ResamplingNAM> mRetiredModel;
+  std::unique_ptr<ResamplingNAM> mRetiredModelRight;
   std::unique_ptr<dsp::ImpulseResponse> mStagedIR;
   std::unique_ptr<dsp::ImpulseResponse> mStagedIRRight;
   std::mutex mDSPStagingMutex;
@@ -1373,6 +1392,7 @@ private:
   std::atomic<bool> mStereoProcessing = false;
   std::atomic<int> mPendingOversamplingFactor = 0;
   std::atomic<int> mPendingAntiAliasFilterPhase = -1;
+  std::atomic<bool> mCoreModelRestageRequested = false;
   bool mRealtimeDSPTransitionFadingOut = false;
   bool mRealtimeDSPTransitionFadingIn = false;
   int mRealtimeDSPTransitionSamplesRemaining = 0;
