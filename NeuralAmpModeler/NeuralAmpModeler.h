@@ -262,12 +262,17 @@ static inline int NAMPhaseMulticoreHardwareThreads()
 static inline int NAMPhaseMulticoreApplePerformanceCoreCount()
 {
 #if defined(__APPLE__) && (defined(__arm64__) || defined(__aarch64__))
-  int logicalPerformanceCores = 0;
-  size_t size = sizeof(logicalPerformanceCores);
+  int performanceCores = 0;
+  size_t size = sizeof(performanceCores);
 
-  if (sysctlbyname("hw.perflevel0.logicalcpu", &logicalPerformanceCores, &size, nullptr, 0) == 0
-      && logicalPerformanceCores > 0)
-    return logicalPerformanceCores;
+  if (sysctlbyname("hw.perflevel0.physicalcpu", &performanceCores, &size, nullptr, 0) == 0
+      && performanceCores > 0)
+    return performanceCores;
+
+  size = sizeof(performanceCores);
+  if (sysctlbyname("hw.physicalcpu", &performanceCores, &size, nullptr, 0) == 0
+      && performanceCores > 0)
+    return performanceCores;
 #endif
 
   return 0;
@@ -312,15 +317,13 @@ static inline int NAMPhaseMulticoreSmartAutoThreadCount()
     // Apple Silicon has performance + efficiency cores. std::thread::hardware_concurrency()
     // may include efficiency cores, which are not ideal for realtime audio worker load.
     //
-    // Therefore Auto is intentionally conservative on Apple Silicon.
-    //
-    // Manual OS Threads still bypasses this cap.
+    // The audio thread participates, so a lane count equal to the number of
+    // performance cores already leaves one fewer background worker.
     //
     // Override for testing:
     //   NAM_PHASE_MULTICORE_APPLE_SILICON_AUTO_CAP=12
     const int performanceCores = NAMPhaseMulticoreApplePerformanceCoreCount();
-    const int topologyAwareCap =
-      performanceCores > 1 ? performanceCores - 1 : (performanceCores == 1 ? 1 : 8);
+    const int topologyAwareCap = performanceCores > 0 ? performanceCores : 8;
     const int appleAutoCap =
       NAMPhaseMulticoreEnvInt("NAM_PHASE_MULTICORE_APPLE_SILICON_AUTO_CAP", topologyAwareCap, 1, 64);
 
@@ -356,9 +359,14 @@ static inline int NAMPhaseMulticoreConfiguredThreadCount()
 
 static inline int NAMPhaseMulticoreMaxPoolThreadCount()
 {
-  // The pool is intentionally created once at a safe maximum. The active job
-  // count is selected dynamically per block from the plugin parameter.
-  return NAMPhaseMulticoreClampInt(NAMPhaseMulticoreHardwareThreads(), 1, 64);
+  int maxThreads = NAMPhaseMulticoreHardwareThreads();
+  if (NAMPhaseMulticoreIsAppleSilicon())
+  {
+    const int performanceCores = NAMPhaseMulticoreApplePerformanceCoreCount();
+    if (performanceCores > 0)
+      maxThreads = std::min(maxThreads, performanceCores);
+  }
+  return NAMPhaseMulticoreClampInt(maxThreads, 1, 64);
 }
 
 class NAMPhaseMulticorePool
@@ -383,11 +391,8 @@ public:
 
   ~NAMPhaseMulticorePool()
   {
-    {
-      std::lock_guard<std::mutex> lock(mMutex);
-      mStop = true;
-      ++mGeneration;
-    }
+    mStop.store(true, std::memory_order_release);
+    mGeneration.fetch_add(1, std::memory_order_release);
     mCV.notify_all();
 
     for (auto& t : mWorkers)
@@ -462,17 +467,13 @@ public:
     using JobType = std::remove_reference_t<Fn>;
     JobType job = std::forward<Fn>(fn);
 
-    {
-      std::lock_guard<std::mutex> lock(mMutex);
-      mJobContext = &job;
-      mJobInvoker = [](void* context, int jobIndex) {
-        (*static_cast<JobType*>(context))(jobIndex);
-      };
-      mJobCount = clampedJobCount;
-      mRemainingWorkers = workerJobs;
-      mDone = workerJobs == 0;
-      ++mGeneration;
-    }
+    mJobContext = &job;
+    mJobInvoker = [](void* context, int jobIndex) {
+      (*static_cast<JobType*>(context))(jobIndex);
+    };
+    mJobCount = clampedJobCount;
+    mCompletedWorkers.store(0, std::memory_order_relaxed);
+    mGeneration.fetch_add(1, std::memory_order_release);
 
     mCV.notify_all();
 
@@ -481,23 +482,32 @@ public:
 
     if (workerJobs > 0)
     {
-      std::unique_lock<std::mutex> lock(mMutex);
-      mDoneCV.wait(lock, [this] { return mDone; });
+      // Realtime hybrid barrier: workers normally complete during this short
+      // spin window. Yield only when the phase work is long enough to need it;
+      // never put the host audio thread to sleep on a condition variable.
+      int spins = 0;
+      while (mCompletedWorkers.load(std::memory_order_acquire) < workerJobs)
+      {
+        if (++spins >= 256)
+        {
+          spins = 0;
+          std::this_thread::yield();
+        }
+      }
     }
 
-    {
-      std::lock_guard<std::mutex> lock(mMutex);
-      mJobContext = nullptr;
-      mJobInvoker = nullptr;
-    }
+    mJobContext = nullptr;
+    mJobInvoker = nullptr;
   }
 
 private:
   void WorkerLoop(int workerJobIndex)
   {
     NAMConfigurePhaseWorkerThread(workerJobIndex);
-    int seenGeneration = 0;
-
+    // Generation starts at zero and the first published block increments it.
+    // Starting from zero also prevents a newly-created worker from missing the
+    // first job if the audio thread publishes immediately after construction.
+    unsigned seenGeneration = 0;
     for (;;)
     {
       void* jobContext = nullptr;
@@ -507,23 +517,35 @@ private:
       os_workgroup_t audioWorkgroup = nullptr;
 #endif
 
+      unsigned generation = mGeneration.load(std::memory_order_acquire);
+      if (generation == seenGeneration)
       {
-        std::unique_lock<std::mutex> lock(mMutex);
-        mCV.wait(lock, [this, &seenGeneration] { return mStop || mGeneration != seenGeneration; });
-
-        if (mStop)
+        if (mStop.load(std::memory_order_acquire))
           return;
 
-        seenGeneration = mGeneration;
-        shouldRun = workerJobIndex < mJobCount && mJobContext != nullptr && mJobInvoker != nullptr;
-        if (shouldRun)
-        {
-          jobContext = mJobContext;
-          jobInvoker = mJobInvoker;
+        std::unique_lock<std::mutex> lock(mMutex);
+        mCV.wait(lock, [this, &seenGeneration] {
+          return mStop.load(std::memory_order_acquire)
+                 || mGeneration.load(std::memory_order_acquire) != seenGeneration;
+        });
+        continue;
+      }
+
+      seenGeneration = generation;
+      if (mStop.load(std::memory_order_acquire))
+        return;
+
+      shouldRun = workerJobIndex < mJobCount && mJobContext != nullptr && mJobInvoker != nullptr;
+      if (shouldRun)
+      {
+        jobContext = mJobContext;
+        jobInvoker = mJobInvoker;
 #if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
+        {
+          std::lock_guard<std::mutex> lock(mMutex);
           audioWorkgroup = mAudioWorkgroup;
-#endif
         }
+#endif
       }
 
       if (!shouldRun)
@@ -546,31 +568,19 @@ private:
         os_workgroup_leave(audioWorkgroup, &workgroupToken);
 #endif
 
-      {
-        std::lock_guard<std::mutex> lock(mMutex);
-        if (mRemainingWorkers > 0)
-          --mRemainingWorkers;
-
-        if (mRemainingWorkers == 0 && !mDone)
-        {
-          mDone = true;
-          mDoneCV.notify_one();
-        }
-      }
+      mCompletedWorkers.fetch_add(1, std::memory_order_release);
     }
   }
 
   std::vector<std::thread> mWorkers;
   std::mutex mMutex;
   std::condition_variable mCV;
-  std::condition_variable mDoneCV;
   void* mJobContext = nullptr;
   void (*mJobInvoker)(void*, int) = nullptr;
   int mJobCount = 0;
-  int mRemainingWorkers = 0;
-  int mGeneration = 0;
-  bool mDone = true;
-  bool mStop = false;
+  std::atomic<int> mCompletedWorkers {0};
+  std::atomic<unsigned> mGeneration {0};
+  std::atomic<bool> mStop {false};
 #if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
   os_workgroup_t mAudioWorkgroup = nullptr;
   int mRecommendedThreadCount = 1;
@@ -622,7 +632,9 @@ public:
 
   void process(NAM_SAMPLE** input, NAM_SAMPLE** output, const int num_frames) override
   {
-    std::lock_guard<std::mutex> lock(mStateMutex);
+    // Parameter-driven resets are already deferred to and applied by the host
+    // audio thread during the transition fade. Avoid serializing every block
+    // through a mutex that no other realtime participant should hold.
     ProcessUnlocked(input, output, num_frames);
   };
 
@@ -633,7 +645,8 @@ public:
                       NAM_SAMPLE** rightOutput,
                       const int numFrames)
   {
-    std::scoped_lock lock(mStateMutex, right.mStateMutex);
+    ApplyPendingPhaseMulticoreSettingsUnlocked();
+    right.ApplyPendingPhaseMulticoreSettingsUnlocked();
 
     if (numFrames > mMaxExternalBlockSize)
       ResetUnlocked(mExternalSampleRate, numFrames);
@@ -694,12 +707,9 @@ public:
 
   void SetPhaseMulticoreSettings(bool enabled, int requestedThreads)
   {
-    std::lock_guard<std::mutex> lock(mStateMutex);
-    mPhaseMulticoreEnabled = enabled;
-    mPhaseMulticoreRequestedThreads = NAMPhaseMulticoreClampInt(requestedThreads, 0, 64);
-    NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabled, mPhaseMulticoreRequestedThreads, 4);
-    if (mEncapsulated)
-      ResetUnlocked(mExternalSampleRate, mMaxExternalBlockSize);
+    mPendingPhaseMulticoreThreads.store(
+      NAMPhaseMulticoreClampInt(requestedThreads, 0, 64), std::memory_order_relaxed);
+    mPendingPhaseMulticoreEnabled.store(enabled ? 1 : 0, std::memory_order_release);
   }
 
   void SetAudioWorkgroup(void* workgroup)
@@ -740,6 +750,8 @@ public:
 private:
   void ProcessUnlocked(NAM_SAMPLE** input, NAM_SAMPLE** output, const int numFrames)
   {
+    ApplyPendingPhaseMulticoreSettingsUnlocked();
+
     if (numFrames > mMaxExternalBlockSize)
       ResetUnlocked(mExternalSampleRate, numFrames);
 
@@ -775,32 +787,19 @@ private:
 
     const bool phaseMulticoreRequested = ShouldUsePhaseMulticoreUnlocked(timeScale, resamplingActive);
 
-    // A2Fast backend policy:
-    // - For A2Fast models, OS Multi-Core uses the single-model frame-OpenMP backend.
-    //   That avoids 32 tiny phase-model process() calls, which the profiler showed
-    //   to be the real bottleneck.
-    // - For non-A2Fast models, keep the existing phase-multicore fallback.
-#if defined(NAM_ENABLE_A2_FAST)
-    const bool isA2FastModel =
-      phaseMulticoreRequested && mEncapsulated
-      && nam::wavenet::a2_fast::is_a2_fast_dsp(mEncapsulated.get());
-#else
-    const bool isA2FastModel = false;
-#endif
-
-    const bool useA2FrameOMPBackend = isA2FastModel;
-    mPhaseMulticoreActive = phaseMulticoreRequested && !useA2FrameOMPBackend;
+    // Gateway-style policy: every compatible WaveNet backend, including A2Fast,
+    // uses one native-rate model instance per oversampling phase. The phases
+    // are independent and require one barrier for the whole block.
+    mPhaseMulticoreActive = phaseMulticoreRequested;
     mPhaseCount = mPhaseMulticoreActive ? timeScale : 1;
 
-    if (mPhaseMulticoreActive)
-      GetPhaseMulticorePoolForThreadCount(PhaseMulticoreThreadCountUnlocked());
+    // Create the worker pool lazily in the processing path. In stereo the left
+    // instance owns the combined barrier; an eager right-side pool would remain
+    // unused while still keeping high-priority worker threads alive.
 
 #if defined(NAM_ENABLE_A2_FAST)
-    nam::wavenet::a2_fast::SetFrameOMPRuntimeConfig(
-      useA2FrameOMPBackend,
-      useA2FrameOMPBackend ? PhaseMulticoreThreadCountUnlocked() : 0,
-      1024,
-      128);
+    // Never nest A2 frame OpenMP inside phase-lane multicore.
+    nam::wavenet::a2_fast::SetFrameOMPRuntimeConfig(false, 0, 1024, 128);
 #endif
 
     if (resamplingActive)
@@ -847,17 +846,58 @@ private:
       mEncapsulated->ResetAndPrewarm(sampleRate, maxBlockSize);
     }
   };
+
+  void ApplyPendingPhaseMulticoreSettingsUnlocked()
+  {
+    const int pendingEnabled = mPendingPhaseMulticoreEnabled.exchange(-1, std::memory_order_acquire);
+    if (pendingEnabled < 0)
+      return;
+
+    mPhaseMulticoreEnabled = pendingEnabled != 0;
+    mPhaseMulticoreRequestedThreads =
+      NAMPhaseMulticoreClampInt(mPendingPhaseMulticoreThreads.load(std::memory_order_relaxed), 0, 64);
+    NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabled, mPhaseMulticoreRequestedThreads, 4);
+
+    if (mEncapsulated)
+      ResetUnlocked(mExternalSampleRate, mMaxExternalBlockSize);
+  }
+
   bool ShouldUsePhaseMulticoreUnlocked(int timeScale, bool resamplingActive) const
   {
-    return resamplingActive && mRequestedOversamplingFactor > 1 && timeScale > 1 && !mModelPath.empty()
+    // Two real phase lanes avoid the doubled ring-buffer lookback/cache stride
+    // of the time-scaled single-model path at 2x.
+    return resamplingActive && mRequestedOversamplingFactor >= 2 && timeScale >= 2 && !mModelPath.empty()
            && mPhaseMulticoreEnabled;
   }
 
   int PhaseMulticoreThreadCountUnlocked() const
   {
-    return mPhaseMulticoreRequestedThreads > 0
-             ? NAMPhaseMulticoreClampInt(mPhaseMulticoreRequestedThreads, 1, 64)
-             : NAMPhaseMulticoreSmartAutoThreadCount();
+    int requested = mPhaseMulticoreRequestedThreads > 0
+                      ? NAMPhaseMulticoreClampInt(mPhaseMulticoreRequestedThreads, 1, 64)
+                      : NAMPhaseMulticoreSmartAutoThreadCount();
+
+    // Manual values must not spill phase workers onto Apple efficiency cores.
+    if (NAMPhaseMulticoreIsAppleSilicon())
+    {
+      const int performanceCores = NAMPhaseMulticoreApplePerformanceCoreCount();
+      if (performanceCores > 0)
+        requested = std::min(requested, performanceCores);
+    }
+
+    return requested;
+  }
+
+  int PhaseMulticoreLaneCountUnlocked(int phaseCount, int availableThreads) const
+  {
+    // Aggressive phase scaling test. The atomic dispatcher has low enough
+    // overhead to expose one lane per phase starting at 2x.
+    int factorCap = 1;
+    if (phaseCount >= 2)
+      factorCap = phaseCount;
+
+    return std::max(
+      1,
+      std::min(std::min(PhaseMulticoreThreadCountUnlocked(), availableThreads), factorCap));
   }
 
   std::shared_ptr<NAMPhaseMulticorePool> GetPhaseMulticorePoolForThreadCount(int totalThreads)
@@ -868,21 +908,23 @@ private:
     const int maxThreads = NAMPhaseMulticoreMaxPoolThreadCount();
     const int clampedThreads = NAMPhaseMulticoreClampInt(totalThreads, 1, maxThreads);
 
-    if (static_cast<int>(mPhasePools.size()) <= clampedThreads)
-      mPhasePools.resize(static_cast<size_t>(clampedThreads + 1));
+    // Keep only one live pool per model instance. The previous cache retained
+    // every historical thread count, leaving multiple high-priority worker
+    // groups alive after parameter changes and increasing host wake contention.
+    if (!mPhasePool || mPhasePoolThreadCount != clampedThreads)
+    {
+      mPhasePool = std::make_shared<NAMPhaseMulticorePool>(clampedThreads);
+      mPhasePoolThreadCount = clampedThreads;
+    }
 
-    auto& pool = mPhasePools[static_cast<size_t>(clampedThreads)];
-    if (!pool)
-      pool = std::make_shared<NAMPhaseMulticorePool>(clampedThreads);
-
-    return pool;
+    return mPhasePool;
   }
 
   std::unique_ptr<nam::DSP> CreatePhaseModelCloneUnlocked(double encapsulatedSampleRate, int maxPhaseBlockSize)
   {
-    // Prefer a state-only clone: shared immutable weights/config, independent
-    // delay/history/state. This removes the most expensive part of phase
-    // multicore for backends that implement CloneForPhase().
+    // Prefer an in-memory clone with independent delay/history state. Optimized
+    // backends may share immutable data; container backends clone only the
+    // active child instead of reopening and rebuilding the complete .nam file.
     std::unique_ptr<nam::DSP> clone = mEncapsulated ? mEncapsulated->CloneForPhase() : nullptr;
 
     // Fallback for unsupported model types: preserve the existing behavior.
@@ -895,7 +937,6 @@ private:
     clone->SetTimeScale(1);
     if (nam::SlimmableModel* slimmable = dynamic_cast<nam::SlimmableModel*>(clone.get()))
       slimmable->SetSlimmableSize(mSlimmableSize);
-    clone->ResetAndPrewarm(encapsulatedSampleRate, maxPhaseBlockSize);
     return clone;
   }
 
@@ -970,43 +1011,77 @@ private:
            && std::abs(mRenderingSampleRate - right.mRenderingSampleRate) < 1.0e-6;
   }
 
-  void ProcessPhaseRangeUnlocked(NAM_SAMPLE** resampledInput,
-                                 NAM_SAMPLE** resampledOutput,
-                                 int resampledFrames,
-                                 int phaseBegin,
-                                 int phaseEnd)
+  int PhaseFrameCountUnlocked(int phase, int resampledFrames) const
   {
-    const int phaseCount = mPhaseCount;
+    return phase < resampledFrames ? ((resampledFrames - phase + mPhaseCount - 1) / mPhaseCount) : 0;
+  }
 
-    for (int phase = phaseBegin; phase < phaseEnd; phase++)
+  void DeinterleavePhaseInputsUnlocked(NAM_SAMPLE** resampledInput, int resampledFrames)
+  {
+    for (int phase = 0; phase < mPhaseCount; phase++)
     {
-      const int phaseFrames =
-        phase < resampledFrames ? ((resampledFrames - phase + phaseCount - 1) / phaseCount) : 0;
+      const int phaseFrames = PhaseFrameCountUnlocked(phase, resampledFrames);
+      if (phaseFrames <= 0)
+        continue;
+
+      auto& phaseInput = mPhaseInputBuffers[static_cast<size_t>(phase)];
+
+      for (int i = 0; i < phaseFrames; i++)
+        phaseInput[static_cast<size_t>(i)] = resampledInput[0][phase + i * mPhaseCount];
+    }
+  }
+
+  void ReinterleavePhaseOutputsUnlocked(NAM_SAMPLE** resampledOutput, int resampledFrames)
+  {
+    for (int phase = 0; phase < mPhaseCount; phase++)
+    {
+      const int phaseFrames = PhaseFrameCountUnlocked(phase, resampledFrames);
+      if (phaseFrames <= 0)
+        continue;
+
+      const auto& phaseOutput = mPhaseOutputBuffers[static_cast<size_t>(phase)];
+      for (int i = 0; i < phaseFrames; i++)
+        resampledOutput[0][phase + i * mPhaseCount] = phaseOutput[static_cast<size_t>(i)];
+    }
+  }
+
+  void ProcessPhaseLaneBufferedUnlocked(NAM_SAMPLE** resampledInput,
+                                        int resampledFrames,
+                                        int laneIndex,
+                                        int laneCount,
+                                        bool inputsAreDeinterleaved)
+  {
+    for (int phase = laneIndex; phase < mPhaseCount; phase += laneCount)
+    {
+      const int phaseFrames = PhaseFrameCountUnlocked(phase, resampledFrames);
       if (phaseFrames <= 0)
         continue;
 
       nam::DSP* phaseModel = GetPhaseModelUnlocked(phase);
-
-      if (phaseModel && phaseModel->SupportsStridedProcess())
-      {
-        phaseModel->process_strided(
-          resampledInput[0] + phase, phaseCount, resampledOutput[0] + phase, phaseCount, phaseFrames);
-        continue;
-      }
-
       auto& phaseInput = mPhaseInputBuffers[static_cast<size_t>(phase)];
       auto& phaseOutput = mPhaseOutputBuffers[static_cast<size_t>(phase)];
 
-      for (int i = 0; i < phaseFrames; i++)
-        phaseInput[static_cast<size_t>(i)] = resampledInput[0][phase + i * phaseCount];
+      if (!inputsAreDeinterleaved && phaseModel->SupportsStridedProcess())
+      {
+        phaseModel->process_strided(
+          resampledInput[0] + phase, mPhaseCount, phaseOutput.data(), 1, phaseFrames);
+        continue;
+      }
 
       NAM_SAMPLE* phaseInputPtrs[1] = {phaseInput.data()};
       NAM_SAMPLE* phaseOutputPtrs[1] = {phaseOutput.data()};
       phaseModel->process(phaseInputPtrs, phaseOutputPtrs, phaseFrames);
-
-      for (int i = 0; i < phaseFrames; i++)
-        resampledOutput[0][phase + i * phaseCount] = phaseOutput[static_cast<size_t>(i)];
     }
+  }
+
+  bool PhaseModelsSupportStridedUnlocked() const
+  {
+    if (!mEncapsulated || !mEncapsulated->SupportsStridedProcess())
+      return false;
+    for (const auto& model : mPhaseModels)
+      if (!model || !model->SupportsStridedProcess())
+        return false;
+    return true;
   }
 
   void ProcessStereoPhaseMulticoreUnlocked(ResamplingNAM& right,
@@ -1017,41 +1092,40 @@ private:
                                            int resampledFrames)
   {
     const int phaseCount = mPhaseCount;
-    const int totalPhaseTasks = phaseCount * 2;
     const int requestedThreads = PhaseMulticoreThreadCountUnlocked();
-    auto pool = GetPhaseMulticorePoolForThreadCount(requestedThreads);
+    const int laneCount = PhaseMulticoreLaneCountUnlocked(phaseCount, requestedThreads);
+    auto pool = GetPhaseMulticorePoolForThreadCount(laneCount);
     pool->SetAudioWorkgroup(mAudioWorkgroup.load(std::memory_order_acquire));
 
     const int availableThreads = pool->RecommendedThreadCount();
-    const int jobCount =
-      std::max(1, std::min(std::min(requestedThreads, availableThreads), totalPhaseTasks));
-    const int tasksPerJob = (totalPhaseTasks + jobCount - 1) / jobCount;
+    const int jobCount = std::min(laneCount, availableThreads);
+
+    // Keep every worker on private contiguous buffers. Direct strided writes
+    // make different phase workers modify the same cache lines, which severely
+    // limits multicore scaling at high oversampling factors.
+    const bool leftNeedsDeinterleave = !PhaseModelsSupportStridedUnlocked();
+    const bool rightNeedsDeinterleave = !right.PhaseModelsSupportStridedUnlocked();
+    if (leftNeedsDeinterleave)
+      DeinterleavePhaseInputsUnlocked(leftResampledInput, resampledFrames);
+    if (rightNeedsDeinterleave)
+      right.DeinterleavePhaseInputsUnlocked(rightResampledInput, resampledFrames);
 
     pool->ParallelFor(jobCount, [this,
                                  &right,
                                  leftResampledInput,
-                                 leftResampledOutput,
                                  rightResampledInput,
-                                 rightResampledOutput,
                                  resampledFrames,
-                                 phaseCount,
-                                 totalPhaseTasks,
-                                 tasksPerJob](int jobIndex) {
-      const int taskBegin = jobIndex * tasksPerJob;
-      const int taskEnd = std::min(totalPhaseTasks, taskBegin + tasksPerJob);
-
-      const int leftBegin = std::min(taskBegin, phaseCount);
-      const int leftEnd = std::min(taskEnd, phaseCount);
-      if (leftBegin < leftEnd)
-        ProcessPhaseRangeUnlocked(
-          leftResampledInput, leftResampledOutput, resampledFrames, leftBegin, leftEnd);
-
-      const int rightBegin = std::max(0, taskBegin - phaseCount);
-      const int rightEnd = std::max(0, taskEnd - phaseCount);
-      if (rightBegin < rightEnd)
-        right.ProcessPhaseRangeUnlocked(
-          rightResampledInput, rightResampledOutput, resampledFrames, rightBegin, rightEnd);
+                                 jobCount,
+                                 leftNeedsDeinterleave,
+                                 rightNeedsDeinterleave](int jobIndex) {
+      ProcessPhaseLaneBufferedUnlocked(
+        leftResampledInput, resampledFrames, jobIndex, jobCount, leftNeedsDeinterleave);
+      right.ProcessPhaseLaneBufferedUnlocked(
+        rightResampledInput, resampledFrames, jobIndex, jobCount, rightNeedsDeinterleave);
     });
+
+    ReinterleavePhaseOutputsUnlocked(leftResampledOutput, resampledFrames);
+    right.ReinterleavePhaseOutputsUnlocked(rightResampledOutput, resampledFrames);
   }
 
 
@@ -1072,22 +1146,25 @@ private:
 
     const int phaseCount = mPhaseCount;
     const int requestedThreads = PhaseMulticoreThreadCountUnlocked();
+    const int laneCount = PhaseMulticoreLaneCountUnlocked(phaseCount, requestedThreads);
 
-    // Important: do NOT schedule one job per phase. At 32x this creates 32 tiny
-    // jobs per audio block. Gateway-style phase processing should schedule one
-    // coarse job per worker, and each worker processes several phases sequentially.
-    auto pool = GetPhaseMulticorePoolForThreadCount(requestedThreads);
+    // One coarse round-robin lane per worker. Each lane processes complete
+    // native-rate phase models sequentially, followed by one block barrier.
+    auto pool = GetPhaseMulticorePoolForThreadCount(laneCount);
     pool->SetAudioWorkgroup(mAudioWorkgroup.load(std::memory_order_acquire));
     const int availableThreads = pool->RecommendedThreadCount();
-    const int jobCount = std::max(1, std::min(std::min(requestedThreads, availableThreads), phaseCount));
-    const int phasesPerJob = (phaseCount + jobCount - 1) / jobCount;
+    const int jobCount = std::max(1, std::min(laneCount, availableThreads));
 
-    pool->ParallelFor(jobCount, [this, resampledInput, resampledOutput, resampledFrames,
-                                 phaseCount, phasesPerJob](int jobIndex) {
-      const int phaseBegin = jobIndex * phasesPerJob;
-      const int phaseEnd = std::min(phaseCount, phaseBegin + phasesPerJob);
-      ProcessPhaseRangeUnlocked(resampledInput, resampledOutput, resampledFrames, phaseBegin, phaseEnd);
+    const bool needsDeinterleave = !PhaseModelsSupportStridedUnlocked();
+    if (needsDeinterleave)
+      DeinterleavePhaseInputsUnlocked(resampledInput, resampledFrames);
+
+    pool->ParallelFor(jobCount, [this, resampledInput, resampledFrames, jobCount, needsDeinterleave](int jobIndex) {
+      ProcessPhaseLaneBufferedUnlocked(
+        resampledInput, resampledFrames, jobIndex, jobCount, needsDeinterleave);
     });
+
+    ReinterleavePhaseOutputsUnlocked(resampledOutput, resampledFrames);
   }
 
 double GetRenderingSampleRate(double externalSampleRate) const
@@ -1115,7 +1192,8 @@ double GetRenderingSampleRate(double externalSampleRate) const
   std::vector<std::unique_ptr<nam::DSP>> mPhaseModels;
   std::vector<std::vector<NAM_SAMPLE>> mPhaseInputBuffers;
   std::vector<std::vector<NAM_SAMPLE>> mPhaseOutputBuffers;
-  std::vector<std::shared_ptr<NAMPhaseMulticorePool>> mPhasePools;
+  std::shared_ptr<NAMPhaseMulticorePool> mPhasePool;
+  int mPhasePoolThreadCount = 0;
   std::atomic<void*> mAudioWorkgroup {nullptr};
   mutable std::mutex mStateMutex;
 
@@ -1133,6 +1211,8 @@ double GetRenderingSampleRate(double externalSampleRate) const
   dsp::EAntiAliasFilterPhase mAntiAliasFilterPhase = dsp::EAntiAliasFilterPhase::MinimumPhaseCascadedFIR;
   bool mPhaseMulticoreEnabled = true;
   int mPhaseMulticoreRequestedThreads = 0; // 0 = Smart Auto
+  std::atomic<int> mPendingPhaseMulticoreEnabled {-1};
+  std::atomic<int> mPendingPhaseMulticoreThreads {0};
   double mExternalSampleRate = 48000.0;
 };
 
