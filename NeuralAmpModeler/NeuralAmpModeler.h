@@ -39,6 +39,7 @@
 #include <stdexcept>
 #include <filesystem>
 #include <cstdlib>
+#include <chrono>
 #include <condition_variable>
 #include <memory>
 
@@ -369,6 +370,17 @@ static inline int NAMPhaseMulticoreMaxPoolThreadCount()
   return NAMPhaseMulticoreClampInt(maxThreads, 1, 64);
 }
 
+static inline void NAMPhaseMulticoreRealtimePause()
+{
+#if defined(__APPLE__) && (defined(__arm64__) || defined(__aarch64__))
+  __asm__ __volatile__("yield");
+#elif defined(_WIN32)
+  YieldProcessor();
+#else
+  std::this_thread::yield();
+#endif
+}
+
 class NAMPhaseMulticorePool
 {
 public:
@@ -488,7 +500,8 @@ public:
       int spins = 0;
       while (mCompletedWorkers.load(std::memory_order_acquire) < workerJobs)
       {
-        if (++spins >= 256)
+        NAMPhaseMulticoreRealtimePause();
+        if (++spins >= 16384)
         {
           spins = 0;
           std::this_thread::yield();
@@ -508,6 +521,7 @@ private:
     // Starting from zero also prevents a newly-created worker from missing the
     // first job if the audio thread publishes immediately after construction.
     unsigned seenGeneration = 0;
+    int idleSpins = 0;
     for (;;)
     {
       void* jobContext = nullptr;
@@ -523,15 +537,33 @@ private:
         if (mStop.load(std::memory_order_acquire))
           return;
 
+#if defined(__APPLE__) && (defined(__arm64__) || defined(__aarch64__))
+        // Avoid a kernel wake-up on every tiny audio block. The timed sleep is
+        // only a fallback for stopped or inactive playback.
+        if (idleSpins++ < 262144)
+        {
+          NAMPhaseMulticoreRealtimePause();
+          continue;
+        }
+
+        std::unique_lock<std::mutex> lock(mMutex);
+        mCV.wait_for(lock, std::chrono::microseconds(500), [this, seenGeneration] {
+          return mStop.load(std::memory_order_acquire)
+                 || mGeneration.load(std::memory_order_acquire) != seenGeneration;
+        });
+        idleSpins = 0;
+#else
         std::unique_lock<std::mutex> lock(mMutex);
         mCV.wait(lock, [this, &seenGeneration] {
           return mStop.load(std::memory_order_acquire)
                  || mGeneration.load(std::memory_order_acquire) != seenGeneration;
         });
+#endif
         continue;
       }
 
       seenGeneration = generation;
+      idleSpins = 0;
       if (mStop.load(std::memory_order_acquire))
         return;
 
