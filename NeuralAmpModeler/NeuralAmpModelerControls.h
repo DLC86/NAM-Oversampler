@@ -800,7 +800,7 @@ class PhaseThreadControl : public IVRadioButtonControl
 public:
   PhaseThreadControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
                      EDirection direction = EDirection::Vertical)
-  : IVRadioButtonControl(bounds, paramIdx, {"Auto", "1", "2", "4", "8", "12", "16", "20", "24", "32"}, "", style,
+  : IVRadioButtonControl(bounds, paramIdx, {"Auto", "2", "4", "8", "12", "16", "20", "24", "32"}, "", style,
                          EVShape::Ellipse, direction, buttonSize) {};
 };
 

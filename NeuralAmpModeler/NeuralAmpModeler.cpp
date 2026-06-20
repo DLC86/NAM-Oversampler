@@ -108,7 +108,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     ->InitEnum("Offline Filter Phase", 2, {"Minimum Phase", "Linear Phase (short)", "Linear Phase (long)"});
   GetParam(kPhaseMulticoreEnabled)->InitBool("OS Multi-Core", true);
   GetParam(kPhaseMulticoreThreadCount)
-    ->InitEnum("OS Threads", 0, {"Auto", "1", "2", "4", "8", "12", "16", "20", "24", "32"});
+    ->InitEnum("OS Threads", 0, {"Auto", "2", "4", "8", "12", "16", "20", "24", "32"});
   GetParam(kEQPostNAM)->InitBool("EQ Post", true);
   GetParam(kChannelMode)->InitEnum("Channel Mode", 0, {"Mono", "Stereo"});
   NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
@@ -969,7 +969,7 @@ int NeuralAmpModeler::_GetActiveOversamplingFactor() const
 
 int NeuralAmpModeler::_GetPhaseMulticoreThreadCountFromParam() const
 {
-  static constexpr int kThreadCounts[] = {0, 1, 2, 4, 8, 12, 16, 20, 24, 32};
+  static constexpr int kThreadCounts[] = {0, 2, 4, 8, 12, 16, 20, 24, 32};
   const int maxIndex = static_cast<int>(sizeof(kThreadCounts) / sizeof(kThreadCounts[0])) - 1;
   const int idx = std::clamp(static_cast<int>(GetParam(kPhaseMulticoreThreadCount)->Value()), 0, maxIndex);
   return kThreadCounts[idx];
