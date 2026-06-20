@@ -100,6 +100,45 @@ void _RenameKeys(nlohmann::json& j, std::unordered_map<std::string, std::string>
   }
 }
 
+// v1.5.0
+
+void _UpdateConfigFrom_1_5_0(nlohmann::json& config)
+{
+  if (!config.contains("OS Multi-Core"))
+    config["OS Multi-Core"] = 1.0;
+  if (!config.contains("OS Threads"))
+    config["OS Threads"] = 0.0;
+}
+
+int _GetConfigFrom_1_5_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Slim",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling",
+                                      "EQ Post",
+                                      "Channel Mode",
+                                      "Offline Filter Phase",
+                                      "OS Multi-Core",
+                                      "OS Threads"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_5_0(config);
+  return pos;
+}
+
 // v1.2.1
 
 void _UpdateConfigFrom_1_2_1(nlohmann::json& config)
@@ -426,7 +465,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   _Version version(versionStr);
   // Act accordingly
   nlohmann::json config;
-  if (version >= _Version(1, 2, 1))
+  if (version >= _Version(1, 5, 0))
+  {
+    pos = _GetConfigFrom_1_5_0(chunk, pos, config);
+  }
+  else if (version >= _Version(1, 2, 1))
   {
     pos = _GetConfigFrom_1_2_1(chunk, pos, config);
   }
