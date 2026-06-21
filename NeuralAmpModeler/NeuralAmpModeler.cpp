@@ -532,6 +532,11 @@ void NeuralAmpModeler::OnReset()
 
   // Reset the model/IR first, then apply the active realtime/offline oversampling/filter settings.
   _ResetModelAndIR(sampleRate, GetBlockSize());
+  mPendingPhaseMulticoreEnabled.store(-1, std::memory_order_release);
+  mRealtimeDSPTransitionFadingOut = false;
+  mRealtimeDSPTransitionFadingIn = false;
+  _ApplyImmediatePhaseMulticoreSettings(
+    mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load());
   _ApplyActiveDSPSettings(false);
 
   mToneStack->Reset(sampleRate, maxBlockSize);
@@ -983,22 +988,45 @@ void NeuralAmpModeler::_SetPhaseMulticoreSettingsFromParams()
   mPhaseMulticoreEnabledParam = enabled;
   mPhaseMulticoreRequestedThreadsParam = requestedThreads;
 
+  // Staged models are not audible yet, so keep them ready without waiting for
+  // the realtime transition.
+  if (mStagedModel != nullptr)
+    mStagedModel->SetPhaseMulticoreSettings(enabled, requestedThreads);
+  if (mStagedModelRight != nullptr)
+    mStagedModelRight->SetPhaseMulticoreSettings(enabled, requestedThreads);
+
+  if (mModel == nullptr || GetRenderingOffline())
+  {
+    _ApplyImmediatePhaseMulticoreSettings(enabled, requestedThreads);
+    return;
+  }
+
+  // Do not change the global runtime policy or queue a model reset until the
+  // audible signal has reached the bottom of the fade-out.
+  mPendingPhaseMulticoreThreads.store(requestedThreads, std::memory_order_relaxed);
+  mPendingPhaseMulticoreEnabled.store(enabled ? 1 : 0, std::memory_order_release);
+  _StartRealtimeDSPTransition();
+}
+
+void NeuralAmpModeler::_ApplyImmediatePhaseMulticoreSettings(bool enabled, int requestedThreads)
+{
   NAMSetPhaseMulticoreRuntimeSettings(enabled, requestedThreads, 4);
 
-  auto apply = [enabled, requestedThreads](ResamplingNAM* p) {
-    if (p != nullptr)
-      p->SetPhaseMulticoreSettings(enabled, requestedThreads);
-  };
+  if (mModel != nullptr)
+    mModel->SetPhaseMulticoreSettings(enabled, requestedThreads);
+  if (mModelRight != nullptr)
+    mModelRight->SetPhaseMulticoreSettings(enabled, requestedThreads);
 
-  apply(mModel.get());
-  apply(mStagedModel.get());
-  apply(mModelRight.get());
-  apply(mStagedModelRight.get());
-
-  mAppliedOversamplingFactor = 0;
-  mAppliedAntiAliasFilterPhase = -1;
-  _ApplyActiveDSPSettings(false);
   _UpdateLatency();
+}
+
+void NeuralAmpModeler::_StartRealtimeDSPTransition()
+{
+  if (!mRealtimeDSPTransitionFadingOut && !mRealtimeDSPTransitionFadingIn)
+  {
+    mRealtimeDSPTransitionFadingOut = true;
+    mRealtimeDSPTransitionSamplesRemaining = mRealtimeDSPTransitionLength;
+  }
 }
 
 int NeuralAmpModeler::_GetAntiAliasFilterPhaseIndex() const
@@ -1056,11 +1084,7 @@ void NeuralAmpModeler::_ApplyActiveDSPSettings(bool allowSmoothRealtimeTransitio
 
   mPendingOversamplingFactor = factor;
   mPendingAntiAliasFilterPhase = filterPhaseIndex;
-  if (!mRealtimeDSPTransitionFadingOut && !mRealtimeDSPTransitionFadingIn)
-  {
-    mRealtimeDSPTransitionFadingOut = true;
-    mRealtimeDSPTransitionSamplesRemaining = mRealtimeDSPTransitionLength;
-  }
+  _StartRealtimeDSPTransition();
 }
 
 void NeuralAmpModeler::_PrepareRealtimeDSPTransition(const double sampleRate)
@@ -1074,12 +1098,25 @@ void NeuralAmpModeler::_PrepareRealtimeDSPTransition(const double sampleRate)
     if (pendingFactor > 0 && pendingFilterPhase >= 0)
       _ApplyImmediateDSPSettings(pendingFactor, pendingFilterPhase);
 
+    const int pendingMulticoreEnabled = mPendingPhaseMulticoreEnabled.exchange(-1, std::memory_order_acquire);
+    if (pendingMulticoreEnabled >= 0)
+    {
+      const int pendingThreads = mPendingPhaseMulticoreThreads.load(std::memory_order_relaxed);
+      _ApplyImmediatePhaseMulticoreSettings(pendingMulticoreEnabled != 0, pendingThreads);
+    }
+
     mRealtimeDSPTransitionFadingOut = false;
     mRealtimeDSPTransitionFadingIn = true;
     mRealtimeDSPTransitionSamplesRemaining = mRealtimeDSPTransitionLength;
   }
 
   _ApplyActiveDSPSettings(true);
+
+  // A thread/multicore change received during fade-in waits until that fade is
+  // complete, then starts one clean fade-out on the following block.
+  if (!mRealtimeDSPTransitionFadingOut && !mRealtimeDSPTransitionFadingIn
+      && mPendingPhaseMulticoreEnabled.load(std::memory_order_acquire) >= 0)
+    _StartRealtimeDSPTransition();
 }
 
 void NeuralAmpModeler::_ApplyRealtimeDSPTransitionGain(sample** outputs, const size_t nFrames, const size_t nChans)

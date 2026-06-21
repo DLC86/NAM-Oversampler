@@ -1379,6 +1379,8 @@ private:
   int _GetAntiAliasFilterPhaseIndex() const;
   int _GetPhaseMulticoreThreadCountFromParam() const;
   void _SetPhaseMulticoreSettingsFromParams();
+  void _ApplyImmediatePhaseMulticoreSettings(bool enabled, int requestedThreads);
+  void _StartRealtimeDSPTransition();
   void _ApplyActiveDSPSettings(bool allowSmoothRealtimeTransition);
   void _ApplyImmediateDSPSettings(int oversamplingFactor, int filterPhaseIndex);
   void _PrepareRealtimeDSPTransition(const double sampleRate);
@@ -1463,6 +1465,8 @@ private:
   std::atomic<bool> mStereoProcessing = false;
   std::atomic<int> mPendingOversamplingFactor = 0;
   std::atomic<int> mPendingAntiAliasFilterPhase = -1;
+  std::atomic<int> mPendingPhaseMulticoreEnabled = -1;
+  std::atomic<int> mPendingPhaseMulticoreThreads = 0;
   bool mRealtimeDSPTransitionFadingOut = false;
   bool mRealtimeDSPTransitionFadingIn = false;
   int mRealtimeDSPTransitionSamplesRemaining = 0;
