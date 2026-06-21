@@ -135,24 +135,25 @@ END
 // TEXTINCLUDE
 //
 
-1 TEXTINCLUDE 
+1 TEXTINCLUDE
 BEGIN
     "resource.h\0"
 END
 
-2 TEXTINCLUDE 
+2 TEXTINCLUDE
 BEGIN
     "#include ""winres.h""\r\n"
     "\0"
 END
 
-3 TEXTINCLUDE 
+3 TEXTINCLUDE
 BEGIN
     "#include ""..\\config.h""\r\n"
     "ROBOTO_FN TTF ROBOTO_FN\r\n"
     "MICHROMA_FN TTF MICHROMA_FN\r\n"
     "FILE_FN SVG FILE_FN\r\n"
     "GEAR_FN SVG GEAR_FN\r\n"
+    "TUNER_FN SVG TUNER_FN\r\n"
     "GLOBE_ICON_FN SVG GLOBE_ICON_FN\r\n"
     "CLOSE_BUTTON_FN SVG CLOSE_BUTTON_FN\r\n"
     "LEFT_ARROW_FN SVG LEFT_ARROW_FN\r\n"
@@ -219,8 +220,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,5,1,0
- PRODUCTVERSION 1,5,1,0
+ FILEVERSION 1,5,2,0
+ PRODUCTVERSION 1,5,2,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -235,8 +236,8 @@ BEGIN
     BEGIN
         BLOCK "040004e4"
         BEGIN
-            VALUE "FileVersion", "1.5.1"
-            VALUE "ProductVersion", "1.5.1"
+            VALUE "FileVersion", "1.5.2"
+            VALUE "ProductVersion", "1.5.2"
             VALUE "FileDescription", "NAM-Oversampler"
             VALUE "InternalName", "NAM-Oversampler"
             VALUE "ProductName", "NAM-Oversampler"
@@ -266,6 +267,7 @@ ROBOTO_FN TTF ROBOTO_FN
 MICHROMA_FN TTF MICHROMA_FN
 FILE_FN SVG FILE_FN
 GEAR_FN SVG GEAR_FN
+TUNER_FN SVG TUNER_FN
 GLOBE_ICON_FN SVG GLOBE_ICON_FN
 CLOSE_BUTTON_FN SVG CLOSE_BUTTON_FN
 LEFT_ARROW_FN SVG LEFT_ARROW_FN
@@ -298,4 +300,3 @@ METERBACKGROUND2X_FN PNG METERBACKGROUND2X_FN
 METERBACKGROUND3X_FN PNG METERBACKGROUND3X_FN
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED
-

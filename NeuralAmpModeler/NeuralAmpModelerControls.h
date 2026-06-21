@@ -1019,6 +1019,170 @@ private:
   } mControlNames;
 };
 
+class NAMTunerDisplayControl : public IControl
+{
+public:
+  NAMTunerDisplayControl(const IRECT& bounds)
+  : IControl(bounds)
+  {
+    SetIgnoreMouse(true);
+  }
+
+  void SetTunerData(const NAMTunerDetector::Result& result)
+  {
+    mResult = result;
+    SetDirty(false);
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const auto noteArea = mRECT.GetFromTop(116.0f);
+    const auto detailsArea = mRECT.GetReducedFromTop(112.0f).GetFromTop(42.0f);
+    const auto barArea = mRECT.GetReducedFromTop(174.0f).GetFromTop(60.0f).GetHPadded(-28.0f);
+    const IText noteText(82.0f, COLOR_WHITE, "Michroma-Regular", EAlign::Center, EVAlign::Middle);
+    const IText sharpText(28.0f, COLOR_WHITE, "Michroma-Regular", EAlign::Near, EVAlign::Top);
+    const IText detailsText(18.0f, PluginColors::HELP_TEXT, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    const IText scaleText(11.0f, PluginColors::HELP_TEXT, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+
+    if (!mResult.valid)
+    {
+      g.DrawText(noteText, "--", noteArea);
+      g.DrawText(detailsText, "Play a single note", detailsArea);
+    }
+    else
+    {
+      static constexpr const char* noteLetters[12] =
+        {"C", "C", "D", "D", "E", "F", "F", "G", "G", "A", "A", "B"};
+      static constexpr bool noteSharps[12] =
+        {false, true, false, true, false, false, true, false, true, false, true, false};
+      const int midi = static_cast<int>(std::lround(69.0 + 12.0 * std::log2(mResult.frequency / 440.0)));
+      const int note = ((midi % 12) + 12) % 12;
+      const auto letterArea =
+        noteArea.GetCentredInside(120.0f, noteArea.H()).GetHShifted(noteSharps[note] ? -10.0f : 0.0f);
+      g.DrawText(noteText, noteLetters[note], letterArea);
+      if (noteSharps[note])
+        g.DrawText(
+          sharpText, "#",
+          IRECT(letterArea.MW() + 30.0f, letterArea.T + 14.0f, letterArea.R + 38.0f, letterArea.B));
+
+      WDL_String details;
+      details.SetFormatted(64, "%.2f Hz     %+.1f cents", mResult.frequency, mResult.cents);
+      g.DrawText(detailsText, details.Get(), detailsArea);
+    }
+
+    const auto track = barArea.GetCentredInside(barArea.W(), 12.0f);
+    g.FillRoundRect(COLOR_BLACK.WithOpacity(0.62f), track, 5.0f);
+    for (int tick = -5; tick <= 5; tick++)
+    {
+      const float x = track.MW() + static_cast<float>(tick) * track.W() / 10.0f;
+      const float height = tick == 0 ? 22.0f : (tick % 5 == 0 ? 16.0f : 9.0f);
+      g.DrawLine(tick == 0 ? COLOR_WHITE : PluginColors::HELP_TEXT,
+                 x, track.MH() - height * 0.5f, x, track.MH() + height * 0.5f);
+    }
+
+    if (mResult.valid)
+    {
+      const float normalized = std::clamp(mResult.cents / 50.0f, -1.0f, 1.0f);
+      const float x = track.MW() + normalized * track.W() * 0.5f;
+      const IColor needleColor =
+        std::abs(mResult.cents) <= 3.0f ? IColor(255, 70, 220, 110) : PluginColors::NAM_THEMEFONTCOLOR;
+      g.FillRoundRect(needleColor, IRECT(x - 3.0f, track.T - 12.0f, x + 3.0f, track.B + 12.0f), 2.0f);
+    }
+
+    g.DrawText(scaleText, "-50", barArea.GetFromLeft(45.0f));
+    g.DrawText(scaleText, "+50", barArea.GetFromRight(45.0f));
+  }
+
+private:
+  NAMTunerDetector::Result mResult;
+};
+
+class NAMTunerPageControl : public IContainerBaseWithNamedChildren
+{
+public:
+  NAMTunerPageControl(const IRECT& bounds, const IBitmap& bitmap, const IBitmap& switchBitmap,
+                      ISVG closeSVG, const IVStyle& style)
+  : IContainerBaseWithNamedChildren(bounds)
+  , mBitmap(bitmap)
+  , mSwitchBitmap(switchBitmap)
+  , mCloseSVG(closeSVG)
+  , mStyle(style)
+  {
+    mIgnoreMouse = false;
+  }
+
+  bool OnKeyDown(float x, float y, const IKeyPress& key) override
+  {
+    if (key.VK == kVK_ESCAPE)
+    {
+      HideAnimated(true);
+      return true;
+    }
+    return false;
+  }
+
+  void SetTunerData(const NAMTunerDetector::Result& result)
+  {
+    if (auto* display = dynamic_cast<NAMTunerDisplayControl*>(GetNamedChild("Display")))
+      display->SetTunerData(result);
+  }
+
+  void HideAnimated(bool hide)
+  {
+    PLUG()->SetTunerActive(!hide);
+    mWillHide = hide;
+    if (!hide)
+      mHide = false;
+    else
+      ForAllChildrenFunc([hide](int childIdx, IControl* pChild) { pChild->Hide(hide); });
+
+    SetAnimation(
+      [&](IControl* pCaller) {
+        const auto progress = static_cast<float>(pCaller->GetAnimationProgress());
+        SetBlend(IBlend(EBlend::Default, mWillHide ? 1.0f - progress : progress));
+        if (progress > 1.0f)
+        {
+          pCaller->OnEndAnimation();
+          IContainerBase::Hide(mWillHide);
+          GetUI()->SetAllControlsDirty();
+        }
+      },
+      160);
+    SetDirty(true);
+  }
+
+  void OnAttached() override
+  {
+    const auto content = GetRECT().GetPadded(-30.0f);
+    const IVStyle titleStyle = DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular"))
+                                 .WithDrawFrame(false)
+                                 .WithShadowOffset(2.0f);
+    AddNamedChildControl(new IBitmapControl(GetRECT(), mBitmap), "Bitmap")->SetIgnoreMouse(true);
+    AddNamedChildControl(new IVLabelControl(content.GetFromTop(50.0f), "TUNER", titleStyle), "Title");
+    AddNamedChildControl(
+      new NAMTunerDisplayControl(content.GetReducedFromTop(58.0f).GetReducedFromBottom(55.0f)),
+      "Display", kCtrlTagTunerDisplay);
+
+    const auto muteArea = content.GetFromBottom(52.0f).GetCentredInside(120.0f, 48.0f);
+    auto* mute = AddNamedChildControl(
+      new NAMSwitchControl(muteArea, kTunerMute, "MUTE OUTPUT", mStyle, mSwitchBitmap), "Mute");
+    mute->SetTooltip("Mute the plug-in output while tuning");
+
+    auto closeAction = [&](IControl* pCaller) {
+      static_cast<NAMTunerPageControl*>(pCaller->GetParent())->HideAnimated(true);
+    };
+    AddNamedChildControl(
+      new NAMSquareButtonControl(CornerButtonArea(GetRECT()), closeAction, mCloseSVG), "Close");
+  }
+
+private:
+  IBitmap mBitmap;
+  IBitmap mSwitchBitmap;
+  ISVG mCloseSVG;
+  IVStyle mStyle;
+  bool mWillHide = false;
+};
+
 class NAMSettingsPageControl : public IContainerBaseWithNamedChildren
 {
 public:

@@ -25,6 +25,7 @@
 #endif
 
 #include "ToneStack.h"
+#include "Tuner.h"
 
 #include "IPlug_include_in_plug_hdr.h"
 #include "ISender.h"
@@ -103,6 +104,7 @@ enum EParams
   kOfflineAntiAliasFilterPhase,
   kPhaseMulticoreEnabled,
   kPhaseMulticoreThreadCount,
+  kTunerMute,
   kNumParams
 };
 
@@ -131,6 +133,8 @@ enum ECtrlTags
   kCtrlTagOversamplingIndicator,
   kCtrlTagPhaseMulticoreEnabled,
   kCtrlTagPhaseMulticoreThreadCount,
+  kCtrlTagTunerBox,
+  kCtrlTagTunerDisplay,
   kNumCtrlTags
 };
 
@@ -1320,11 +1324,20 @@ public:
   bool SerializeState(iplug::IByteChunk& chunk) const override;
   int UnserializeState(const iplug::IByteChunk& chunk, int startPos) override;
   void OnUIOpen() override;
+  void OnUIClose() override;
   bool OnHostRequestingSupportedViewConfiguration(int width, int height) override { return true; }
 
   void OnParamChange(int paramIdx) override;
   void OnParamChangeUI(int paramIdx, iplug::EParamSource source) override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
+  void SetTunerActive(bool active)
+  {
+    if (active)
+      mTunerDetector.ClearResult();
+    mTunerActive.store(active, std::memory_order_release);
+  }
+  bool IsTunerActive() const { return mTunerActive.load(std::memory_order_acquire); }
+  NAMTunerDetector::Result GetTunerResult() const { return mTunerDetector.GetResult(); }
 
 private:
   // Allocates mInputPointers and mOutputPointers
@@ -1385,6 +1398,8 @@ private:
   void _ApplyImmediateDSPSettings(int oversamplingFactor, int filterPhaseIndex);
   void _PrepareRealtimeDSPTransition(const double sampleRate);
   void _ApplyRealtimeDSPTransitionGain(iplug::sample** outputs, const size_t nFrames, const size_t nChans);
+  void _ProcessTunerInput(
+    iplug::sample** inputs, const size_t nFrames, const size_t nChans, const double sampleRate);
 
   // See: Unserialization.cpp
   void _UnserializeApplyConfig(nlohmann::json& config);
@@ -1458,6 +1473,11 @@ private:
   std::atomic<bool> mPhaseMulticoreEnabledParam = true;
   std::atomic<int> mPhaseMulticoreRequestedThreadsParam = 0; // 0 = Smart Auto
   std::atomic<void*> mAudioWorkgroup {nullptr};
+  NAMTunerDetector mTunerDetector;
+  std::atomic<bool> mTunerActive {false};
+  std::atomic<bool> mTunerMute {true};
+  bool mTunerWasActive = false;
+  double mTunerSampleRate = 0.0;
   // Tracks the last known offline-rendering state so that DSP settings/latency are refreshed on transitions.
   bool mOfflineRenderLatencyArmed = false;
 

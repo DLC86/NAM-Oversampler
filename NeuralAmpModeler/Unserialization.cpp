@@ -100,6 +100,44 @@ void _RenameKeys(nlohmann::json& j, std::unordered_map<std::string, std::string>
   }
 }
 
+// v1.5.2
+
+void _UpdateConfigFrom_1_5_2(nlohmann::json& config)
+{
+  if (!config.contains("Tuner Mute"))
+    config["Tuner Mute"] = 1.0;
+}
+
+int _GetConfigFrom_1_5_2(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Slim",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling",
+                                      "EQ Post",
+                                      "Channel Mode",
+                                      "Offline Filter Phase",
+                                      "OS Multi-Core",
+                                      "OS Threads",
+                                      "Tuner Mute"};
+
+  const int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_5_2(config);
+  return pos;
+}
+
 // v1.5.0
 
 void _UpdateConfigFrom_1_5_0(nlohmann::json& config)
@@ -108,6 +146,7 @@ void _UpdateConfigFrom_1_5_0(nlohmann::json& config)
     config["OS Multi-Core"] = 1.0;
   if (!config.contains("OS Threads"))
     config["OS Threads"] = 0.0;
+  _UpdateConfigFrom_1_5_2(config);
 }
 
 int _GetConfigFrom_1_5_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
@@ -465,7 +504,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   _Version version(versionStr);
   // Act accordingly
   nlohmann::json config;
-  if (version >= _Version(1, 5, 0))
+  if (version >= _Version(1, 5, 2))
+  {
+    pos = _GetConfigFrom_1_5_2(chunk, pos, config);
+  }
+  else if (version >= _Version(1, 5, 0))
   {
     pos = _GetConfigFrom_1_5_0(chunk, pos, config);
   }

@@ -1,7 +1,7 @@
 #define PLUG_NAME "NAM-Oversampler"
 #define PLUG_MFR "The Tone Scientist"
-#define PLUG_VERSION_HEX 0x00010501
-#define PLUG_VERSION_STR "1.5.1"
+#define PLUG_VERSION_HEX 0x00010502
+#define PLUG_VERSION_STR "1.5.2"
 #define PLUG_UNIQUE_ID '1YEo'
 #define PLUG_MFR_ID 'TTSc'
 #define PLUG_URL_STR "https://github.com/sdatkinson/NeuralAmpModelerPlugin"
@@ -64,6 +64,7 @@
 #define MICHROMA_FN "Michroma-Regular.ttf"
 
 #define GEAR_FN "Gear.svg"
+#define TUNER_FN "TuningFork.svg"
 #define FILE_FN "File.svg"
 #define CLOSE_BUTTON_FN "Cross.svg"
 #define LEFT_ARROW_FN "ArrowLeft.svg"

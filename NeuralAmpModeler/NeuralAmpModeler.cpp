@@ -109,6 +109,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPhaseMulticoreEnabled)->InitBool("OS Multi-Core", true);
   GetParam(kPhaseMulticoreThreadCount)
     ->InitEnum("OS Threads", 0, {"Auto", "2", "4", "8", "12", "16", "20", "24", "32"});
+  GetParam(kTunerMute)->InitBool("Tuner Mute", true);
   GetParam(kEQPostNAM)->InitBool("EQ Post", true);
   GetParam(kChannelMode)->InitEnum("Channel Mode", 0, {"Mono", "Stereo"});
   NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
@@ -139,6 +140,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->LoadFont("Michroma-Regular", MICHROMA_FN);
 
     const auto gearSVG = pGraphics->LoadSVG(GEAR_FN);
+    const auto tunerSVG = pGraphics->LoadSVG(TUNER_FN);
     const auto fileSVG = pGraphics->LoadSVG(FILE_FN);
     const auto globeSVG = pGraphics->LoadSVG(GLOBE_ICON_FN);
     const auto crossSVG = pGraphics->LoadSVG(CLOSE_BUTTON_FN);
@@ -204,7 +206,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto outputMeterArea = contentArea.GetFromRight(30).GetHShifted(20).GetMidVPadded(100).GetVShifted(-25);
 
     // Misc Areas
-    const auto settingsButtonArea = CornerButtonArea(b);
+    const auto settingsButtonArea = CornerButtonArea(b).GetVShifted(10.0f);
+    const auto tunerButtonArea = settingsButtonArea.GetTranslated(-34.0f, 0.0f);
     const auto oversamplingButtonArea = LeftCornerButtonArea(b, 42.0f).GetTranslated(8.0f, 10.0f);
     const auto oversamplingIndicatorArea =
       oversamplingButtonArea.GetTranslated(34.0f, 0.0f).GetCentredInside(38.0f, 22.0f);
@@ -329,6 +332,13 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                              kCtrlTagOversamplingIndicator);
 
     pGraphics->AttachControl(new NAMCircleButtonControl(
+      tunerButtonArea,
+      [pGraphics](IControl* pCaller) {
+        pGraphics->GetControlWithTag(kCtrlTagTunerBox)->As<NAMTunerPageControl>()->HideAnimated(false);
+      },
+      tunerSVG));
+
+    pGraphics->AttachControl(new NAMCircleButtonControl(
       settingsButtonArea,
       [pGraphics](IControl* pCaller) {
         pGraphics->GetControlWithTag(kCtrlTagSettingsBox)->As<NAMSettingsPageControl>()->HideAnimated(false);
@@ -344,6 +354,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics
       ->AttachControl(
         new NAMOversamplingPageControl(b, backgroundBitmap, crossSVG, style, radioButtonStyle), kCtrlTagOversamplingBox)
+      ->Hide(true);
+
+    pGraphics
+      ->AttachControl(new NAMTunerPageControl(b, backgroundBitmap, switchHandleBitmap, crossSVG, style),
+                      kCtrlTagTunerBox)
       ->Hide(true);
 
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
@@ -406,6 +421,7 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
   _PrepareBuffers(numChannelsInternal, numFrames);
   // Mono mode sums the input; stereo mode keeps left/right chains separate.
   _ProcessInput(inputs, numFrames, numChannelsExternalIn, numChannelsInternal);
+  _ProcessTunerInput(mInputPointers, numFrames, numChannelsInternal, sampleRate);
   _ApplyDSPStaging();
   _PrepareRealtimeDSPTransition(sampleRate);
   const bool noiseGateActive = GetParam(kNoiseGateActive)->Value();
@@ -502,6 +518,11 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
   // This is where we exit mono for whatever the output requires.
   _ProcessOutput(hpfPointers, outputs, numFrames, numChannelsInternal, numChannelsExternalOut);
   _ApplyRealtimeDSPTransitionGain(outputs, numFrames, numChannelsExternalOut);
+  if (mTunerActive.load(std::memory_order_acquire) && mTunerMute.load(std::memory_order_relaxed))
+  {
+    for (size_t channel = 0; channel < numChannelsExternalOut; channel++)
+      std::fill(outputs[channel], outputs[channel] + numFrames, 0.0);
+  }
   // _ProcessOutput(lpfPointers, outputs, numFrames, numChannelsInternal, numChannelsExternalOut);
   // * Output of input leveling (inputs -> mInputPointers),
   // * Output of output leveling (mOutputPointers -> outputs)
@@ -548,6 +569,20 @@ void NeuralAmpModeler::OnReset()
 void NeuralAmpModeler::OnIdle()
 {
 #if PLUG_HAS_UI
+  if (IsTunerActive())
+  {
+    mTunerDetector.AnalyzePending();
+    if (auto* pGraphics = GetUI())
+    {
+      if (auto* tuner = dynamic_cast<NAMTunerPageControl*>(pGraphics->GetControlWithTag(kCtrlTagTunerBox)))
+        tuner->SetTunerData(GetTunerResult());
+    }
+    else
+    {
+      SetTunerActive(false);
+    }
+  }
+
   mInputSender.TransmitData(*this);
   mOutputSender.TransmitData(*this);
 
@@ -640,6 +675,12 @@ void NeuralAmpModeler::OnUIOpen()
 #endif
 }
 
+void NeuralAmpModeler::OnUIClose()
+{
+  SetTunerActive(false);
+  Plugin::OnUIClose();
+}
+
 void NeuralAmpModeler::OnParamChange(int paramIdx)
 {
   switch (paramIdx)
@@ -699,6 +740,8 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
       _SetPhaseMulticoreSettingsFromParams();
       break;
     }
+
+    case kTunerMute: mTunerMute.store(GetParam(kTunerMute)->Bool(), std::memory_order_relaxed); break;
 
     case kOfflineAntiAliasFilterPhase:
     {
@@ -1145,6 +1188,37 @@ void NeuralAmpModeler::_ApplyRealtimeDSPTransitionGain(sample** outputs, const s
   {
     if (mRealtimeDSPTransitionFadingIn)
       mRealtimeDSPTransitionFadingIn = false;
+  }
+}
+
+void NeuralAmpModeler::_ProcessTunerInput(
+  sample** inputs, const size_t nFrames, const size_t nChans, const double sampleRate)
+{
+  const bool active = mTunerActive.load(std::memory_order_acquire);
+  if (!active)
+  {
+    if (mTunerWasActive)
+    {
+      mTunerDetector.Reset(sampleRate);
+      mTunerWasActive = false;
+    }
+    return;
+  }
+
+  if (!mTunerWasActive || std::abs(mTunerSampleRate - sampleRate) > 1.0e-6)
+  {
+    mTunerDetector.Reset(sampleRate);
+    mTunerSampleRate = sampleRate;
+    mTunerWasActive = true;
+  }
+
+  const double channelGain = nChans > 0 ? 1.0 / static_cast<double>(nChans) : 1.0;
+  for (size_t sampleIndex = 0; sampleIndex < nFrames; sampleIndex++)
+  {
+    double mono = 0.0;
+    for (size_t channel = 0; channel < nChans; channel++)
+      mono += inputs[channel][sampleIndex];
+    mTunerDetector.ProcessSample(static_cast<float>(mono * channelGain));
   }
 }
 
