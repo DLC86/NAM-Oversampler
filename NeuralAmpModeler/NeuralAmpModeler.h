@@ -914,6 +914,7 @@ private:
       {
         const int maxPhaseBlockSize = (maxEncapsulatedBlockSize + mPhaseCount - 1) / mPhaseCount + 1;
         mEncapsulated->SetTimeScale(1);
+        mAppliedModelTimeScale = 1;
         ApplySlimmableSizeUnlocked();
         mEncapsulated->ResetAndPrewarm(encapsulatedSampleRate, maxPhaseBlockSize);
         RebuildPhaseModelsUnlocked(encapsulatedSampleRate, maxPhaseBlockSize);
@@ -923,10 +924,10 @@ private:
       {
         ClearPhaseModelsUnlocked();
         if (timeScale != mAppliedModelTimeScale)
-    {
-      mEncapsulated->SetTimeScale(timeScale);
-      mAppliedModelTimeScale = timeScale;
-    }
+        {
+          mEncapsulated->SetTimeScale(timeScale);
+          mAppliedModelTimeScale = timeScale;
+        }
         ApplySlimmableSizeUnlocked();
         mEncapsulated->ResetAndPrewarm(renderingSampleRate, maxEncapsulatedBlockSize);
       }
@@ -937,6 +938,7 @@ private:
       mResamplingContainer = nullptr;
       mRenderingSampleRate = sampleRate;
       mEncapsulated->SetTimeScale(1);
+      mAppliedModelTimeScale = 1;
       ApplySlimmableSizeUnlocked();
       mEncapsulated->ResetAndPrewarm(sampleRate, maxBlockSize);
     }
@@ -961,8 +963,14 @@ private:
   {
     // Two real phase lanes avoid the doubled ring-buffer lookback/cache stride
     // of the time-scaled single-model path at 2x.
+    // Phase lanes are equivalent only for models whose temporal state can be
+    // separated by modulo-time phase. In the current NAM backends this
+    // capability is represented by direct strided processing (WaveNet/A2,
+    // ConvNet and compatible containers). Recurrent models such as LSTM must
+    // keep one continuous high-rate state and therefore use the single-model
+    // path even when multicore is enabled.
     return resamplingActive && mRequestedOversamplingFactor >= 2 && timeScale >= 2 && !mModelPath.empty()
-           && mPhaseMulticoreEnabled;
+           && mPhaseMulticoreEnabled && mEncapsulated && mEncapsulated->SupportsStridedProcess();
   }
 
   int PhaseMulticoreThreadCountUnlocked() const
