@@ -33,10 +33,9 @@ Click on the logo in the upper-left corner, the Oversampling menu will appear an
 
 It also includes selectable anti-alias filter phase modes, separate for realtime and offline rendering:
 
-- Min Phase IIR (0.8 ms latency)
-- Min Phase FIR (0.8 ms latency)
-- Polyphase FIR (3.5 ms latency)
-- Linear Phase (3.5 ms latency)
+- Minimum Phase (0 latency)
+- Linear Phase short (1.6 ms max latency at 48 kHz)
+- Linear Phase Long (6 ms max latency at 48 kHz)
 
 ## Pre/post EQ
 
@@ -53,3 +52,7 @@ This fork also changes the input/gate staging.
 The noise gate trigger now works before the input gain control is applied. The input gain is applied after the gate trigger stage and before the NAM model.
 
 This keeps the gate behavior less affected by input gain changes while preserving the post-NAM gate gain stage.
+
+## Tuner
+
+No amount of oversampling will make you sound better if you're out of tune, use it!
