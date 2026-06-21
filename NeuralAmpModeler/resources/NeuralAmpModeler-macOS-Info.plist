@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>NAM-Oversampler</string>
 	<key>CFBundleGetInfoString</key>
-	<string>1.5.0</string>
+	<string>1.5.1</string>
 	<key>CFBundleIconFile</key>
 	<string>NeuralAmpModeler.icns</string>
 	<key>CFBundleIdentifier</key>
@@ -19,11 +19,11 @@
 	<key>CFBundlePackageType</key>
 	<string>BNDL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.5.0</string>
+	<string>1.5.1</string>
 	<key>CFBundleSignature</key>
 	<string>1YEo</string>
 	<key>CFBundleVersion</key>
-	<string>1.5.0</string>
+	<string>1.5.1</string>
 	<key>CSResourcesFileMapped</key>
 	<true/>
 	<key>LSApplicationCategoryType</key>

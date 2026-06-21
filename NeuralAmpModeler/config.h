@@ -1,7 +1,7 @@
 #define PLUG_NAME "NAM-Oversampler"
 #define PLUG_MFR "The Tone Scientist"
-#define PLUG_VERSION_HEX 0x00010500
-#define PLUG_VERSION_STR "1.5.0"
+#define PLUG_VERSION_HEX 0x00010501
+#define PLUG_VERSION_STR "1.5.1"
 #define PLUG_UNIQUE_ID '1YEo'
 #define PLUG_MFR_ID 'TTSc'
 #define PLUG_URL_STR "https://github.com/sdatkinson/NeuralAmpModelerPlugin"

@@ -6,6 +6,7 @@
   #include <windows.h>
   #include <avrt.h>
   #pragma comment(lib, "Avrt.lib")
+  #pragma comment(lib, "Synchronization.lib")
 #endif
 
 #pragma once
@@ -279,6 +280,28 @@ static inline int NAMPhaseMulticoreApplePerformanceCoreCount()
   return 0;
 }
 
+static inline bool NAMPhaseMulticoreIsAppleIntel()
+{
+#if defined(__APPLE__) && !(defined(__arm64__) || defined(__aarch64__))
+  return true;
+#else
+  return false;
+#endif
+}
+
+static inline int NAMPhaseMulticoreApplePhysicalCoreCount()
+{
+#if defined(__APPLE__)
+  int physicalCores = 0;
+  size_t size = sizeof(physicalCores);
+  if (sysctlbyname("hw.physicalcpu", &physicalCores, &size, nullptr, 0) == 0
+      && physicalCores > 0)
+    return physicalCores;
+#endif
+
+  return 0;
+}
+
 static inline bool NAMPhaseMulticoreIsAppleSilicon()
 {
 #if defined(__APPLE__) && (defined(__arm64__) || defined(__aarch64__))
@@ -336,6 +359,22 @@ static inline int NAMPhaseMulticoreSmartAutoThreadCount()
 
     total = NAMPhaseMulticoreClampInt(total, 1, 64);
   }
+  else if (NAMPhaseMulticoreIsAppleIntel())
+  {
+    // Hyper-Threading siblings are poor substitutes for physical cores under a
+    // realtime phase barrier. At 16x/32x they can increase contention and make
+    // the host miss deadlines even while average CPU still appears reasonable.
+    const int physicalCores = NAMPhaseMulticoreApplePhysicalCoreCount();
+    if (physicalCores > 0)
+    {
+      const int topologyAwareCap = std::max(1, physicalCores - 1);
+      const int intelAutoCap =
+        NAMPhaseMulticoreEnvInt("NAM_PHASE_MULTICORE_APPLE_INTEL_AUTO_CAP", topologyAwareCap, 1, 64);
+      total = std::min(total, intelAutoCap);
+    }
+
+    total = NAMPhaseMulticoreClampInt(total, 1, 64);
+  }
 
   return total;
 }
@@ -366,6 +405,12 @@ static inline int NAMPhaseMulticoreMaxPoolThreadCount()
     const int performanceCores = NAMPhaseMulticoreApplePerformanceCoreCount();
     if (performanceCores > 0)
       maxThreads = std::min(maxThreads, performanceCores);
+  }
+  else if (NAMPhaseMulticoreIsAppleIntel())
+  {
+    const int physicalCores = NAMPhaseMulticoreApplePhysicalCoreCount();
+    if (physicalCores > 0)
+      maxThreads = std::min(maxThreads, physicalCores);
   }
   return NAMPhaseMulticoreClampInt(maxThreads, 1, 64);
 }
@@ -504,7 +549,18 @@ public:
         if (++spins >= 16384)
         {
           spins = 0;
+#if defined(_WIN32)
+          // If a background host loses foreground scheduling priority, a pure
+          // busy-wait can consume the CPU time needed by its own phase workers
+          // and turn an ordinary realtime dropout into a host-wide freeze.
+          // Keep the short low-latency spin above, then park until a worker
+          // advances the completion counter (or the short timeout expires).
+          int observed = mCompletedWorkers.load(std::memory_order_acquire);
+          if (observed < workerJobs)
+            WaitOnAddress(&mCompletedWorkers, &observed, sizeof(observed), 1);
+#else
           std::this_thread::yield();
+#endif
         }
       }
     }
@@ -601,6 +657,9 @@ private:
 #endif
 
       mCompletedWorkers.fetch_add(1, std::memory_order_release);
+#if defined(_WIN32)
+      WakeByAddressAll(&mCompletedWorkers);
+#endif
     }
   }
 
@@ -915,7 +974,6 @@ private:
       if (performanceCores > 0)
         requested = std::min(requested, performanceCores);
     }
-
     return requested;
   }
 
