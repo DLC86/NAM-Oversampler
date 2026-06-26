@@ -2,8 +2,8 @@
 """Update NAM-Oversampler release version metadata.
 
 Usage:
-    python set_version.py 1.5.2
-    python set_version.py 1.5.2 --dry-run
+    python set_version.py 1.5.3
+    python set_version.py 1.5.3 --dry-run
 
 This intentionally does not modify:
   - the hardcoded Settings-page version 0.7.15;
@@ -37,7 +37,7 @@ PLISTS = (
 def parse_version(value: str) -> tuple[int, int, int]:
     match = re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", value)
     if not match:
-        raise argparse.ArgumentTypeError("Version must use major.minor.patch, e.g. 1.5.2")
+        raise argparse.ArgumentTypeError("Version must use major.minor.patch, e.g. 1.5.3")
 
     parts = tuple(int(part) for part in match.groups())
     if any(part > 255 for part in parts):

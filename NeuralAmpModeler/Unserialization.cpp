@@ -100,7 +100,7 @@ void _RenameKeys(nlohmann::json& j, std::unordered_map<std::string, std::string>
   }
 }
 
-// v1.5.2
+// v1.5.3
 
 void _UpdateConfigFrom_1_5_2(nlohmann::json& config)
 {
