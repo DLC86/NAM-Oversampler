@@ -55,9 +55,10 @@ FULL_VERSION=$MAJOR_VERSION"."$MINOR_VERSION"."$BUG_FIX
 PLUGIN_NAME=`echo | grep BUNDLE_NAME config.h`
 PLUGIN_NAME=${PLUGIN_NAME//\#define BUNDLE_NAME }
 PLUGIN_NAME=${PLUGIN_NAME//\"}
+PLUGIN_ID_NAME=${PLUGIN_NAME// /}
 
-NOTARIZE_BUNDLE_ID=${NOTARIZE_BUNDLE_ID:-${INSTALLER_PKG_ID_PREFIX}.${PLUGIN_NAME}}
-NOTARIZE_BUNDLE_ID_DEMO=${NOTARIZE_BUNDLE_ID_DEMO:-${INSTALLER_PKG_ID_PREFIX}.${PLUGIN_NAME}.DEMO}
+NOTARIZE_BUNDLE_ID=${NOTARIZE_BUNDLE_ID:-${INSTALLER_PKG_ID_PREFIX}.${PLUGIN_ID_NAME}}
+NOTARIZE_BUNDLE_ID_DEMO=${NOTARIZE_BUNDLE_ID_DEMO:-${INSTALLER_PKG_ID_PREFIX}.${PLUGIN_ID_NAME}.DEMO}
 
 ARCHIVE_NAME=$PLUGIN_NAME-v$FULL_VERSION-mac
 THIRD_PARTY_NOTICES="./installer/ThirdPartyNotices.txt"
@@ -150,16 +151,16 @@ touch *.cpp
 echo "remove existing binaries"
 echo ""
 
-if [ -d $APP ]; then
-  sudo rm -f -R -f $APP
+if [ -d "$APP" ]; then
+  sudo rm -f -R -f "$APP"
 fi
 
-if [ -d $AU ]; then
- sudo rm -f -R $AU
+if [ -d "$AU" ]; then
+ sudo rm -f -R "$AU"
 fi
 
-if [ -d $VST3 ]; then
-  sudo rm -f -R $VST3
+if [ -d "$VST3" ]; then
+  sudo rm -f -R "$VST3"
 fi
 
 if [ -d "${AAX}" ]; then
@@ -200,12 +201,12 @@ fi
 echo "setting icons"
 echo ""
 
-if [ -d $AU ]; then
-  ./$SCRIPTS/SetFileIcon -image "$ICON_FILE" -file $AU
+if [ -d "$AU" ]; then
+  ./$SCRIPTS/SetFileIcon -image "$ICON_FILE" -file "$AU"
 fi
 
-if [ -d $VST3 ]; then
-  ./$SCRIPTS/SetFileIcon -image "$ICON_FILE" -file $VST3
+if [ -d "$VST3" ]; then
+  ./$SCRIPTS/SetFileIcon -image "$ICON_FILE" -file "$VST3"
 fi
 
 if [ -d "${AAX}" ]; then
@@ -218,16 +219,16 @@ fi
 echo "stripping binaries"
 echo ""
 
-if [ -d $APP ]; then
-  strip -x $APP/Contents/MacOS/$PLUGIN_NAME
+if [ -d "$APP" ]; then
+  strip -x "$APP/Contents/MacOS/$PLUGIN_NAME"
 fi
 
-if [ -d $AU ]; then
-  strip -x $AU/Contents/MacOS/$PLUGIN_NAME
+if [ -d "$AU" ]; then
+  strip -x "$AU/Contents/MacOS/$PLUGIN_NAME"
 fi
 
-if [ -d $VST3 ]; then
-  strip -x $VST3/Contents/MacOS/$PLUGIN_NAME
+if [ -d "$VST3" ]; then
+  strip -x "$VST3/Contents/MacOS/$PLUGIN_NAME"
 fi
 
 if [ -d "${AAX}" ]; then
@@ -258,11 +259,11 @@ if [ $CODESIGN == 1 ]; then
   echo "code-sign binaries"
   echo ""
 
-  codesign --force -s "${DEV_ID_APP_STR}" -v $APP --deep --strict --options=runtime #hardened runtime for app
-  xattr -cr $AU 
-  codesign --force -s "${DEV_ID_APP_STR}" -v $AU --deep --strict
-  xattr -cr $VST3 
-  codesign --force -s "${DEV_ID_APP_STR}" -v $VST3 --deep --strict
+  codesign --force -s "${DEV_ID_APP_STR}" -v "$APP" --deep --strict --options=runtime #hardened runtime for app
+  xattr -cr "$AU"
+  codesign --force -s "${DEV_ID_APP_STR}" -v "$AU" --deep --strict
+  xattr -cr "$VST3"
+  codesign --force -s "${DEV_ID_APP_STR}" -v "$VST3" --deep --strict
   #---------------------------------------------------------------------------------------------------------
 fi
 
@@ -270,7 +271,7 @@ if [ $BUILD_INSTALLER == 1 ]; then
   #---------------------------------------------------------------------------------------------------------
   # installer
 
-  sudo rm -R -f build-mac/$PLUGIN_NAME-*.dmg
+  sudo rm -R -f "build-mac/$PLUGIN_NAME-"*.dmg
 
   echo "building installer"
   echo ""
@@ -293,13 +294,13 @@ if [ $BUILD_INSTALLER == 1 ]; then
   echo "building dmg"
   echo ""
 
-  if [ -d installer/$PLUGIN_NAME.dmgCanvas ]; then
-    dmgcanvas installer/$PLUGIN_NAME.dmgCanvas build-mac/$ARCHIVE_NAME.dmg
+  if [ -d "installer/$PLUGIN_NAME.dmgCanvas" ]; then
+    dmgcanvas "installer/$PLUGIN_NAME.dmgCanvas" "build-mac/$ARCHIVE_NAME.dmg"
   else
     cp installer/changelog.txt build-mac/installer/
     cp installer/known-issues.txt build-mac/installer/
     cp "$MANUAL_FILE" build-mac/installer/
-    hdiutil create build-mac/$ARCHIVE_NAME.dmg -format UDZO -srcfolder build-mac/installer/ -ov -anyowners -volname $PLUGIN_NAME
+    hdiutil create "build-mac/$ARCHIVE_NAME.dmg" -format UDZO -srcfolder build-mac/installer/ -ov -anyowners -volname "$PLUGIN_NAME"
   fi
 
   sudo rm -R -f build-mac/installer/
@@ -317,9 +318,9 @@ if [ $BUILD_INSTALLER == 1 ]; then
     PWD=`pwd`
 
     if [ $DEMO == 1 ]; then
-      ./$SCRIPTS/notarise.sh "${PWD}/build-mac" "${PWD}/build-mac/${ARCHIVE_NAME}.dmg" $NOTARIZE_BUNDLE_ID_DEMO $APP_SPECIFIC_ID $APP_SPECIFIC_PWD
+      ./$SCRIPTS/notarise.sh "${PWD}/build-mac" "${PWD}/build-mac/${ARCHIVE_NAME}.dmg" "$NOTARIZE_BUNDLE_ID_DEMO" "$APP_SPECIFIC_ID" "$APP_SPECIFIC_PWD"
     else
-      ./$SCRIPTS/notarise.sh "${PWD}/build-mac" "${PWD}/build-mac/${ARCHIVE_NAME}.dmg" $NOTARIZE_BUNDLE_ID $APP_SPECIFIC_ID $APP_SPECIFIC_PWD
+      ./$SCRIPTS/notarise.sh "${PWD}/build-mac" "${PWD}/build-mac/${ARCHIVE_NAME}.dmg" "$NOTARIZE_BUNDLE_ID" "$APP_SPECIFIC_ID" "$APP_SPECIFIC_PWD"
     fi
 
     if [ "${PIPESTATUS[0]}" -ne "0" ]; then
@@ -338,25 +339,25 @@ else
 
   mkdir -p build-mac/zip
 
-  if [ -d $APP ]; then
-    cp -R $APP build-mac/zip/$PLUGIN_NAME.app
+  if [ -d "$APP" ]; then
+    cp -R "$APP" "build-mac/zip/$PLUGIN_NAME.app"
   fi
 
-  if [ -d $AU ]; then
-    cp -R $AU build-mac/zip/$PLUGIN_NAME.component
+  if [ -d "$AU" ]; then
+    cp -R "$AU" "build-mac/zip/$PLUGIN_NAME.component"
   fi
 
-  if [ -d $VST3 ]; then
-    cp -R $VST3 build-mac/zip/$PLUGIN_NAME.vst3
+  if [ -d "$VST3" ]; then
+    cp -R "$VST3" "build-mac/zip/$PLUGIN_NAME.vst3"
   fi
 
   if [ -d "${AAX_FINAL}" ]; then
-    cp -R $AAX_FINAL build-mac/zip/$PLUGIN_NAME.aaxplugin
+    cp -R "$AAX_FINAL" "build-mac/zip/$PLUGIN_NAME.aaxplugin"
   fi
 
   echo "zipping binaries..."
   echo ""
-  ditto -c -k build-mac/zip build-mac/$ARCHIVE_NAME.zip
+  ditto -c -k build-mac/zip "build-mac/$ARCHIVE_NAME.zip"
   rm -R build-mac/zip
 fi
 
@@ -366,7 +367,7 @@ sudo rm -R -f build-mac/*-dSYMs.zip
 
 echo "packaging dSYMs"
 echo ""
-zip -r ./build-mac/$ARCHIVE_NAME-dSYMs.zip ./build-mac/*.dSYM
+zip -r "./build-mac/$ARCHIVE_NAME-dSYMs.zip" ./build-mac/*.dSYM
 
 #---------------------------------------------------------------------------------------------------------
 
@@ -375,8 +376,8 @@ zip -r ./build-mac/$ARCHIVE_NAME-dSYMs.zip ./build-mac/*.dSYM
 echo "preparing output folder"
 echo ""
 mkdir -p ./build-mac/out
-if [ -f ./build-mac/$ARCHIVE_NAME.dmg ]; then
-  mv ./build-mac/$ARCHIVE_NAME.dmg ./build-mac/out
+if [ -f "./build-mac/$ARCHIVE_NAME.dmg" ]; then
+  mv "./build-mac/$ARCHIVE_NAME.dmg" ./build-mac/out
 fi
 mv ./build-mac/*.zip ./build-mac/out
 
