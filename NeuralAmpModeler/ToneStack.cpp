@@ -1,6 +1,7 @@
 #include "ToneStack.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
 #include <limits>
@@ -1675,12 +1676,34 @@ void dsp::tone_stack::BasicNamToneStack::_RefreshCircuitNormalization()
   const auto& spec = _GetCircuitSpec();
   auto unityReferenceSpec = spec;
   unityReferenceSpec.makeupGain = 1.0;
-  const Complex unityReference = EvaluateToneStackMna(
-    mToneStackType, unityReferenceSpec, 5.0, 5.0, 5.0,
-    Complex(0.0, 2.0 * 3.1415926535897932384626433832795 * 1000.0));
-  const double unityReferenceMagnitude = std::abs(unityReference);
-  if (std::isfinite(unityReferenceMagnitude) && unityReferenceMagnitude > 1.0e-9)
-    mCircuitNormalizationGain = 1.0 / unityReferenceMagnitude;
+
+  constexpr std::array<double, 31> kNormalizationFrequenciesHz{{
+    20.0, 25.0, 31.5, 40.0, 50.0, 63.0, 80.0, 100.0, 125.0, 160.0, 200.0, 250.0, 315.0, 400.0, 500.0,
+    630.0, 800.0, 1000.0, 1250.0, 1600.0, 2000.0, 2500.0, 3150.0, 4000.0, 5000.0, 6300.0, 8000.0,
+    10000.0, 12500.0, 16000.0, 20000.0,
+  }};
+
+  double logMagnitudeSum = 0.0;
+  int numValidMagnitudes = 0;
+  for (const double frequencyHz : kNormalizationFrequenciesHz)
+  {
+    const Complex response = EvaluateToneStackMna(
+      mToneStackType, unityReferenceSpec, 5.0, 5.0, 5.0,
+      Complex(0.0, 2.0 * 3.1415926535897932384626433832795 * frequencyHz));
+    const double magnitude = std::abs(response);
+    if (std::isfinite(magnitude) && magnitude > 1.0e-9)
+    {
+      logMagnitudeSum += std::log(magnitude);
+      ++numValidMagnitudes;
+    }
+  }
+
+  if (numValidMagnitudes > 0)
+  {
+    const double averageMagnitude = std::exp(logMagnitudeSum / static_cast<double>(numValidMagnitudes));
+    if (std::isfinite(averageMagnitude) && averageMagnitude > 1.0e-9)
+      mCircuitNormalizationGain = 1.0 / averageMagnitude;
+  }
 
   mCircuitNormalizationDirty = false;
 }
