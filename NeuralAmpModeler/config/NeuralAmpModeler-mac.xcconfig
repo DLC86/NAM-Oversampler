@@ -11,7 +11,7 @@ IPLUG2_ROOT = ../../iPlug2
 // Global build settings
 
 // the basename of the vst, vst3, app, component, aaxplugin
-BINARY_NAME = NAM-Oversampler
+BINARY_NAME = NAM On Steroids
 
 // ------------------------------
 // HEADER AND LIBRARY SEARCH PATHS
@@ -24,7 +24,7 @@ EXTRA_LNK_FLAGS = -framework Accelerate -framework Metal -framework MetalKit // 
 
 //------------------------------
 // PREPROCESSOR MACROS
-EXTRA_ALL_DEFS = OBJC_PREFIX=vNAMOversampler SWELL_APP_PREFIX=Swell_vNAMOversampler IGRAPHICS_NANOVG IGRAPHICS_METAL GRAYED_ALPHA=0.5f NAM_ENABLE_A2_FAST
+EXTRA_ALL_DEFS = OBJC_PREFIX=vNAMOnSteroids SWELL_APP_PREFIX=Swell_vNAMOnSteroids IGRAPHICS_NANOVG IGRAPHICS_METAL GRAYED_ALPHA=0.5f NAM_ENABLE_A2_FAST
 //EXTRA_DEBUG_DEFS =
 //EXTRA_RELEASE_DEFS =
 //EXTRA_TRACER_DEFS =

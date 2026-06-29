@@ -1,7 +1,9 @@
 #pragma once
 
 #include <algorithm> // std::max, std::min
+#include <array>
 #include <cmath> // std::round
+#include <cstdlib> // std::strtod
 #include <cstdio> // FILE, fclose
 #include <sstream> // std::stringstream
 #include <unordered_map> // std::unordered_map
@@ -132,7 +134,7 @@ public:
     if (mMouseIsOver)
       g.FillEllipse(PluginColors::MOUSEOVER, mRECT.GetCentredInside(26.0f, 26.0f));
 
-    const IColor blue = IColor(255, 70, 155, 255);
+    const IColor blue = PluginColors::NAM_THEMECOLOR;
     const float radius = 6.0f;
     const float stroke = 1.8f;
     const float cx = mRECT.MW();
@@ -207,6 +209,56 @@ public:
                {}, &mBlend);
     g.DrawCircle(COLOR_BLACK.WithOpacity(0.5f), data[1][0], data[1][1], 3, &mBlend);
   }
+};
+
+class NAMFilterKnobControl : public IVKnobControl, public IBitmapBase
+{
+public:
+  NAMFilterKnobControl(const IRECT& bounds, int paramIdx, const char* label, const IVStyle& style, IBitmap bitmap,
+                       bool reverseTrack = false)
+  : IVKnobControl(bounds, paramIdx, label, style, true)
+  , IBitmapBase(bitmap)
+  , mReverseTrack(reverseTrack)
+  {
+    mInnerPointerFrac = 0.55;
+  }
+
+  void OnRescale() override { mBitmap = GetUI()->GetScaledBitmap(mBitmap); }
+
+  void DrawWidget(IGraphics& g) override
+  {
+    float widgetRadius = GetRadius() * 0.73f;
+    auto knobRect = mWidgetBounds.GetCentredInside(mWidgetBounds.W(), mWidgetBounds.W());
+    const float cx = knobRect.MW(), cy = knobRect.MH();
+    const float angle = mAngle1 + (static_cast<float>(GetValue()) * (mAngle2 - mAngle1));
+
+    g.DrawFittedBitmap(mBitmap, knobRect);
+    DrawFilterTrack(g, angle, cx + 0.5f, cy, widgetRadius);
+
+    float data[2][2];
+    RadialPoints(angle, cx, cy, mInnerPointerFrac * widgetRadius, mInnerPointerFrac * widgetRadius, 2, data);
+    g.PathCircle(data[1][0], data[1][1], 3);
+    g.PathFill(IPattern::CreateRadialGradient(data[1][0], data[1][1], 4.0f,
+                                              {{GetColor(mMouseIsOver ? kX3 : kX1), 0.f},
+                                               {GetColor(mMouseIsOver ? kX3 : kX1), 0.8f},
+                                               {COLOR_TRANSPARENT, 1.0f}}),
+               {}, &mBlend);
+    g.DrawCircle(COLOR_BLACK.WithOpacity(0.5f), data[1][0], data[1][1], 3, &mBlend);
+  }
+
+private:
+  void DrawFilterTrack(IGraphics& g, float angle, float cx, float cy, float radius)
+  {
+    if (mTrackSize <= 0.0f)
+      return;
+
+    if (mReverseTrack)
+      g.DrawArc(GetColor(kX1), cx, cy, radius, angle, mAngle2, &mBlend, mTrackSize);
+    else
+      g.DrawArc(GetColor(kX1), cx, cy, radius, mAnchorAngle, angle, &mBlend, mTrackSize);
+  }
+
+  bool mReverseTrack = false;
 };
 
 class NAMSwitchControl : public IVSlideSwitchControl, public IBitmapBase
@@ -293,6 +345,62 @@ public:
 
     g.DrawBitmap(mBitmap, r, 0, 0, nullptr);
   }
+};
+
+class NAMCutFiltersButtonControl : public IControl
+{
+public:
+  NAMCutFiltersButtonControl(const IRECT& bounds, IActionFunction openAction)
+  : IControl(bounds, openAction)
+  , mOpenAction(openAction)
+  {
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    if (mMouseIsOver)
+      g.FillRoundRect(PluginColors::MOUSEOVER, mRECT.GetPadded(-2.0f), 2.0f);
+
+    const IColor blue = PluginColors::NAM_THEMECOLOR;
+    const float stroke = 1.8f;
+    const auto left = mRECT.GetFromLeft(mRECT.W() * 0.5f).GetPadded(-4.0f);
+    const auto right = mRECT.GetFromRight(mRECT.W() * 0.5f).GetPadded(-4.0f);
+    DrawLowCut(g, left, blue, stroke);
+    DrawHighCut(g, right, blue, stroke);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    if (mOpenAction)
+      mOpenAction(this);
+  }
+
+private:
+  static void DrawLowCut(IGraphics& g, const IRECT& r, const IColor& color, float stroke)
+  {
+    const float yLow = r.B - 4.0f;
+    const float yHigh = r.T + 5.0f;
+    const float x0 = r.L + 2.0f;
+    const float x1 = r.MW() - 1.0f;
+    const float x2 = r.R - 2.0f;
+    g.DrawLine(color, x0, yLow, x1, yLow, nullptr, stroke);
+    g.DrawLine(color, x1, yLow, x1 + 5.0f, yHigh, nullptr, stroke);
+    g.DrawLine(color, x1 + 5.0f, yHigh, x2, yHigh, nullptr, stroke);
+  }
+
+  static void DrawHighCut(IGraphics& g, const IRECT& r, const IColor& color, float stroke)
+  {
+    const float yLow = r.B - 4.0f;
+    const float yHigh = r.T + 5.0f;
+    const float x0 = r.L + 2.0f;
+    const float x1 = r.MW() + 1.0f;
+    const float x2 = r.R - 2.0f;
+    g.DrawLine(color, x0, yHigh, x1 - 5.0f, yHigh, nullptr, stroke);
+    g.DrawLine(color, x1 - 5.0f, yHigh, x1, yLow, nullptr, stroke);
+    g.DrawLine(color, x1, yLow, x2, yLow, nullptr, stroke);
+  }
+
+  IActionFunction mOpenAction;
 };
 
 class NAMFileNameControl : public IVButtonControl
@@ -587,18 +695,19 @@ private:
   NAMGetButtonControl* mGetButton = nullptr;
 };
 
-class NAMMeterControl : public IVPeakAvgMeterControl<>, public IBitmapBase
+class NAMMeterControl : public IVPeakAvgMeterControl<2>, public IBitmapBase
 {
   static constexpr float KMeterMin = -70.0f;
   static constexpr float KMeterMax = -0.01f;
 
 public:
   NAMMeterControl(const IRECT& bounds, const IBitmap& bitmap, const IVStyle& style)
-  : IVPeakAvgMeterControl<>(bounds, "", style.WithShowValue(false).WithDrawFrame(false).WithWidgetFrac(0.8),
-                            EDirection::Vertical, {}, 0, KMeterMin, KMeterMax, {})
+  : IVPeakAvgMeterControl<2>(bounds, "", style.WithShowValue(false).WithDrawFrame(false).WithWidgetFrac(0.8),
+                             EDirection::Vertical, {}, 0, KMeterMin, KMeterMax, {})
   , IBitmapBase(bitmap)
   {
     SetPeakSize(1.0f);
+    SetNTracks(1);
   }
 
   void OnRescale() override { mBitmap = GetUI()->GetScaledBitmap(mBitmap); }
@@ -610,6 +719,37 @@ public:
     MakeTrackRects(mWidgetBounds);
     MakeStepRects(mWidgetBounds, mNSteps);
     SetDirty(false);
+  }
+
+  void MakeTrackRects(const IRECT& bounds) override
+  {
+    const int nVals = NVals();
+    if (nVals <= 1)
+    {
+      mTrackBounds.Get()[0] = bounds;
+      return;
+    }
+
+    const float gap = 3.0f;
+    const float halfWidth = (bounds.W() - gap) * 0.5f;
+    mTrackBounds.Get()[0] = IRECT(bounds.L, bounds.T, bounds.L + halfWidth, bounds.B);
+    mTrackBounds.Get()[1] = IRECT(bounds.L + halfWidth + gap, bounds.T, bounds.R, bounds.B);
+  }
+
+  void OnMsgFromDelegate(int msgTag, int dataSize, const void* pData) override
+  {
+    if (!IsDisabled() && msgTag == ISender<>::kUpdateMessage)
+    {
+      IByteStream stream(pData, dataSize);
+      int pos = 0;
+      ISenderData<2, std::pair<float, float>> d;
+      pos = stream.Get(&d, pos);
+      const int activeChannels = std::max(1, std::min(2, d.nChans));
+      if (activeChannels != NVals())
+        SetNTracks(activeChannels);
+    }
+
+    IVPeakAvgMeterControl<2>::OnMsgFromDelegate(msgTag, dataSize, pData);
   }
 
   void DrawBackground(IGraphics& g, const IRECT& r) override { g.DrawFittedBitmap(mBitmap, r); }
@@ -655,6 +795,110 @@ private:
   std::unordered_map<std::string, int> mChildNameIndexMap;
 }; // class IContainerBaseWithNamedChildren
 
+class NAMCutFiltersPageControl : public IContainerBaseWithNamedChildren
+{
+public:
+  NAMCutFiltersPageControl(const IRECT& bounds, const IBitmap& bitmap, const IBitmap& knobBitmap,
+                           const IBitmap& switchBitmap, ISVG closeSVG, const IVStyle& style,
+                           const IVStyle& radioButtonStyle)
+  : IContainerBaseWithNamedChildren(bounds)
+  , mBitmap(bitmap)
+  , mKnobBitmap(knobBitmap)
+  , mSwitchBitmap(switchBitmap)
+  , mCloseSVG(closeSVG)
+  , mStyle(style)
+  , mRadioButtonStyle(radioButtonStyle)
+  {
+    mIgnoreMouse = false;
+  }
+
+  bool OnKeyDown(float x, float y, const IKeyPress& key) override
+  {
+    if (key.VK == kVK_ESCAPE)
+    {
+      HideAnimated(true);
+      return true;
+    }
+    return false;
+  }
+
+  void HideAnimated(bool hide)
+  {
+    mWillHide = hide;
+    if (!hide)
+      mHide = false;
+    else
+      ForAllChildrenFunc([hide](int childIdx, IControl* pChild) { pChild->Hide(hide); });
+
+    SetAnimation(
+      [&](IControl* pCaller) {
+        const auto progress = static_cast<float>(pCaller->GetAnimationProgress());
+        SetBlend(IBlend(EBlend::Default, mWillHide ? 1.0f - progress : progress));
+        if (progress > 1.0f)
+        {
+          pCaller->OnEndAnimation();
+          IContainerBase::Hide(mWillHide);
+          GetUI()->SetAllControlsDirty();
+        }
+      },
+      160);
+    SetDirty(true);
+  }
+
+  void OnAttached() override
+  {
+    const auto content = GetRECT().GetPadded(-30.0f);
+    const IVStyle titleStyle = DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular"))
+                                 .WithDrawFrame(false)
+                                 .WithShadowOffset(2.0f);
+
+    AddNamedChildControl(new IBitmapControl(GetRECT(), mBitmap), "Bitmap")->SetIgnoreMouse(true);
+    AddNamedChildControl(new IVLabelControl(content.GetFromTop(50.0f), "FILTERS", titleStyle), "Title");
+
+    const auto panelArea = content.GetReducedFromTop(64.0f).GetReducedFromBottom(58.0f).GetVShifted(-10.0f);
+    const auto lowArea = panelArea.GetFromLeft(panelArea.W() * 0.5f).GetPadded(-14.0f);
+    const auto highArea = panelArea.GetFromRight(panelArea.W() * 0.5f).GetPadded(-14.0f);
+
+    AddFilterColumn(lowArea, "LOW CUT", kLowCutFrequency, kLowCutSlope, kLowCutPostNAM);
+    AddFilterColumn(highArea, "HIGH CUT", kHighCutFrequency, kHighCutSlope, kHighCutPostNAM);
+
+    auto closeAction = [&](IControl* pCaller) {
+      static_cast<NAMCutFiltersPageControl*>(pCaller->GetParent())->HideAnimated(true);
+    };
+    AddNamedChildControl(new NAMSquareButtonControl(CornerButtonArea(GetRECT()), closeAction, mCloseSVG), "Close");
+  }
+
+private:
+  void AddFilterColumn(const IRECT& area, const char* title, int frequencyParam, int slopeParam, int postParam)
+  {
+    const auto knobArea =
+      area.GetFromTop(NAM_KNOB_HEIGHT + 24.0f).GetCentredInside(100.0f, NAM_KNOB_HEIGHT + 24.0f);
+    const auto slopeArea = area.GetReducedFromTop(158.0f).GetFromTop(30.0f).GetCentredInside(150.0f, 28.0f);
+    const auto switchArea =
+      area.GetReducedFromTop(208.0f).GetFromTop(NAM_SWTICH_HEIGHT).GetCentredInside(110.0f, NAM_SWTICH_HEIGHT);
+
+    AddNamedChildControl(new NAMFilterKnobControl(knobArea, frequencyParam, "", mStyle, mKnobBitmap,
+                                                  frequencyParam == kHighCutFrequency),
+                         std::string(title) + "Frequency");
+    const auto slopeStyle = mRadioButtonStyle.WithColor(kBG, COLOR_BLACK)
+                            .WithColor(kFG, COLOR_BLACK)
+                            .WithColor(kFR, PluginColors::NAM_THEMECOLOR.WithOpacity(0.40f));
+    AddNamedChildControl(new IVMenuButtonControl(slopeArea, slopeParam, "", slopeStyle, EVShape::Rectangle),
+                         std::string(title) + "Slope");
+    auto* posSwitch =
+      AddNamedChildControl(new NAMSwitchControl(switchArea, postParam, "Pre/Post", mStyle, mSwitchBitmap),
+                           std::string(title) + "Position");
+    posSwitch->SetTooltip("Filter position: off = pre NAM, on = post IR");
+  }
+
+  IBitmap mBitmap;
+  IBitmap mKnobBitmap;
+  IBitmap mSwitchBitmap;
+  ISVG mCloseSVG;
+  IVStyle mStyle;
+  IVStyle mRadioButtonStyle;
+  bool mWillHide = false;
+};
 
 struct PossiblyKnownParameter
 {
@@ -804,6 +1048,305 @@ public:
                          EVShape::Ellipse, direction, buttonSize) {};
 };
 
+class ToneStackTypeControl : public IVRadioButtonControl
+{
+public:
+  ToneStackTypeControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
+                       EDirection direction = EDirection::Vertical)
+  : IVRadioButtonControl(bounds, paramIdx,
+                         {"Default", "Bench", "Big Muff", "Crate", "Dmbl Jazz", "Dmbl Rock", "Fndr Bassman 5F6-A", "Fndr Brownface",
+                          "Fndr Deluxe 5E3", "Fndr E-series", "Fndr Princeton 5E2", "Fndr Princeton 5F2A",
+                          "Fndr Pro Jr", "Fndr TMB", "Hiwatt", "Marshall", "Neve", "Vox"},
+                         "", style, EVShape::Ellipse, direction, buttonSize) {};
+};
+
+class NAMToneStackSelectorControl : public IControl
+{
+public:
+  NAMToneStackSelectorControl(const IRECT& bounds, int paramIdx, const ISVG& leftSVG, const ISVG& rightSVG,
+                              IActionFunction openAction)
+  : IControl(bounds)
+  , mLeftSVG(leftSVG)
+  , mRightSVG(rightSVG)
+  , mOpenAction(openAction)
+  {
+    SetParamIdx(paramIdx);
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    IRECT buttonArea;
+    IRECT labelArea;
+    IRECT leftArrowArea;
+    IRECT rightArrowArea;
+    IRECT valueArea;
+    CalculateAreas(g, buttonArea, labelArea, leftArrowArea, rightArrowArea, valueArea);
+
+    const IColor frame = IsDisabled() ? PluginColors::NAM_THEMECOLOR.WithOpacity(0.15f)
+                                     : PluginColors::NAM_THEMECOLOR.WithOpacity(0.40f);
+    const IColor valueColor = IsDisabled() ? PluginColors::HELP_TEXT.WithOpacity(0.45f)
+                                          : PluginColors::NAM_THEMEFONTCOLOR;
+    const IColor labelColor = IsDisabled() ? PluginColors::HELP_TEXT.WithOpacity(0.40f) : PluginColors::HELP_TEXT;
+    if (mMouseIsOver && !IsDisabled())
+      g.FillRoundRect(PluginColors::MOUSEOVER, buttonArea, 4.0f);
+
+    g.FillRoundRect(COLOR_BLACK.WithOpacity(0.28f), buttonArea, 4.0f);
+    g.DrawRoundRect(frame, buttonArea, 4.0f, nullptr, 1.0f);
+    g.DrawSVG(mLeftSVG, leftArrowArea, &mBlend);
+    g.DrawSVG(mRightSVG, rightArrowArea, &mBlend);
+
+    const IText labelText(DEFAULT_TEXT_SIZE + 3.0f, labelColor, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    const IText valueText(11.0f, valueColor, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    g.DrawText(labelText, "Tonestack", labelArea);
+
+    const int idx = std::max(0, std::min(dsp::tone_stack::kNumToneStackTypes - 1, PLUG()->GetParam(kToneStackType)->Int()));
+    g.DrawText(valueText, dsp::tone_stack::GetToneStackTypeName(dsp::tone_stack::ToneStackTypeFromInt(idx)),
+               valueArea);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    if (IsDisabled())
+      return;
+
+    IRECT buttonArea;
+    IRECT labelArea;
+    IRECT leftArrowArea;
+    IRECT rightArrowArea;
+    IRECT valueArea;
+    CalculateAreas(*GetUI(), buttonArea, labelArea, leftArrowArea, rightArrowArea, valueArea);
+
+    if (leftArrowArea.Contains(x, y) || rightArrowArea.Contains(x, y))
+    {
+      const int direction = leftArrowArea.Contains(x, y) ? -1 : 1;
+      const int current =
+        std::max(0, std::min(dsp::tone_stack::kNumToneStackTypes - 1, PLUG()->GetParam(kToneStackType)->Int()));
+      const int next = (current + direction + dsp::tone_stack::kNumToneStackTypes) % dsp::tone_stack::kNumToneStackTypes;
+      SetValueFromUserInput(PLUG()->GetParam(kToneStackType)->ToNormalized(next));
+      return;
+    }
+
+    if (mOpenAction)
+      mOpenAction(this);
+  }
+
+private:
+  void CalculateAreas(IGraphics& g, IRECT& buttonArea, IRECT& labelArea, IRECT& leftArrowArea,
+                      IRECT& rightArrowArea, IRECT& valueArea) const
+  {
+    const IText labelText(DEFAULT_TEXT_SIZE + 3.0f, PluginColors::NAM_THEMEFONTCOLOR, "Roboto-Regular",
+                          EAlign::Center, EVAlign::Middle);
+    IRECT measuredLabel;
+    g.MeasureText(labelText, "Tonestack", measuredLabel);
+
+    labelArea = mRECT.GetFromBottom(measuredLabel.H()).GetCentredInside(measuredLabel.W(), measuredLabel.H());
+    const IRECT clickableArea = mRECT.GetReducedFromBottom(measuredLabel.H());
+    buttonArea = clickableArea.GetCentredInside(std::min(122.0f, clickableArea.W()), clickableArea.H() * 0.5f);
+    leftArrowArea = buttonArea.GetFromLeft(20.0f).GetPadded(-3.0f);
+    rightArrowArea = buttonArea.GetFromRight(20.0f).GetPadded(-3.0f);
+    valueArea = IRECT(leftArrowArea.R + 2.0f, buttonArea.T, rightArrowArea.L - 2.0f, buttonArea.B);
+  }
+
+  ISVG mLeftSVG;
+  ISVG mRightSVG;
+  IActionFunction mOpenAction;
+};
+
+class NAMToneStackComponentFieldControl : public IEditableTextControl
+{
+public:
+  NAMToneStackComponentFieldControl(const IRECT& bounds, int component)
+  : IEditableTextControl(bounds, "", IText(12.0f, PluginColors::HELP_TEXT, "Roboto-Regular", EAlign::Center,
+                                           EVAlign::Middle),
+                         COLOR_TRANSPARENT)
+  , mComponent(component)
+  {
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const auto labelArea = IRECT(mRECT.L, mRECT.T, mRECT.L + 58.0f, mRECT.B);
+    const auto valueArea = IRECT(mRECT.L + 62.0f, mRECT.T, std::min(mRECT.L + 154.0f, mRECT.R), mRECT.B);
+    const auto component = dsp::tone_stack::ToneStackComponentFromInt(mComponent);
+    const int type = std::max(0, std::min(dsp::tone_stack::kNumToneStackTypes - 1, PLUG()->GetParam(kToneStackType)->Int()));
+    const auto toneStackType = dsp::tone_stack::ToneStackTypeFromInt(type);
+    const bool editable = dsp::tone_stack::ToneStackTypeHasComponent(toneStackType, component);
+    const double value = editable ? PLUG()->GetToneStackComponentValue(type, mComponent) : 0.0;
+
+    const IText labelText(10.5f, PluginColors::HELP_TEXT, "Roboto-Regular", EAlign::Near, EVAlign::Middle);
+    const IText valueText(12.0f, editable ? PluginColors::NAM_THEMEFONTCOLOR : PluginColors::HELP_TEXT.WithOpacity(0.25f),
+                          "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    g.DrawText(labelText, dsp::tone_stack::GetToneStackComponentName(component), labelArea);
+    g.FillRoundRect(COLOR_BLACK, valueArea, 3.0f);
+    g.DrawRoundRect(PluginColors::NAM_THEMECOLOR.WithOpacity(editable && mMouseIsOver ? 0.65f : 0.35f), valueArea,
+                    3.0f);
+
+    if (editable)
+    {
+      WDL_String text;
+      text.SetFormatted(64, "%.4g %s", value, dsp::tone_stack::GetToneStackComponentUnit(component));
+      g.DrawText(valueText, text.Get(), valueArea);
+    }
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    const auto valueArea = IRECT(mRECT.L + 62.0f, mRECT.T, std::min(mRECT.L + 154.0f, mRECT.R), mRECT.B);
+    const int type = std::max(0, std::min(dsp::tone_stack::kNumToneStackTypes - 1, PLUG()->GetParam(kToneStackType)->Int()));
+    const auto toneStackType = dsp::tone_stack::ToneStackTypeFromInt(type);
+    const auto component = dsp::tone_stack::ToneStackComponentFromInt(mComponent);
+    if (!dsp::tone_stack::ToneStackTypeHasComponent(toneStackType, component))
+      return;
+
+    const double value = PLUG()->GetToneStackComponentValue(type, mComponent);
+    WDL_String text;
+    text.SetFormatted(64, "%.8g", value);
+    SetStr(text.Get());
+    GetUI()->CreateTextEntry(*this, mText, valueArea, text.Get());
+  }
+
+  void OnTextEntryCompletion(const char* str, int valIdx) override
+  {
+    char* end = nullptr;
+    const double value = std::strtod(str, &end);
+    if (end != str && std::isfinite(value))
+    {
+      const int type =
+        std::max(0, std::min(dsp::tone_stack::kNumToneStackTypes - 1, PLUG()->GetParam(kToneStackType)->Int()));
+      PLUG()->SetToneStackComponentValue(type, mComponent, value);
+      SetDirty(false);
+    }
+  }
+
+private:
+  int mComponent = 0;
+};
+
+class NAMToneStackPageControl : public IContainerBaseWithNamedChildren
+{
+public:
+  NAMToneStackPageControl(const IRECT& bounds, const IBitmap& bitmap, ISVG closeSVG, const IVStyle& style,
+                          const IVStyle& radioButtonStyle)
+  : IContainerBaseWithNamedChildren(bounds)
+  , mBitmap(bitmap)
+  , mCloseSVG(closeSVG)
+  , mStyle(style)
+  , mRadioButtonStyle(radioButtonStyle)
+  {
+    mIgnoreMouse = false;
+  }
+
+  bool OnKeyDown(float x, float y, const IKeyPress& key) override
+  {
+    if (key.VK == kVK_ESCAPE)
+    {
+      HideAnimated(true);
+      return true;
+    }
+    return false;
+  }
+
+  void HideAnimated(bool hide)
+  {
+    mWillHide = hide;
+    if (!hide)
+      mHide = false;
+    else
+      ForAllChildrenFunc([hide](int childIdx, IControl* pChild) { pChild->Hide(hide); });
+
+    SetAnimation(
+      [&](IControl* pCaller) {
+        const auto progress = static_cast<float>(pCaller->GetAnimationProgress());
+        SetBlend(IBlend(EBlend::Default, mWillHide ? 1.0f - progress : progress));
+        if (progress > 1.0f)
+        {
+          pCaller->OnEndAnimation();
+          IContainerBase::Hide(mWillHide);
+          GetUI()->SetAllControlsDirty();
+        }
+      },
+      160);
+    SetDirty(true);
+  }
+
+  void OnAttached() override
+  {
+    const auto content = GetRECT().GetPadded(-30.0f);
+    const IVStyle titleStyle = DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular"))
+                                 .WithDrawFrame(false)
+                                 .WithShadowOffset(2.0f);
+    const IText bodyText(13.0f, PluginColors::HELP_TEXT, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    const IText smallText(12.0f, PluginColors::HELP_TEXT, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    const auto bodyStyle = mStyle.WithDrawFrame(false).WithValueText(bodyText);
+    const auto radioButtonStyle =
+      mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));
+
+    AddNamedChildControl(new IBitmapControl(GetRECT(), mBitmap), "Bitmap")->SetIgnoreMouse(true);
+    AddNamedChildControl(new IVLabelControl(content.GetFromTop(50.0f), "TONESTACK", titleStyle), "Title");
+
+    const auto selectorArea = content.GetReducedFromTop(52.0f).GetFromTop(30.0f).GetCentredInside(210.0f, 26.0f);
+    const auto selectorStyle = radioButtonStyle.WithDrawFrame(true)
+                               .WithColor(kBG, COLOR_BLACK)
+                               .WithColor(kFG, COLOR_BLACK)
+                               .WithColor(kFR, PluginColors::NAM_THEMECOLOR.WithOpacity(0.40f));
+    auto* stackControl =
+      AddNamedChildControl(new IVMenuButtonControl(selectorArea, kToneStackType, "", 
+                                                   selectorStyle, EVShape::Rectangle),
+                           "ToneStackType");
+    stackControl->SetTooltip("Select the EQ tone stack circuit used by the Bass, Middle and Treble controls");
+
+    const auto gridArea = content.GetReducedFromTop(92.0f).GetFromTop(172.0f).GetCentredInside(555.0f, 172.0f);
+    constexpr int numRows = 4;
+    constexpr int numCols = 3;
+    constexpr std::array<int, dsp::tone_stack::kNumToneStackComponents> componentOrder{{
+      static_cast<int>(dsp::tone_stack::ToneStackComponent::BassPot),
+      static_cast<int>(dsp::tone_stack::ToneStackComponent::BassTaper),
+      static_cast<int>(dsp::tone_stack::ToneStackComponent::BassCap),
+      static_cast<int>(dsp::tone_stack::ToneStackComponent::MidPot),
+      static_cast<int>(dsp::tone_stack::ToneStackComponent::MidTaper),
+      static_cast<int>(dsp::tone_stack::ToneStackComponent::MidCap),
+      static_cast<int>(dsp::tone_stack::ToneStackComponent::TreblePot),
+      static_cast<int>(dsp::tone_stack::ToneStackComponent::TrebleTaper),
+      static_cast<int>(dsp::tone_stack::ToneStackComponent::TrebleCap),
+      static_cast<int>(dsp::tone_stack::ToneStackComponent::SlopeResistor),
+      static_cast<int>(dsp::tone_stack::ToneStackComponent::LoadResistor),
+      static_cast<int>(dsp::tone_stack::ToneStackComponent::MakeupGain),
+    }};
+    for (int displayIndex = 0; displayIndex < dsp::tone_stack::kNumToneStackComponents; ++displayIndex)
+    {
+      const int component = componentOrder[displayIndex];
+      const int row = displayIndex / numCols;
+      const int col = displayIndex % numCols;
+      const auto cell = gridArea.GetGridCell(row, col, numRows, numCols).GetHPadded(-4.0f).GetVPadded(-5.0f);
+      AddNamedChildControl(new NAMToneStackComponentFieldControl(cell, component),
+                           std::string("ToneStackComponent") + std::to_string(component));
+    }
+
+    auto resetAction = [&](IControl* pCaller) {
+      const int type =
+        std::max(0, std::min(dsp::tone_stack::kNumToneStackTypes - 1, PLUG()->GetParam(kToneStackType)->Int()));
+      PLUG()->ResetToneStackComponentValues(type);
+      pCaller->GetUI()->SetAllControlsDirty();
+    };
+    AddNamedChildControl(new IVButtonControl(content.GetReducedFromTop(318.0f).GetCentredInside(128.0f, 22.0f),
+                                            resetAction, "Reset values", mStyle),
+                         "ResetValues");
+
+    auto closeAction = [&](IControl* pCaller) {
+      static_cast<NAMToneStackPageControl*>(pCaller->GetParent())->HideAnimated(true);
+    };
+    AddNamedChildControl(
+      new NAMSquareButtonControl(CornerButtonArea(GetRECT()), closeAction, mCloseSVG), "Close");
+  }
+
+private:
+  IBitmap mBitmap;
+  ISVG mCloseSVG;
+  IVStyle mStyle;
+  IVStyle mRadioButtonStyle;
+  bool mWillHide = false;
+};
+
 class NAMOversamplingPageControl : public IContainerBaseWithNamedChildren
 {
 public:
@@ -891,7 +1434,8 @@ public:
     const auto offlineFilterLabelArea = offlineFilterRow.GetFromLeft(rowLabelWidth);
     const auto realtimeRadioArea = realtimeOSRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto realtimeFilterArea = realtimeFilterRow.GetFromRight(rowsArea.W() - rowLabelWidth);
-    const auto realtimeMulticoreArea = realtimeMulticoreRow.GetFromRight(rowsArea.W() - rowLabelWidth);
+    const auto realtimeMulticoreArea =
+      realtimeMulticoreRow.GetFromRight(rowsArea.W() - rowLabelWidth).GetFromLeft((rowsArea.W() - rowLabelWidth) / 3.0f);
     const auto realtimeThreadsArea = realtimeThreadsRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto offlineRadioArea = offlineOSRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto offlineFilterArea = offlineFilterRow.GetFromRight(rowsArea.W() - rowLabelWidth);
@@ -958,14 +1502,14 @@ public:
 
     WDL_String verStr, oversamplingVersionStr;
     PLUG()->GetPluginVersionStr(verStr);
-    oversamplingVersionStr.SetFormatted(100, "NAM-Oversampler %s", verStr.Get());
+    oversamplingVersionStr.SetFormatted(100, "NAM On Steroids %s", verStr.Get());
 
     AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 0), oversamplingVersionStr.Get(), infoStyle),
                          mControlNames.version);
     AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 1), "The Tone Scientist", infoStyle),
                          mControlNames.author);
-    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 2), "https://github.com/DLC86/NAM-Oversampler",
-                                         "https://github.com/DLC86/NAM-Oversampler", infoText, COLOR_TRANSPARENT,
+    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 2), "https://github.com/DLC86/NAM-On-Steroids",
+                                         "https://github.com/DLC86/NAM-On-Steroids", infoText, COLOR_TRANSPARENT,
                                          PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
                          mControlNames.github);
     AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 3), "https://youtube.com/@ToneScientist",

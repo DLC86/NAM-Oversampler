@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Update NAM-Oversampler release version metadata.
+"""Update NAM On Steroids release version metadata.
 
 Usage:
     python set_version.py 1.5.3

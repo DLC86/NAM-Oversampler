@@ -1,14 +1,14 @@
-#define PLUG_NAME "NAM-Oversampler"
+#define PLUG_NAME "NAM On Steroids"
 #define PLUG_MFR "The Tone Scientist"
-#define PLUG_VERSION_HEX 0x00010503
-#define PLUG_VERSION_STR "1.5.3"
+#define PLUG_VERSION_HEX 0x00020000
+#define PLUG_VERSION_STR "2.0.0"
 #define PLUG_UNIQUE_ID '1YEo'
 #define PLUG_MFR_ID 'TTSc'
 #define PLUG_URL_STR "https://github.com/sdatkinson/NeuralAmpModelerPlugin"
 #define PLUG_EMAIL_STR "spam@me.com"
 #define PLUG_COPYRIGHT_STR "Copyright 2022 Steven Atkinson"
 #define PLUG_CLASS_NAME NeuralAmpModeler
-#define BUNDLE_NAME "NAM-Oversampler"
+#define BUNDLE_NAME "NAM On Steroids"
 #define BUNDLE_MFR "TheToneScientist"
 #define BUNDLE_DOMAIN "com"
 
@@ -42,13 +42,13 @@
 #define AUV2_ENTRY NeuralAmpModeler_Entry
 #define AUV2_ENTRY_STR "NeuralAmpModeler_Entry"
 #define AUV2_FACTORY NeuralAmpModeler_Factory
-#define AUV2_VIEW_CLASS NAMOversampler_View
-#define AUV2_VIEW_CLASS_STR "NAMOversampler_View"
+#define AUV2_VIEW_CLASS NAMOnSteroids_View
+#define AUV2_VIEW_CLASS_STR "NAMOnSteroids_View"
 
 #define AAX_TYPE_IDS 'ITP1'
 #define AAX_TYPE_IDS_AUDIOSUITE 'ITA1'
 #define AAX_PLUG_MFR_STR "Acme"
-#define AAX_PLUG_NAME_STR "NAM-Oversampler\nIPEF"
+#define AAX_PLUG_NAME_STR "NAM On Steroids\nIPEF"
 #define AAX_PLUG_CATEGORY_STR "Effect"
 #define AAX_DOES_AUDIOSUITE 1
 

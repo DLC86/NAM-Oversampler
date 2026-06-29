@@ -11,7 +11,7 @@ on:
 
 env:
   PROJECT_DIR: NeuralAmpModeler
-  ARTIFACT_NAME: NAM-Oversampler
+  ARTIFACT_NAME: NAM On Steroids
 
 jobs:
   build:

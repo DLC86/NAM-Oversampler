@@ -100,12 +100,77 @@ void _RenameKeys(nlohmann::json& j, std::unordered_map<std::string, std::string>
   }
 }
 
+void _UpdateConfigFrom_1_5_2(nlohmann::json& config);
+
+// v1.6.0
+
+void _UpdateConfigFrom_1_6_0(nlohmann::json& config)
+{
+  _UpdateConfigFrom_1_5_2(config);
+}
+
+int _GetConfigFrom_1_6_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Model Size",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling",
+                                      "EQ Post",
+                                      "Channel Mode",
+                                      "Offline Filter Phase",
+                                      "OS Multi-Core",
+                                      "OS Threads",
+                                      "Tuner Mute",
+                                      "ToneStack Type",
+                                      "Low Cut",
+                                      "Low Cut Slope",
+                                      "Low Cut Post",
+                                      "High Cut",
+                                      "High Cut Slope",
+                                      "High Cut Post"};
+
+  const int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_6_0(config);
+  return pos;
+}
+
 // v1.5.3
 
 void _UpdateConfigFrom_1_5_2(nlohmann::json& config)
 {
+  if (config.contains("Slim") && !config.contains("Model Size"))
+  {
+    config["Model Size"] = config["Slim"];
+    config.erase("Slim");
+  }
   if (!config.contains("Tuner Mute"))
     config["Tuner Mute"] = 1.0;
+  if (!config.contains("ToneStack Type"))
+    config["ToneStack Type"] = 0.0;
+  if (!config.contains("Low Cut"))
+    config["Low Cut"] = 20.0;
+  if (!config.contains("Low Cut Slope"))
+    config["Low Cut Slope"] = 1.0;
+  if (!config.contains("Low Cut Post"))
+    config["Low Cut Post"] = 1.0;
+  if (!config.contains("High Cut"))
+    config["High Cut"] = 20000.0;
+  if (!config.contains("High Cut Slope"))
+    config["High Cut Slope"] = 1.0;
+  if (!config.contains("High Cut Post"))
+    config["High Cut Post"] = 1.0;
 }
 
 int _GetConfigFrom_1_5_2(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
@@ -504,7 +569,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   _Version version(versionStr);
   // Act accordingly
   nlohmann::json config;
-  if (version >= _Version(1, 5, 2))
+  if (version >= _Version(1, 6, 0))
+  {
+    pos = _GetConfigFrom_1_6_0(chunk, pos, config);
+  }
+  else if (version >= _Version(1, 5, 2))
   {
     pos = _GetConfigFrom_1_5_2(chunk, pos, config);
   }

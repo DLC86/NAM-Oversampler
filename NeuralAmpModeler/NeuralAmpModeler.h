@@ -44,6 +44,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <memory>
+#include <array>
 
 #if defined(__APPLE__)
 #include <pthread.h>
@@ -68,11 +69,11 @@ const int kNumPresets = 1;
 constexpr size_t kNumChannelsMono = 1;
 constexpr size_t kNumChannelsStereo = 2;
 
-class NAMSender : public iplug::IPeakAvgSender<>
+class NAMSender : public iplug::IPeakAvgSender<2>
 {
 public:
   NAMSender()
-  : iplug::IPeakAvgSender<>(-90.0, true, 5.0f, 1.0f, 300.0f, 500.0f)
+  : iplug::IPeakAvgSender<2>(-90.0, true, 5.0f, 1.0f, 300.0f, 500.0f)
   {
   }
 };
@@ -105,6 +106,13 @@ enum EParams
   kPhaseMulticoreEnabled,
   kPhaseMulticoreThreadCount,
   kTunerMute,
+  kToneStackType,
+  kLowCutFrequency,
+  kLowCutSlope,
+  kLowCutPostNAM,
+  kHighCutFrequency,
+  kHighCutSlope,
+  kHighCutPostNAM,
   kNumParams
 };
 
@@ -135,6 +143,10 @@ enum ECtrlTags
   kCtrlTagPhaseMulticoreThreadCount,
   kCtrlTagTunerBox,
   kCtrlTagTunerDisplay,
+  kCtrlTagToneStackBox,
+  kCtrlTagToneStackSelector,
+  kCtrlTagCutFiltersButton,
+  kCtrlTagCutFiltersBox,
   kNumCtrlTags
 };
 
@@ -366,12 +378,15 @@ static inline int NAMPhaseMulticoreSmartAutoThreadCount()
   else if (NAMPhaseMulticoreIsAppleIntel())
   {
     // Hyper-Threading siblings are poor substitutes for physical cores under a
-    // realtime phase barrier. At 16x/32x they can increase contention and make
-    // the host miss deadlines even while average CPU still appears reasonable.
+    // realtime phase barrier, but using only physical cores can be too
+    // conservative on older Intel Macs where worker wake latency is the real
+    // bottleneck. Allow a small number of sibling threads while still leaving
+    // system/host headroom.
     const int physicalCores = NAMPhaseMulticoreApplePhysicalCoreCount();
     if (physicalCores > 0)
     {
-      const int topologyAwareCap = std::max(1, physicalCores - 1);
+      const int topologyAwareCap =
+        std::min(std::max(1, physicalCores + 2), std::max(1, hw - 2));
       const int intelAutoCap =
         NAMPhaseMulticoreEnvInt("NAM_PHASE_MULTICORE_APPLE_INTEL_AUTO_CAP", topologyAwareCap, 1, 64);
       total = std::min(total, intelAutoCap);
@@ -414,7 +429,7 @@ static inline int NAMPhaseMulticoreMaxPoolThreadCount()
   {
     const int physicalCores = NAMPhaseMulticoreApplePhysicalCoreCount();
     if (physicalCores > 0)
-      maxThreads = std::min(maxThreads, physicalCores);
+      maxThreads = std::min(maxThreads, std::min(std::max(1, physicalCores + 2), std::max(1, maxThreads - 2)));
   }
   return NAMPhaseMulticoreClampInt(maxThreads, 1, 64);
 }
@@ -423,6 +438,8 @@ static inline void NAMPhaseMulticoreRealtimePause()
 {
 #if defined(__APPLE__) && (defined(__arm64__) || defined(__aarch64__))
   __asm__ __volatile__("yield");
+#elif defined(__APPLE__) && (defined(__x86_64__) || defined(__i386__))
+  __asm__ __volatile__("pause");
 #elif defined(_WIN32)
   YieldProcessor();
 #else
@@ -597,10 +614,14 @@ private:
         if (mStop.load(std::memory_order_acquire))
           return;
 
-#if defined(__APPLE__) && (defined(__arm64__) || defined(__aarch64__))
+#if defined(__APPLE__)
         // Avoid a kernel wake-up on every tiny audio block. The timed sleep is
-        // only a fallback for stopped or inactive playback.
-        if (idleSpins++ < 262144)
+        // only a fallback for stopped or inactive playback. Apple Silicon can
+        // spin longer because the AudioWorkgroup/P-core path is very effective;
+        // Intel Macs get a shorter spin to reduce condition_variable wake
+        // latency without burning an entire hyper-thread while transport is idle.
+        const int spinLimit = NAMPhaseMulticoreIsAppleSilicon() ? 262144 : 32768;
+        if (idleSpins++ < spinLimit)
         {
           NAMPhaseMulticoreRealtimePause();
           continue;
@@ -1318,6 +1339,122 @@ double GetRenderingSampleRate(double externalSampleRate) const
   double mExternalSampleRate = 48000.0;
 };
 
+class NAMCutFilter
+{
+public:
+  void Reset(double sampleRate, int maxBlockSize)
+  {
+    mSampleRate = std::max(1.0, sampleRate);
+    mOutputData.assign(2 * std::max(1, maxBlockSize), 0.0);
+    mOutputPointers.resize(2);
+    for (size_t ch = 0; ch < mOutputPointers.size(); ++ch)
+      mOutputPointers[ch] = mOutputData.data() + ch * std::max(1, maxBlockSize);
+    ClearState();
+    mLastFrequency = -1.0;
+    mLastSlopeIndex = -1;
+    mLastHighPass = false;
+    mLastEnabled = false;
+  }
+
+  void ClearState()
+  {
+    for (auto& channel : mStates)
+      for (auto& stage : channel)
+        stage = {};
+  }
+
+  iplug::sample** Process(iplug::sample** inputs, size_t numChannels, size_t numFrames, double frequency,
+                          int slopeIndex, bool highPass)
+  {
+    const bool enabled = highPass ? frequency > 20.0001 : frequency < 19999.9;
+    if (!enabled)
+    {
+      if (mLastEnabled)
+        ClearState();
+      mLastEnabled = false;
+      return inputs;
+    }
+
+    UpdateCoefficients(frequency, slopeIndex, highPass);
+    const int stages = std::max(1, std::min(6, slopeIndex + 1));
+    const size_t channels = std::min<size_t>(numChannels, mOutputPointers.size());
+
+    for (size_t ch = 0; ch < channels; ++ch)
+    {
+      for (size_t i = 0; i < numFrames; ++i)
+      {
+        double y = inputs[ch][i];
+        for (int stage = 0; stage < stages; ++stage)
+        {
+          auto& s = mStates[ch][stage];
+          const double out = mB0 * y + mB1 * s.x1 - mA1 * s.y1;
+          s.x1 = y;
+          s.y1 = out;
+          y = out;
+        }
+        mOutputPointers[ch][i] = static_cast<iplug::sample>(y);
+      }
+    }
+
+    for (size_t ch = channels; ch < numChannels && ch < mOutputPointers.size(); ++ch)
+      std::copy(inputs[ch], inputs[ch] + numFrames, mOutputPointers[ch]);
+
+    mLastEnabled = true;
+    return mOutputPointers.data();
+  }
+
+private:
+  struct StageState
+  {
+    double x1 = 0.0;
+    double y1 = 0.0;
+  };
+
+  void UpdateCoefficients(double frequency, int slopeIndex, bool highPass)
+  {
+    slopeIndex = std::max(0, std::min(5, slopeIndex));
+    frequency = std::clamp(frequency, highPass ? 20.0 : 1000.0, highPass ? 1000.0 : 20000.0);
+    if (frequency == mLastFrequency && slopeIndex == mLastSlopeIndex && highPass == mLastHighPass)
+      return;
+
+    constexpr double pi = 3.14159265358979323846;
+    const int stages = slopeIndex + 1;
+    const double perStageMagnitude = std::pow(0.5, 1.0 / (2.0 * stages));
+    const double ratio = std::sqrt(std::max(1.0e-12, (1.0 / (perStageMagnitude * perStageMagnitude)) - 1.0));
+    const double targetFrequency = std::clamp(frequency, 1.0, 0.49 * mSampleRate);
+    const double targetK = std::tan(pi * targetFrequency / mSampleRate);
+    const double stageK = highPass ? targetK * ratio : targetK / ratio;
+    const double k = std::clamp(stageK, 1.0e-9, 1.0e9);
+
+    if (highPass)
+    {
+      mB0 = 1.0 / (1.0 + k);
+      mB1 = -mB0;
+    }
+    else
+    {
+      mB0 = k / (1.0 + k);
+      mB1 = mB0;
+    }
+    mA1 = (k - 1.0) / (k + 1.0);
+    mLastFrequency = frequency;
+    mLastSlopeIndex = slopeIndex;
+    mLastHighPass = highPass;
+  }
+
+  double mSampleRate = 48000.0;
+  double mB0 = 1.0;
+  double mB1 = 0.0;
+  double mA1 = 0.0;
+  double mLastFrequency = -1.0;
+  int mLastSlopeIndex = -1;
+  bool mLastHighPass = false;
+  bool mLastEnabled = false;
+  std::array<std::array<StageState, 6>, 2> mStates {};
+  std::vector<iplug::sample> mOutputData;
+  std::vector<iplug::sample*> mOutputPointers;
+};
+
 class NeuralAmpModeler final : public iplug::Plugin
 {
 public:
@@ -1346,6 +1483,9 @@ public:
   }
   bool IsTunerActive() const { return mTunerActive.load(std::memory_order_acquire); }
   NAMTunerDetector::Result GetTunerResult() const { return mTunerDetector.GetResult(); }
+  double GetToneStackComponentValue(int type, int component) const;
+  void SetToneStackComponentValue(int type, int component, double value);
+  void ResetToneStackComponentValues(int type);
 
 private:
   // Allocates mInputPointers and mOutputPointers
@@ -1408,6 +1548,7 @@ private:
   void _ApplyRealtimeDSPTransitionGain(iplug::sample** outputs, const size_t nFrames, const size_t nChans);
   void _ProcessTunerInput(
     iplug::sample** inputs, const size_t nFrames, const size_t nChans, const double sampleRate);
+  iplug::sample** _ProcessCutFilters(iplug::sample** inputs, const size_t nChans, const size_t nFrames, bool postNAM);
 
   // See: Unserialization.cpp
   void _UnserializeApplyConfig(nlohmann::json& config);
@@ -1470,6 +1611,10 @@ private:
   // Post-IR filters
   recursive_linear_filter::HighPass mHighPass;
   //  recursive_linear_filter::LowPass mLowPass;
+  NAMCutFilter mLowCutPre;
+  NAMCutFilter mHighCutPre;
+  NAMCutFilter mLowCutPost;
+  NAMCutFilter mHighCutPost;
 
   // Oversampling factor (1, 2, 4, 8, 16, 32)
   std::atomic<int> mOversamplingFactor = 1;
@@ -1505,7 +1650,7 @@ private:
   // Path to IR (.wav file)
   WDL_String mIRPath;
 
-  WDL_String mHighLightColor{"#5085e8"};
+  WDL_String mHighLightColor{"#bf0000"};
 
   std::unordered_map<std::string, double> mNAMParams = {{"Input", 0.0}, {"Output", 0.0}};
 

@@ -10,7 +10,7 @@ set(AUDIO_DSP_TOOLS_ROOT "${PROJECT_ROOT}/AudioDSPTools")
 file(STRINGS "${PLUGIN_ROOT}/config.h" PLUG_VERSION_LINE REGEX "^#define PLUG_VERSION_STR ")
 string(REGEX REPLACE "^#define PLUG_VERSION_STR \"([0-9]+\\.[0-9]+\\.[0-9]+)\".*$" "\\1" PLUG_VERSION "${PLUG_VERSION_LINE}")
 
-project(NAM-Oversampler-Linux VERSION ${PLUG_VERSION})
+project(NAMOnSteroids-Linux VERSION ${PLUG_VERSION})
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -68,9 +68,9 @@ set(PLUGIN_SOURCES
   ${NAM_CORE_SOURCES}
 )
 
-smtg_add_vst3plugin(NAM-Oversampler PACKAGE_NAME "NAM-Oversampler" SOURCES_LIST ${PLUGIN_SOURCES})
+smtg_add_vst3plugin(NAMOnSteroids PACKAGE_NAME "NAM On Steroids" SOURCES_LIST ${PLUGIN_SOURCES})
 
-target_compile_definitions(NAM-Oversampler
+target_compile_definitions(NAMOnSteroids
   PRIVATE
     VST3_API
     NO_IGRAPHICS
@@ -78,7 +78,7 @@ target_compile_definitions(NAM-Oversampler
     NAM_ENABLE_A2_FAST
 )
 
-target_include_directories(NAM-Oversampler
+target_include_directories(NAMOnSteroids
   PRIVATE
     "${PLUGIN_ROOT}"
     "${IPLUG2_ROOT}"
@@ -99,12 +99,12 @@ target_include_directories(NAM-Oversampler
     "${AUDIO_DSP_TOOLS_ROOT}/Dependencies/eigen"
 )
 
-target_link_libraries(NAM-Oversampler PRIVATE sdk)
+target_link_libraries(NAMOnSteroids PRIVATE sdk)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  target_link_libraries(NAM-Oversampler PRIVATE stdc++fs)
+  target_link_libraries(NAMOnSteroids PRIVATE stdc++fs)
 endif()
 
-target_compile_options(NAM-Oversampler
+target_compile_options(NAMOnSteroids
   PRIVATE
     -Wall
     -Wextra
@@ -115,7 +115,7 @@ target_compile_options(NAM-Oversampler
     $<$<CONFIG:Release>:-O3>
 )
 
-set_target_properties(NAM-Oversampler
+set_target_properties(NAMOnSteroids
   PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON

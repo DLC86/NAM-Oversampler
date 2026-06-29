@@ -99,7 +99,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kCalibrateInput)->InitBool(kCalibrateInputParamName.c_str(), kDefaultCalibrateInput);
   GetParam(kInputCalibrationLevel)
     ->InitDouble(kInputCalibrationLevelParamName.c_str(), kDefaultInputCalibrationLevel, -60.0, 60.0, 0.1, "dBu");
-  GetParam(kSlim)->InitDouble("Slim", 1.0, 0.0, 1.0, 0.01);
+  GetParam(kSlim)->InitDouble("Model Size", 1.0, 0.0, 1.0, 0.01);
   GetParam(kOversamplingFactor)->InitEnum("Oversampling", 0, {"OFF", "2x", "4x", "8x", "16x", "32x"});
   GetParam(kAntiAliasFilterPhase)
     ->InitEnum("Filter Phase", 0, {"Minimum Phase", "Linear Phase (short)", "Linear Phase (long)"});
@@ -110,6 +110,21 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPhaseMulticoreThreadCount)
     ->InitEnum("OS Threads", 0, {"Auto", "2", "4", "8", "12", "16", "20", "24", "32"});
   GetParam(kTunerMute)->InitBool("Tuner Mute", true);
+  GetParam(kToneStackType)
+    ->InitEnum("ToneStack Type", 0,
+               {"Default", "Bench", "Big Muff", "Crate", "Dmbl Jazz", "Dmbl Rock", "Fndr Bassman 5F6-A", "Fndr Brownface",
+                "Fndr Deluxe 5E3", "Fndr E-series", "Fndr Princeton 5E2", "Fndr Princeton 5F2A",
+                "Fndr Pro Jr", "Fndr TMB", "Hiwatt", "Marshall", "Neve", "Vox"});
+  GetParam(kLowCutFrequency)
+    ->InitDouble("Low Cut", 20.0, 20.0, 1000.0, 1.0, "Hz", 0, "", iplug::IParam::ShapeExp(),
+                 iplug::IParam::kUnitFrequency);
+  GetParam(kLowCutSlope)->InitEnum("Low Cut Slope", 1, {"6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct", "30 dB/oct", "36 dB/oct"});
+  GetParam(kLowCutPostNAM)->InitBool("Low Cut Post", true);
+  GetParam(kHighCutFrequency)
+    ->InitDouble("High Cut", 20000.0, 1000.0, 20000.0, 1.0, "Hz", 0, "", iplug::IParam::ShapeExp(),
+                 iplug::IParam::kUnitFrequency);
+  GetParam(kHighCutSlope)->InitEnum("High Cut Slope", 1, {"6 dB/oct", "12 dB/oct", "18 dB/oct", "24 dB/oct", "30 dB/oct", "36 dB/oct"});
+  GetParam(kHighCutPostNAM)->InitBool("High Cut Post", true);
   GetParam(kEQPostNAM)->InitBool("EQ Post", true);
   GetParam(kChannelMode)->InitEnum("Channel Mode", 0, {"Mono", "Stereo"});
   NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
@@ -164,7 +179,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto mainArea = b.GetPadded(-20);
     const auto contentArea = mainArea.GetPadded(-10);
     const auto titleHeight = 50.0f;
-    const auto titleArea = contentArea.GetFromTop(titleHeight).GetVShifted(-4.0f);
+    const auto titleArea = contentArea.GetFromTop(titleHeight);
 
     // Areas for knobs
     const auto knobsPad = 20.0f;
@@ -185,7 +200,13 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       noiseGateArea.GetVShifted(noiseGateArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
     const auto channelModeArea =
       inputKnobArea.GetVShifted(inputKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
-    const auto eqToggleArea = midKnobArea.GetVShifted(midKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
+    const auto eqToggleArea =
+      bassKnobArea.GetVShifted(bassKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
+    const auto toneStackSelectorBaseArea =
+      midKnobArea.GetVShifted(midKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
+    const auto toneStackSelectorArea =
+      IRECT(toneStackSelectorBaseArea.L - 14.0f, toneStackSelectorBaseArea.T, toneStackSelectorBaseArea.R + 14.0f,
+            toneStackSelectorBaseArea.B);
     const auto eqPositionArea =
       trebleKnobArea.GetVShifted(trebleKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
 
@@ -200,6 +221,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 10);
     const auto irArea = modelArea.GetVShifted(irYOffset);
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
+    const auto cutFiltersButtonArea = IRECT(irArea.R + 6.0f, irArea.MH() - 14.0f,
+                                           irArea.R + 6.0f + 56.0f, irArea.MH() + 14.0f);
 
     // Areas for meters
     const auto inputMeterArea = contentArea.GetFromLeft(30).GetHShifted(-20).GetMidVPadded(100).GetVShifted(-25);
@@ -248,7 +271,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     pGraphics->AttachBackground(BACKGROUND_FN);
     pGraphics->AttachControl(new IBitmapControl(b, linesBitmap));
-    pGraphics->AttachControl(new IVLabelControl(titleArea, "NAM OVERSAMPLER", titleStyle));
+    pGraphics->AttachControl(new IVLabelControl(titleArea, "NAM ON STEROIDS", titleStyle));
     pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
 
 #ifdef NAM_PICK_DIRECTORY
@@ -295,13 +318,28 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                 fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
                                 "Get IRs", getUrl),
       kCtrlTagIRFileBrowser);
+    pGraphics->AttachControl(new NAMCutFiltersButtonControl(cutFiltersButtonArea,
+                                                            [pGraphics](IControl* pCaller) {
+                                                              pGraphics->GetControlWithTag(kCtrlTagCutFiltersBox)
+                                                                ->As<NAMCutFiltersPageControl>()
+                                                                ->HideAnimated(false);
+                                                            }),
+                             kCtrlTagCutFiltersButton);
     pGraphics->AttachControl(
       new NAMSwitchControl(ngToggleArea, kNoiseGateActive, "Noise Gate", style, switchHandleBitmap));
     pGraphics->AttachControl(new NAMChannelModeControl(channelModeArea.GetCentredInside(30.0f, 30.0f), kChannelMode),
                              kCtrlTagChannelMode)
       ->SetTooltip("Channel mode: mono or stereo");
     pGraphics->AttachControl(new NAMSwitchControl(eqToggleArea, kEQActive, "EQ", style, switchHandleBitmap));
-    pGraphics->AttachControl(new NAMSwitchControl(eqPositionArea, kEQPostNAM, "EQ Post", style, switchHandleBitmap),
+    pGraphics->AttachControl(
+      new NAMToneStackSelectorControl(toneStackSelectorArea, kToneStackType, leftArrowSVG, rightArrowSVG,
+                                      [pGraphics](IControl* pCaller) {
+                                        pGraphics->GetControlWithTag(kCtrlTagToneStackBox)
+                                          ->As<NAMToneStackPageControl>()
+                                          ->HideAnimated(false);
+                                      }),
+      kCtrlTagToneStackSelector);
+    pGraphics->AttachControl(new NAMSwitchControl(eqPositionArea, kEQPostNAM, "Pre/Post", style, switchHandleBitmap),
                              kCtrlTagEQPostNAM)
       ->SetTooltip("EQ position: off = pre NAM, on = post NAM");
 
@@ -361,11 +399,23 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                       kCtrlTagTunerBox)
       ->Hide(true);
 
+    pGraphics
+      ->AttachControl(new NAMToneStackPageControl(b, backgroundBitmap, crossSVG, style, radioButtonStyle),
+                      kCtrlTagToneStackBox)
+      ->Hide(true);
+
+    pGraphics
+      ->AttachControl(new NAMCutFiltersPageControl(b, backgroundBitmap, knobBackgroundBitmap, switchHandleBitmap,
+                                                   crossSVG, style, radioButtonStyle),
+                      kCtrlTagCutFiltersBox)
+      ->Hide(true);
+
     const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
     pGraphics->AttachControl(new NAMSlimOverlayBackdropControl(b, hideSlimOverlay), kCtrlTagSlimOverlayBackdrop)
       ->Hide(true);
     pGraphics
-      ->AttachControl(new NAMKnobControl(slimKnobArea, kSlim, "Slim", style, knobBackgroundBitmap), kCtrlTagSlimKnob)
+      ->AttachControl(new NAMKnobControl(slimKnobArea, kSlim, "Model Size", style, knobBackgroundBitmap),
+                      kCtrlTagSlimKnob)
       ->Hide(true);
 
     pGraphics->ForAllControlsFunc([](IControl* pControl) {
@@ -382,6 +432,25 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 NeuralAmpModeler::~NeuralAmpModeler()
 {
   _DeallocateIOPointers();
+}
+
+double NeuralAmpModeler::GetToneStackComponentValue(int type, int component) const
+{
+  if (auto* toneStack = dynamic_cast<dsp::tone_stack::BasicNamToneStack*>(mToneStack.get()))
+    return toneStack->GetComponentValue(type, component);
+  return 0.0;
+}
+
+void NeuralAmpModeler::SetToneStackComponentValue(int type, int component, double value)
+{
+  if (auto* toneStack = dynamic_cast<dsp::tone_stack::BasicNamToneStack*>(mToneStack.get()))
+    toneStack->SetComponentValue(type, component, value);
+}
+
+void NeuralAmpModeler::ResetToneStackComponentValues(int type)
+{
+  if (auto* toneStack = dynamic_cast<dsp::tone_stack::BasicNamToneStack*>(mToneStack.get()))
+    toneStack->ResetComponentValues(type);
 }
 
 void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outputs, int nFrames)
@@ -445,9 +514,11 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
   }
   _ApplyInputGain(triggerOutput, numFrames, numChannelsInternal);
 
-  sample** modelInputPointers = mInputPointers;
+  sample** preCutPointers = _ProcessCutFilters(mInputPointers, numChannelsInternal, numFrames, false);
+
+  sample** modelInputPointers = preCutPointers;
   if (toneStackActive && !toneStackPostNAM && mToneStack != nullptr)
-    modelInputPointers = mToneStack->Process(mInputPointers, numChannelsInternal, nFrames);
+    modelInputPointers = mToneStack->Process(preCutPointers, numChannelsInternal, nFrames);
 
   void* audioWorkgroup = mAudioWorkgroup.load(std::memory_order_acquire);
   if (mModel != nullptr)
@@ -502,13 +573,15 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
   }
 
   // And the HPF for DC offset (Issue 271)
+  sample** postCutPointers = _ProcessCutFilters(irPointers, numChannelsInternal, numFrames, true);
+
   const double highPassCutoffFreq = kDCBlockerFrequency;
   // const double lowPassCutoffFreq = 20000.0;
   const recursive_linear_filter::HighPassParams highPassParams(sampleRate, highPassCutoffFreq);
   // const recursive_linear_filter::LowPassParams lowPassParams(sampleRate, lowPassCutoffFreq);
   mHighPass.SetParams(highPassParams);
   // mLowPass.SetParams(lowPassParams);
-  sample** hpfPointers = mHighPass.Process(irPointers, numChannelsInternal, numFrames);
+  sample** hpfPointers = mHighPass.Process(postCutPointers, numChannelsInternal, numFrames);
   // sample** lpfPointers = mLowPass.Process(hpfPointers, numChannelsInternal, numFrames);
 
   // restore previous floating point state
@@ -561,6 +634,10 @@ void NeuralAmpModeler::OnReset()
   _ApplyActiveDSPSettings(false);
 
   mToneStack->Reset(sampleRate, maxBlockSize);
+  mLowCutPre.Reset(sampleRate, maxBlockSize);
+  mHighCutPre.Reset(sampleRate, maxBlockSize);
+  mLowCutPost.Reset(sampleRate, maxBlockSize);
+  mHighCutPost.Reset(sampleRate, maxBlockSize);
 
   // This must be called after the selected filter has been applied, otherwise the host can see stale PDC.
   _UpdateLatency();
@@ -695,6 +772,7 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     case kToneBass: mToneStack->SetParam("bass", GetParam(paramIdx)->Value()); break;
     case kToneMid: mToneStack->SetParam("middle", GetParam(paramIdx)->Value()); break;
     case kToneTreble: mToneStack->SetParam("treble", GetParam(paramIdx)->Value()); break;
+    case kToneStackType: mToneStack->SetParam("type", GetParam(paramIdx)->Value()); break;
     case kSlim: _ApplySlimParamToLoadedNAMs(); break;
 
     case kOversamplingFactor:
@@ -768,6 +846,21 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
   if (auto pGraphics = GetUI())
   {
     bool active = GetParam(paramIdx)->Bool();
+    auto updateToneStackControlAvailability = [&]() {
+      const bool eqActive = GetParam(kEQActive)->Bool();
+      const auto type = dsp::tone_stack::ToneStackTypeFromInt(GetParam(kToneStackType)->Int());
+      const bool hasBass = dsp::tone_stack::ToneStackTypeHasBassControl(type);
+      const bool hasMiddle = dsp::tone_stack::ToneStackTypeHasMiddleControl(type);
+      const bool hasTreble = dsp::tone_stack::ToneStackTypeHasTrebleControl(type);
+      if (auto* bassControl = pGraphics->GetControlWithParamIdx(kToneBass))
+        bassControl->SetDisabled(!eqActive || !hasBass);
+      if (auto* midControl = pGraphics->GetControlWithParamIdx(kToneMid))
+        midControl->SetDisabled(!eqActive || !hasMiddle);
+      if (auto* trebleControl = pGraphics->GetControlWithParamIdx(kToneTreble))
+        trebleControl->SetDisabled(!eqActive || !hasTreble);
+      if (auto* toneStackSelector = pGraphics->GetControlWithTag(kCtrlTagToneStackSelector))
+        toneStackSelector->SetDisabled(!eqActive);
+    };
 
     switch (paramIdx)
     {
@@ -775,6 +868,11 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       case kEQActive:
         pGraphics->ForControlInGroup("EQ_KNOBS", [active](IControl* pControl) { pControl->SetDisabled(!active); });
         pGraphics->GetControlWithTag(kCtrlTagEQPostNAM)->SetDisabled(!active);
+        updateToneStackControlAvailability();
+        break;
+      case kToneStackType:
+        updateToneStackControlAvailability();
+        pGraphics->SetAllControlsDirty();
         break;
       case kIRToggle: pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->SetDisabled(!active); break;
       default: break;
@@ -1222,6 +1320,29 @@ void NeuralAmpModeler::_ProcessTunerInput(
   }
 }
 
+sample** NeuralAmpModeler::_ProcessCutFilters(sample** inputs, const size_t nChans, const size_t nFrames, bool postNAM)
+{
+  sample** current = inputs;
+
+  const bool lowPost = GetParam(kLowCutPostNAM)->Bool();
+  if (lowPost == postNAM)
+  {
+    current = (postNAM ? mLowCutPost : mLowCutPre)
+                .Process(current, nChans, nFrames, GetParam(kLowCutFrequency)->Value(),
+                         GetParam(kLowCutSlope)->Int(), true);
+  }
+
+  const bool highPost = GetParam(kHighCutPostNAM)->Bool();
+  if (highPost == postNAM)
+  {
+    current = (postNAM ? mHighCutPost : mHighCutPre)
+                .Process(current, nChans, nFrames, GetParam(kHighCutFrequency)->Value(),
+                         GetParam(kHighCutSlope)->Int(), false);
+  }
+
+  return current;
+}
+
 bool NeuralAmpModeler::_IsStereoRequested() const
 {
   return GetParam(kChannelMode)->Int() == 1;
@@ -1547,10 +1668,10 @@ void NeuralAmpModeler::_UpdateLatency()
 void NeuralAmpModeler::_UpdateMeters(sample** inputPointer, sample** outputPointer, const size_t nFrames,
                                      const size_t nChansIn, const size_t nChansOut)
 {
-  // Right now, we didn't specify MAXNC when we initialized these, so it's 1.
-  const int nChansHack = 1;
-  mInputSender.ProcessBlock(inputPointer, (int)nFrames, kCtrlTagInputMeter, nChansHack);
-  mOutputSender.ProcessBlock(outputPointer, (int)nFrames, kCtrlTagOutputMeter, nChansHack);
+  const int inputChannels = static_cast<int>(std::max<size_t>(1, std::min<size_t>(2, nChansIn)));
+  const int outputChannels = static_cast<int>(std::max<size_t>(1, std::min<size_t>(2, nChansOut)));
+  mInputSender.ProcessBlock(inputPointer, (int)nFrames, kCtrlTagInputMeter, inputChannels);
+  mOutputSender.ProcessBlock(outputPointer, (int)nFrames, kCtrlTagOutputMeter, outputChannels);
 }
 
 // HACK

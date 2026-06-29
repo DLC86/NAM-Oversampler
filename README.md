@@ -1,6 +1,6 @@
-# NAM-Oversampler
+# NAM On Steroids
 
-NAM-Oversampler is a fork of the Neural Amp Modeler plugin focused on adding experimental oversampling support for NAM models.
+NAM On Steroids is a fork of the Neural Amp Modeler plugin focused on adding experimental oversampling support for NAM models.
 
 ## Oversampling approach
 

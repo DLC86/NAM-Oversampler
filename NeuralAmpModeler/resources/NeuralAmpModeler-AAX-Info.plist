@@ -5,23 +5,23 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
-	<string>NAM-Oversampler</string>
+	<string>NAM On Steroids</string>
 	<key>CFBundleGetInfoString</key>
-	<string>1.5.3</string>
+	<string>2.0.0</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.TheToneScientist.aax.NAM-Oversampler</string>
+	<string>com.TheToneScientist.aax.NAMOnSteroids</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>NAM-Oversampler</string>
+	<string>NAM On Steroids</string>
 	<key>CFBundlePackageType</key>
 	<string>TDMw</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.5.3</string>
+	<string>2.0.0</string>
 	<key>CFBundleSignature</key>
 	<string>PTul</string>
 	<key>CFBundleVersion</key>
-	<string>1.5.3</string>
+	<string>2.0.0</string>
 	<key>CSResourcesFileMapped</key>
 	<true/>
 	<key>LSMinimumSystemVersion</key>

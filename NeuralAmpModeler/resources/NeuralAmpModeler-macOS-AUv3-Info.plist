@@ -5,21 +5,21 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>English</string>
 	<key>CFBundleExecutable</key>
-	<string>NAM-Oversampler</string>
+	<string>NAM On Steroids</string>
 	<key>CFBundleGetInfoString</key>
-	<string>1.5.3</string>
+	<string>2.0.0</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.TheToneScientist.app.NAM-Oversampler.AUv3</string>
+	<string>com.TheToneScientist.app.NAMOnSteroids.AUv3</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>NAM-Oversampler</string>
+	<string>NAM On Steroids</string>
 	<key>CFBundlePackageType</key>
 	<string>XPC!</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.5.3</string>
+	<string>2.0.0</string>
 	<key>CFBundleVersion</key>
-	<string>1.5.3</string>
+	<string>2.0.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>10.12.0</string>
 	<key>NSExtension</key>
@@ -27,16 +27,16 @@
 		<key>NSExtensionAttributes</key>
 		<dict>
 			<key>AudioComponentBundle</key>
-			<string>com.TheToneScientist.app.NAM-Oversampler.AUv3Framework</string>
+			<string>com.TheToneScientist.app.NAMOnSteroids.AUv3Framework</string>
 			<key>AudioComponents</key>
 			<array>
 				<dict>
 					<key>description</key>
-					<string>NAM-Oversampler</string>
+					<string>NAM On Steroids</string>
 					<key>manufacturer</key>
 					<string>TTSc</string>
 					<key>name</key>
-					<string>The Tone Scientist: NAM-Oversampler</string>
+					<string>The Tone Scientist: NAM On Steroids</string>
 					<key>sandboxSafe</key>
 					<true/>
 					<key>subtype</key>
@@ -48,7 +48,7 @@
 					<key>type</key>
 					<string>aufx</string>
 					<key>version</key>
-					<integer>66818</integer>
+					<integer>131072</integer>
 				</dict>
 			</array>
 		</dict>
