@@ -8,8 +8,12 @@ build-*
 *.db
 *.suo
 */.vs
+__pycache__/
+*.pyc
 *.pem
 mkcert*
 
 NeuralAmpModeler/*.wav
 NeuralAmpModeler/peaks/
+
+.vs/
