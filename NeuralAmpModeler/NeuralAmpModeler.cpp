@@ -47,14 +47,14 @@ const double kDCBlockerFrequency = 5.0;
 // Styles
 const IVColorSpec colorSpec{
   DEFAULT_BGCOLOR, // Background
-  PluginColors::NAM_THEMECOLOR, // Foreground
-  PluginColors::NAM_THEMECOLOR.WithOpacity(0.3f), // Pressed
-  PluginColors::NAM_THEMECOLOR.WithOpacity(0.4f), // Frame
+  PluginColors::GetThemeColor(), // Foreground
+  PluginColors::GetThemeColor().WithOpacity(0.3f), // Pressed
+  PluginColors::GetThemeColor().WithOpacity(0.4f), // Frame
   PluginColors::MOUSEOVER, // Highlight
   DEFAULT_SHCOLOR, // Shadow
-  PluginColors::NAM_THEMECOLOR, // Extra 1
+  PluginColors::GetThemeColor(), // Extra 1
   COLOR_RED, // Extra 2 --> color for clipping in meters
-  PluginColors::NAM_THEMECOLOR.WithContrast(0.1f), // Extra 3
+  PluginColors::GetThemeColor().WithContrast(0.1f), // Extra 3
 };
 
 const IVStyle style =
@@ -76,9 +76,9 @@ const IVStyle titleStyle =
   DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular")).WithDrawFrame(false).WithShadowOffset(2.f);
 const IVStyle radioButtonStyle =
   style
-    .WithColor(EVColor::kON, PluginColors::NAM_THEMECOLOR) // Pressed buttons and their labels
-    .WithColor(EVColor::kOFF, PluginColors::NAM_THEMECOLOR.WithOpacity(0.1f)) // Unpressed buttons
-    .WithColor(EVColor::kX1, PluginColors::NAM_THEMECOLOR.WithOpacity(0.6f)); // Unpressed buttons' labels
+    .WithColor(EVColor::kON, PluginColors::GetThemeColor()) // Pressed buttons and their labels
+    .WithColor(EVColor::kOFF, PluginColors::GetThemeColor().WithOpacity(0.1f)) // Unpressed buttons
+    .WithColor(EVColor::kX1, PluginColors::GetThemeColor().WithOpacity(0.6f)); // Unpressed buttons' labels
 
 EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char* str, const char* caption,
                               EMsgBoxType type)
@@ -337,7 +337,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     pGraphics
       ->AttachControl(
-        new NAMSquareButtonControl(slimIconArea, DefaultClickActionFunc, slimIconSVG), kCtrlTagSlimmableIcon)
+        new NAMSquareButtonControl(slimIconArea, DefaultClickActionFunc, slimIconSVG, true), kCtrlTagSlimmableIcon)
       ->SetAnimationEndActionFunction(showSlimOverlay)
       ->Hide(true);
 
@@ -2001,13 +2001,14 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
       mHighLightColor.Set((const char*)pData);
 
 #if PLUG_HAS_UI
+      IColor color = IColor::FromColorCodeStr(mHighLightColor.Get());
+      PluginColors::SetThemeColor(color);
+
       if (GetUI())
       {
         GetUI()->ForStandardControlsFunc([&](IControl* pControl) {
           if (auto* pVectorBase = pControl->As<IVectorBase>())
           {
-            IColor color = IColor::FromColorCodeStr(mHighLightColor.Get());
-
             pVectorBase->SetColor(kX1, color);
             pVectorBase->SetColor(kPR, color.WithOpacity(0.3f));
             pVectorBase->SetColor(kFR, color.WithOpacity(0.4f));

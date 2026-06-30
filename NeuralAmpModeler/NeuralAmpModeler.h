@@ -1714,7 +1714,7 @@ private:
   // Path to IR (.wav file)
   WDL_String mIRPath;
 
-  WDL_String mHighLightColor{"#bf0000"};
+  WDL_String mHighLightColor;
 
   std::unordered_map<std::string, double> mNAMParams = {{"Input", 0.0}, {"Output", 0.0}};
 
