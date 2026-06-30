@@ -46,6 +46,7 @@
 #include <memory>
 #include <array>
 #include <unordered_map>
+#include <future>
 
 #if defined(__APPLE__)
 #include <pthread.h>
@@ -1502,6 +1503,8 @@ public:
   void RenameCurrentInternalPreset(const char* name);
   bool IsMidiAssignableParam(int paramIdx) const;
   void StartMidiLearnForParam(int paramIdx);
+  void StopMidiLearn();
+  void ClearMidiCCForParam(int paramIdx);
   void AssignMidiCCToParam(int paramIdx, int cc);
   int GetMidiCCForParam(int paramIdx) const;
   bool IsMidiLearnArmedForParam(int paramIdx) const;
@@ -1604,6 +1607,10 @@ private:
   void _RefreshCurrentInternalPresetDirty();
   bool _InternalPresetPathsEqual(const std::string& lhs, const char* rhs) const;
   std::string _CaptureCurrentInternalPresetSnapshot() const;
+  void _MaybeStartUpdateCheck();
+  void _HandleUpdateCheckResult();
+  static std::string _FetchLatestStableReleaseTag();
+  static bool _IsReleaseVersionNewer(const std::string& latestTag, const std::string& currentVersion);
 
   // See: Unserialization.cpp
   void _UnserializeApplyConfig(nlohmann::json& config);
@@ -1724,4 +1731,8 @@ private:
   std::atomic<bool> mInternalPresetParamUIDirty {false};
   std::atomic<bool> mCurrentInternalPresetDirty {true};
   std::atomic<bool> mApplyingInternalPreset {false};
+  bool mUpdateCheckStarted = false;
+  bool mUpdateCheckConsumed = false;
+  bool mUpdateNotificationShown = false;
+  std::future<std::string> mUpdateCheckFuture;
 };

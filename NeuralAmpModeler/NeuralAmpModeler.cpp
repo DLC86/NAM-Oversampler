@@ -1,10 +1,23 @@
 #include <algorithm> // std::clamp, std::min
 #include <cctype>
 #include <cmath> // pow
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <utility>
+
+#if defined(_WIN32)
+  #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+  #endif
+  #ifndef NOMINMAX
+    #define NOMINMAX
+  #endif
+  #include <windows.h>
+  #include <wininet.h>
+#endif
 
 #include "../NeuralAmpModelerCore/NAM/activations.h"
 #include "../NeuralAmpModelerCore/NAM/get_dsp.h"
@@ -664,9 +677,45 @@ void NeuralAmpModeler::StartMidiLearnForParam(int paramIdx)
   }
 }
 
+void NeuralAmpModeler::StopMidiLearn()
+{
+  mMidiLearnParam.store(-1, std::memory_order_release);
+  _MarkInternalPresetUIDirty();
+}
+
+void NeuralAmpModeler::ClearMidiCCForParam(int paramIdx)
+{
+  if (!IsMidiAssignableParam(paramIdx))
+    return;
+
+  bool changed = false;
+  for (int i = 0; i < 128; ++i)
+  {
+    if (mMidiCCToParam[i] == paramIdx)
+    {
+      mMidiCCToParam[i] = kNoMidiCCAssignment;
+      changed = true;
+    }
+  }
+
+  mMidiLearnParam.store(-1, std::memory_order_release);
+  if (changed)
+    _SaveGlobalInternalPresetBank();
+  _MarkInternalPresetUIDirty();
+}
+
 void NeuralAmpModeler::AssignMidiCCToParam(int paramIdx, int cc)
 {
-  if (!IsMidiAssignableParam(paramIdx) || cc < 0 || cc >= 128)
+  if (!IsMidiAssignableParam(paramIdx))
+    return;
+
+  if (cc < 0)
+  {
+    ClearMidiCCForParam(paramIdx);
+    return;
+  }
+
+  if (cc >= 128)
     return;
 
   for (int i = 0; i < 128; ++i)
@@ -1408,9 +1457,172 @@ void NeuralAmpModeler::OnReset()
   _UpdateLatency();
 }
 
+namespace
+{
+std::array<int, 3> ParseSemVerTriplet(std::string version)
+{
+  while (!version.empty() && !std::isdigit(static_cast<unsigned char>(version.front())))
+    version.erase(version.begin());
+
+  std::array<int, 3> parts {0, 0, 0};
+  std::stringstream stream(version);
+  std::string token;
+  for (int i = 0; i < 3 && std::getline(stream, token, '.'); ++i)
+  {
+    std::string digits;
+    for (char c : token)
+    {
+      if (std::isdigit(static_cast<unsigned char>(c)))
+        digits.push_back(c);
+      else
+        break;
+    }
+
+    if (!digits.empty())
+      parts[i] = std::stoi(digits);
+  }
+  return parts;
+}
+} // namespace
+
+bool NeuralAmpModeler::_IsReleaseVersionNewer(const std::string& latestTag, const std::string& currentVersion)
+{
+  const auto latest = ParseSemVerTriplet(latestTag);
+  const auto current = ParseSemVerTriplet(currentVersion);
+  for (size_t i = 0; i < latest.size(); ++i)
+  {
+    if (latest[i] != current[i])
+      return latest[i] > current[i];
+  }
+  return false;
+}
+
+std::string NeuralAmpModeler::_FetchLatestStableReleaseTag()
+{
+#if defined(_WIN32)
+  constexpr const char* kUserAgent = "NAM On Steroids Update Check";
+  constexpr const char* kLatestReleaseUrl = "https://api.github.com/repos/DLC86/NAM-Oversampler/releases/latest";
+  constexpr const char* kHeaders = "Accept: application/vnd.github+json\r\n"
+                                   "User-Agent: NAM On Steroids Update Check\r\n";
+
+  HINTERNET internet = InternetOpenA(kUserAgent, INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
+  if (internet == nullptr)
+    return {};
+
+  const DWORD timeoutMs = 3500;
+  InternetSetOptionA(internet, INTERNET_OPTION_CONNECT_TIMEOUT, (LPVOID)&timeoutMs, sizeof(timeoutMs));
+  InternetSetOptionA(internet, INTERNET_OPTION_SEND_TIMEOUT, (LPVOID)&timeoutMs, sizeof(timeoutMs));
+  InternetSetOptionA(internet, INTERNET_OPTION_RECEIVE_TIMEOUT, (LPVOID)&timeoutMs, sizeof(timeoutMs));
+
+  HINTERNET request = InternetOpenUrlA(internet, kLatestReleaseUrl, kHeaders, -1L,
+                                      INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_SECURE,
+                                      0);
+  if (request == nullptr)
+  {
+    InternetCloseHandle(internet);
+    return {};
+  }
+
+  std::string response;
+  char buffer[2048];
+  DWORD bytesRead = 0;
+  while (InternetReadFile(request, buffer, sizeof(buffer), &bytesRead) && bytesRead > 0)
+    response.append(buffer, buffer + bytesRead);
+
+  InternetCloseHandle(request);
+  InternetCloseHandle(internet);
+
+  const auto json = nlohmann::json::parse(response, nullptr, false);
+  if (json.is_discarded() || !json.contains("tag_name") || !json["tag_name"].is_string())
+    return {};
+
+  return json["tag_name"].get<std::string>();
+#elif defined(OS_MAC)
+  constexpr const char* kLatestReleaseCommand =
+    "/usr/bin/curl -LfsS --connect-timeout 3 --max-time 5 "
+    "-H 'Accept: application/vnd.github+json' "
+    "-H 'User-Agent: NAM On Steroids Update Check' "
+    "'https://api.github.com/repos/DLC86/NAM-Oversampler/releases/latest'";
+
+  FILE* pipe = popen(kLatestReleaseCommand, "r");
+  if (pipe == nullptr)
+    return {};
+
+  std::string response;
+  char buffer[2048];
+  while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
+    response += buffer;
+
+  const int exitCode = pclose(pipe);
+  if (exitCode != 0)
+    return {};
+
+  const auto json = nlohmann::json::parse(response, nullptr, false);
+  if (json.is_discarded() || !json.contains("tag_name") || !json["tag_name"].is_string())
+    return {};
+
+  return json["tag_name"].get<std::string>();
+#else
+  return {};
+#endif
+}
+
+void NeuralAmpModeler::_MaybeStartUpdateCheck()
+{
+  if (mUpdateCheckStarted || mUpdateCheckConsumed || GetUI() == nullptr)
+    return;
+
+  mUpdateCheckStarted = true;
+  mUpdateCheckFuture = std::async(std::launch::async, []() { return NeuralAmpModeler::_FetchLatestStableReleaseTag(); });
+}
+
+void NeuralAmpModeler::_HandleUpdateCheckResult()
+{
+  if (mUpdateCheckConsumed || !mUpdateCheckStarted || !mUpdateCheckFuture.valid())
+    return;
+
+  if (mUpdateCheckFuture.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+    return;
+
+  mUpdateCheckConsumed = true;
+
+  std::string latestTag;
+  try
+  {
+    latestTag = mUpdateCheckFuture.get();
+  }
+  catch (...)
+  {
+    return;
+  }
+
+  if (latestTag.empty() || !_IsReleaseVersionNewer(latestTag, PLUG_VERSION_STR) || mUpdateNotificationShown)
+    return;
+
+  mUpdateNotificationShown = true;
+  if (auto* pGraphics = GetUI())
+  {
+    WDL_String message;
+    message.SetFormatted(512,
+                         "A newer stable release of NAM On Steroids is available.\n\nCurrent version: %s\nLatest "
+                         "stable release: %s\n\nOpen the GitHub release page?",
+                         PLUG_VERSION_STR, latestTag.c_str());
+    pGraphics->ShowMessageBox(message.Get(), "Update available", kMB_YESNO, [this](EMsgBoxResult result) {
+      if (result == kYES)
+      {
+        if (auto* ui = GetUI())
+          ui->OpenURL("https://github.com/DLC86/NAM-Oversampler/releases/latest");
+      }
+    });
+  }
+}
+
 void NeuralAmpModeler::OnIdle()
 {
 #if PLUG_HAS_UI
+  _MaybeStartUpdateCheck();
+  _HandleUpdateCheckResult();
+
   if (IsTunerActive())
   {
     mTunerDetector.AnalyzePending();
@@ -2146,20 +2358,26 @@ sample** NeuralAmpModeler::_ProcessCutFilters(sample** inputs, const size_t nCha
 {
   sample** current = inputs;
 
+  const double lowCutFrequency = GetParam(kLowCutFrequency)->Value();
+  const double highCutFrequency = GetParam(kHighCutFrequency)->Value();
+  const bool lowCutEnabled = lowCutFrequency > 20.0001;
+  const bool highCutEnabled = highCutFrequency < 19999.9;
+
+  if (!lowCutEnabled && !highCutEnabled)
+    return current;
+
   const bool lowPost = GetParam(kLowCutPostNAM)->Bool();
-  if (lowPost == postNAM)
+  if (lowCutEnabled && lowPost == postNAM)
   {
     current = (postNAM ? mLowCutPost : mLowCutPre)
-                .Process(current, nChans, nFrames, GetParam(kLowCutFrequency)->Value(),
-                         GetParam(kLowCutSlope)->Int(), true);
+                .Process(current, nChans, nFrames, lowCutFrequency, GetParam(kLowCutSlope)->Int(), true);
   }
 
   const bool highPost = GetParam(kHighCutPostNAM)->Bool();
-  if (highPost == postNAM)
+  if (highCutEnabled && highPost == postNAM)
   {
     current = (postNAM ? mHighCutPost : mHighCutPre)
-                .Process(current, nChans, nFrames, GetParam(kHighCutFrequency)->Value(),
-                         GetParam(kHighCutSlope)->Int(), false);
+                .Process(current, nChans, nFrames, highCutFrequency, GetParam(kHighCutSlope)->Int(), false);
   }
 
   return current;

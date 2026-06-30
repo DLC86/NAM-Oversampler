@@ -182,6 +182,58 @@ private:
 class NAMMidiCCMenuMixin
 {
 protected:
+  void AddMidiCCContextMenuItems(IControl* owner, IPopupMenu& contextMenu, int paramIdx)
+  {
+    auto* plug = owner != nullptr ? static_cast<NeuralAmpModeler*>(owner->GetDelegate()) : nullptr;
+    if (owner == nullptr || plug == nullptr || !plug->IsMidiAssignableParam(paramIdx))
+    {
+      mMidiCCContextMenuParamIdx = -1;
+      mMidiCCContextMenuStartIdx = -1;
+      return;
+    }
+
+    if (contextMenu.NItems() > 0)
+      contextMenu.AddSeparator();
+
+    mMidiCCContextMenuParamIdx = paramIdx;
+    mMidiCCContextMenuStartIdx = contextMenu.NItems();
+    contextMenu.AddItem("MIDI CC Learn");
+    const int assignedCC = plug->GetMidiCCForParam(paramIdx);
+    contextMenu.AddItem("MIDI CC None", -1,
+                        assignedCC < 0 ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
+    for (int cc = 0; cc < 128; ++cc)
+    {
+      WDL_String item;
+      item.SetFormatted(32, "MIDI CC %03d", cc);
+      contextMenu.AddItem(item.Get(), -1, cc == assignedCC ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
+    }
+  }
+
+  bool HandleMidiCCContextSelection(int itemSelected, IControl* owner)
+  {
+    if (mMidiCCContextMenuParamIdx < 0 || mMidiCCContextMenuStartIdx < 0 || itemSelected < mMidiCCContextMenuStartIdx)
+      return false;
+
+    const int localIndex = itemSelected - mMidiCCContextMenuStartIdx;
+    if (localIndex < 0 || localIndex > 129)
+      return false;
+
+    auto* plug = owner != nullptr ? static_cast<NeuralAmpModeler*>(owner->GetDelegate()) : nullptr;
+    if (plug == nullptr)
+      return false;
+
+    if (localIndex == 0)
+      plug->StartMidiLearnForParam(mMidiCCContextMenuParamIdx);
+    else if (localIndex == 1)
+      plug->ClearMidiCCForParam(mMidiCCContextMenuParamIdx);
+    else
+      plug->AssignMidiCCToParam(mMidiCCContextMenuParamIdx, localIndex - 2);
+
+    mMidiCCContextMenuParamIdx = -1;
+    mMidiCCContextMenuStartIdx = -1;
+    return true;
+  }
+
   void OpenMidiCCMenu(IControl* owner, int paramIdx)
   {
     auto* plug = owner != nullptr ? static_cast<NeuralAmpModeler*>(owner->GetDelegate()) : nullptr;
@@ -190,9 +242,10 @@ protected:
 
     mMidiCCMenuParamIdx = paramIdx;
     mMidiCCMenu.Clear();
-    mMidiCCMenu.SetNItemsPerColumn(33);
+    mMidiCCMenu.SetNItemsPerColumn(34);
     mMidiCCMenu.AddItem("Learn");
     const int assignedCC = plug->GetMidiCCForParam(paramIdx);
+    mMidiCCMenu.AddItem("None", -1, assignedCC < 0 ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
     for (int cc = 0; cc < 128; ++cc)
     {
       WDL_String item;
@@ -214,10 +267,23 @@ protected:
     const int chosen = pSelectedMenu->GetChosenItemIdx();
     if (chosen == 0)
       plug->StartMidiLearnForParam(mMidiCCMenuParamIdx);
-    else if (chosen >= 1 && chosen <= 128)
-      plug->AssignMidiCCToParam(mMidiCCMenuParamIdx, chosen - 1);
+    else if (chosen == 1)
+      plug->ClearMidiCCForParam(mMidiCCMenuParamIdx);
+    else if (chosen >= 2 && chosen <= 129)
+      plug->AssignMidiCCToParam(mMidiCCMenuParamIdx, chosen - 2);
 
     mMidiCCMenuParamIdx = -1;
+    return true;
+  }
+
+  bool HandleMidiLearnBadgeClick(IControl* owner, const IRECT& r, float x, float y, int paramIdx)
+  {
+    auto* plug = owner != nullptr ? static_cast<NeuralAmpModeler*>(owner->GetDelegate()) : nullptr;
+    if (plug == nullptr || !plug->IsMidiLearnArmedForParam(paramIdx) || !GetMidiLearnBadgeRect(r).Contains(x, y))
+      return false;
+
+    plug->StopMidiLearn();
+    owner->SetDirty(false);
     return true;
   }
 
@@ -227,7 +293,7 @@ protected:
     if (plug == nullptr || !plug->IsMidiLearnArmedForParam(paramIdx))
       return;
 
-    const IRECT badge = r.GetFromTop(16.0f).GetCentredInside(44.0f, 14.0f);
+    const IRECT badge = GetMidiLearnBadgeRect(r);
     g.FillRoundRect(COLOR_BLACK.WithOpacity(0.85f), badge, 3.0f);
     g.DrawRoundRect(PluginColors::NAM_THEMECOLOR, badge, 3.0f, nullptr, 1.0f);
     g.DrawText(IText(9.0f, PluginColors::NAM_THEMECOLOR, "Roboto-Regular", EAlign::Center, EVAlign::Middle),
@@ -235,8 +301,12 @@ protected:
   }
 
 private:
+  IRECT GetMidiLearnBadgeRect(const IRECT& r) const { return r.GetFromTop(16.0f).GetCentredInside(44.0f, 14.0f); }
+
   IPopupMenu mMidiCCMenu {"MIDI CC"};
   int mMidiCCMenuParamIdx = -1;
+  int mMidiCCContextMenuParamIdx = -1;
+  int mMidiCCContextMenuStartIdx = -1;
 };
 
 class NAMKnobControl : public IVKnobControl, public IBitmapBase, public NAMMidiCCMenuMixin
@@ -253,12 +323,28 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    if (HandleMidiLearnBadgeClick(this, mRECT, x, y, GetParamIdx()))
+      return;
+
     if (mod.R && PLUG()->IsMidiAssignableParam(GetParamIdx()))
     {
       OpenMidiCCMenu(this, GetParamIdx());
       return;
     }
     IVKnobControl::OnMouseDown(x, y, mod);
+  }
+
+  void CreateContextMenu(IPopupMenu& contextMenu) override
+  {
+    IVKnobControl::CreateContextMenu(contextMenu);
+    AddMidiCCContextMenuItems(this, contextMenu, GetParamIdx());
+  }
+
+  void OnContextSelection(int itemSelected) override
+  {
+    if (!HandleMidiCCContextSelection(itemSelected, this))
+      IVKnobControl::OnContextSelection(itemSelected);
+    SetDirty(false);
   }
 
   void OnPopupMenuSelection(IPopupMenu* pSelectedMenu, int valIdx) override
@@ -525,12 +611,28 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    if (HandleMidiLearnBadgeClick(this, mRECT, x, y, GetParamIdx()))
+      return;
+
     if (mod.R && PLUG()->IsMidiAssignableParam(GetParamIdx()))
     {
       OpenMidiCCMenu(this, GetParamIdx());
       return;
     }
     IVKnobControl::OnMouseDown(x, y, mod);
+  }
+
+  void CreateContextMenu(IPopupMenu& contextMenu) override
+  {
+    IVKnobControl::CreateContextMenu(contextMenu);
+    AddMidiCCContextMenuItems(this, contextMenu, GetParamIdx());
+  }
+
+  void OnContextSelection(int itemSelected) override
+  {
+    if (!HandleMidiCCContextSelection(itemSelected, this))
+      IVKnobControl::OnContextSelection(itemSelected);
+    SetDirty(false);
   }
 
   void OnPopupMenuSelection(IPopupMenu* pSelectedMenu, int valIdx) override
@@ -603,12 +705,28 @@ public:
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
+    if (HandleMidiLearnBadgeClick(this, mRECT, x, y, GetParamIdx()))
+      return;
+
     if (mod.R && PLUG()->IsMidiAssignableParam(GetParamIdx()))
     {
       OpenMidiCCMenu(this, GetParamIdx());
       return;
     }
     IVSlideSwitchControl::OnMouseDown(x, y, mod);
+  }
+
+  void CreateContextMenu(IPopupMenu& contextMenu) override
+  {
+    IVSlideSwitchControl::CreateContextMenu(contextMenu);
+    AddMidiCCContextMenuItems(this, contextMenu, GetParamIdx());
+  }
+
+  void OnContextSelection(int itemSelected) override
+  {
+    if (!HandleMidiCCContextSelection(itemSelected, this))
+      IVSlideSwitchControl::OnContextSelection(itemSelected);
+    SetDirty(false);
   }
 
   void OnPopupMenuSelection(IPopupMenu* pSelectedMenu, int valIdx) override
@@ -2236,10 +2354,16 @@ public:
         "How to adjust the level of the output.\nRaw=No adjustment.\nNormalized=Adjust the level so that all models "
         "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration.");
 
-      const auto midiChannelArea = outputArea.GetFromBottom(24.0f).GetTranslated(0.0f, 28.0f).GetMidHPadded(62.0f);
+      const auto midiChannelArea =
+        IRECT(outputArea.MW() - 45.0f, outputArea.T + 42.0f, outputArea.MW() + 45.0f, outputArea.T + 72.0f);
+      AddNamedChildControl(new IVLabelControl(midiChannelArea.GetTranslated(0.0f, -19.0f).GetFromTop(16.0f),
+                                              "MIDI Channel", style),
+                           "MidiChannelLabel");
+      const auto midiChannelStyle = mRadioButtonStyle.WithColor(kBG, COLOR_BLACK)
+                                      .WithColor(kFG, COLOR_BLACK)
+                                      .WithColor(kFR, PluginColors::NAM_THEMECOLOR.WithOpacity(0.40f));
       auto* midiChannelControl =
-        AddNamedChildControl(new IVMenuButtonControl(midiChannelArea, kMidiChannel, "MIDI Channel",
-                                                     mStyle.WithValueText(text).WithDrawFrame(false),
+        AddNamedChildControl(new IVMenuButtonControl(midiChannelArea, kMidiChannel, "", midiChannelStyle,
                                                      EVShape::Rectangle),
                              mControlNames.midiChannel);
       midiChannelControl->SetTooltip("MIDI channel used for internal preset Program Change and assigned CCs.");
