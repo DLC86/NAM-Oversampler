@@ -191,6 +191,17 @@ public:
 
   void OnRescale() override { mBitmap = GetUI()->GetScaledBitmap(mBitmap); }
 
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    if (mod.R && PLUG()->IsMidiAssignableParam(GetParamIdx()))
+    {
+      PLUG()->StartMidiLearnForParam(GetParamIdx());
+      SetTooltip("MIDI learn armed: move a MIDI CC to assign it to this control");
+      return;
+    }
+    IVKnobControl::OnMouseDown(x, y, mod);
+  }
+
   void DrawWidget(IGraphics& g) override
   {
     float widgetRadius = GetRadius() * 0.73;
@@ -211,6 +222,226 @@ public:
   }
 };
 
+class NAMInternalPresetSlotControl : public IControl
+{
+public:
+  NAMInternalPresetSlotControl(const IRECT& bounds, const ISVG& leftSVG, const ISVG& rightSVG)
+  : IControl(bounds)
+  , mLeftSVG(leftSVG)
+  , mRightSVG(rightSVG)
+  {
+    SetTooltip("Internal presets: arrows recall, save writes current slot or asks for a slot from Init");
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const auto areas = GetAreas();
+    const IColor frame = PluginColors::NAM_THEMECOLOR.WithOpacity(mMouseIsOver ? 0.9f : 0.55f);
+    const IColor fill = COLOR_BLACK.WithOpacity(0.82f);
+    const IText text(13.0f, COLOR_WHITE, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+
+    g.FillRoundRect(fill, areas.slot, 3.0f);
+    g.DrawRoundRect(frame, areas.slot, 3.0f, nullptr, 1.0f);
+    const bool canRevert = PLUG()->IsCurrentInternalPresetDirty();
+    const IColor disabledFrame = PluginColors::HELP_TEXT.WithOpacity(0.22f);
+    const IColor disabledIcon = PluginColors::HELP_TEXT.WithOpacity(0.32f);
+    DrawIconButton(g, areas.revert, canRevert ? frame : disabledFrame, fill);
+    DrawIconButton(g, areas.save, frame, fill);
+    DrawIconButton(g, areas.saveAs, frame, fill);
+    DrawIconButton(g, areas.list, frame, fill);
+    g.DrawSVG(mLeftSVG, areas.left.GetCentredInside(10.0f, 10.0f));
+    g.DrawSVG(mRightSVG, areas.right.GetCentredInside(10.0f, 10.0f));
+    WDL_String name;
+    const int current = PLUG()->GetCurrentInternalPresetIndex();
+    if (current < 0)
+      name.SetFormatted(180, "000 %s%s", PLUG()->GetCurrentInternalPresetName(),
+                        PLUG()->IsCurrentInternalPresetDirty() ? " *" : "");
+    else
+      name.SetFormatted(180, "%03d %s%s", current + 1, PLUG()->GetCurrentInternalPresetName(),
+                        PLUG()->IsCurrentInternalPresetDirty() ? " *" : "");
+    g.DrawText(text, name.Get(), areas.name.GetPadded(-2.0f));
+    DrawUndoIcon(g, areas.revert.GetCentredInside(13.0f, 13.0f),
+                 canRevert ? PluginColors::NAM_THEMEFONTCOLOR : disabledIcon);
+    DrawFloppyIcon(g, areas.save.GetCentredInside(13.0f, 13.0f), PluginColors::NAM_THEMEFONTCOLOR);
+    DrawSaveAsIcon(g, areas.saveAs.GetCentredInside(15.0f, 15.0f), PluginColors::NAM_THEMEFONTCOLOR);
+    DrawHamburgerIcon(g, areas.list.GetCentredInside(13.0f, 13.0f), PluginColors::NAM_THEMEFONTCOLOR);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    const auto areas = GetAreas();
+    if (areas.left.Contains(x, y))
+      PLUG()->SelectAdjacentInternalPreset(-1);
+    else if (areas.right.Contains(x, y))
+      PLUG()->SelectAdjacentInternalPreset(1);
+    else if (areas.revert.Contains(x, y))
+    {
+      const int current = PLUG()->GetCurrentInternalPresetIndex();
+      if (current >= 0 && PLUG()->IsCurrentInternalPresetDirty())
+        PLUG()->SelectInternalPreset(current);
+      else if (current < 0 && PLUG()->IsCurrentInternalPresetDirty())
+        PLUG()->RenameCurrentInternalPreset("Init");
+    }
+    else if (areas.save.Contains(x, y))
+    {
+      if (PLUG()->GetCurrentInternalPresetIndex() < 0)
+        OpenPresetMenu(true);
+      else
+        PLUG()->SaveCurrentInternalPreset();
+    }
+    else if (areas.saveAs.Contains(x, y))
+      OpenPresetMenu(true);
+    else if (areas.list.Contains(x, y))
+      OpenPresetMenu(false);
+    else if (areas.name.Contains(x, y))
+    {
+      OpenNameEditor(areas.name);
+    }
+
+    SetDirty(false);
+  }
+
+  void OnTextEntryCompletion(const char* str, int valIdx) override
+  {
+    PLUG()->RenameCurrentInternalPreset(str);
+    SetDirty(false);
+  }
+
+  void OnPopupMenuSelection(IPopupMenu* pSelectedMenu, int valIdx) override
+  {
+    if (pSelectedMenu && pSelectedMenu->GetChosenItem())
+    {
+      const int index = pSelectedMenu->GetChosenItemIdx();
+      if (mMenuMode == MenuMode::SaveTarget)
+        PLUG()->SaveCurrentInternalPresetToSlot(index);
+      else
+        PLUG()->SelectInternalPreset(index);
+    }
+    SetDirty(false);
+  }
+
+private:
+  enum class MenuMode
+  {
+    Recall,
+    SaveTarget
+  };
+
+  struct Areas
+  {
+    IRECT slot;
+    IRECT left;
+    IRECT name;
+    IRECT right;
+    IRECT revert;
+    IRECT save;
+    IRECT saveAs;
+    IRECT list;
+  };
+
+  Areas GetAreas() const
+  {
+    IRECT r = mRECT;
+    Areas a;
+    a.revert = r.ReduceFromLeft(24.0f);
+    r.ReduceFromLeft(5.0f);
+    a.list = r.ReduceFromLeft(24.0f);
+    r.ReduceFromLeft(5.0f);
+    a.saveAs = r.ReduceFromRight(24.0f);
+    r.ReduceFromRight(5.0f);
+    a.save = r.ReduceFromRight(24.0f);
+    r.ReduceFromRight(5.0f);
+    a.slot = r;
+    IRECT slot = a.slot;
+    a.left = slot.ReduceFromLeft(24.0f);
+    a.right = slot.ReduceFromRight(24.0f);
+    a.name = slot;
+    return a;
+  }
+
+  static void DrawIconButton(IGraphics& g, const IRECT& r, const IColor& frame, const IColor& fill)
+  {
+    g.FillRoundRect(fill, r, 3.0f);
+    g.DrawRoundRect(frame, r, 3.0f, nullptr, 1.0f);
+  }
+
+  static void DrawHamburgerIcon(IGraphics& g, const IRECT& r, const IColor& color)
+  {
+    const float stroke = 1.7f;
+    const float x0 = r.L + 1.0f;
+    const float x1 = r.R - 1.0f;
+    g.DrawLine(color, x0, r.T + 3.0f, x1, r.T + 3.0f, nullptr, stroke);
+    g.DrawLine(color, x0, r.MH(), x1, r.MH(), nullptr, stroke);
+    g.DrawLine(color, x0, r.B - 3.0f, x1, r.B - 3.0f, nullptr, stroke);
+  }
+
+  static void DrawFloppyIcon(IGraphics& g, const IRECT& r, const IColor& color)
+  {
+    const float stroke = 1.4f;
+    g.DrawRoundRect(color, r, 1.2f, nullptr, stroke);
+    g.DrawRect(color, IRECT(r.L + 2.0f, r.T + 2.0f, r.R - 3.0f, r.T + 5.0f), nullptr, stroke);
+    g.FillRect(color, IRECT(r.R - 4.0f, r.T + 2.0f, r.R - 2.0f, r.T + 5.0f));
+    g.DrawLine(color, r.L + 3.0f, r.B - 3.0f, r.R - 3.0f, r.B - 3.0f, nullptr, stroke);
+  }
+
+  static void DrawUndoIcon(IGraphics& g, const IRECT& r, const IColor& color)
+  {
+    const float stroke = 1.6f;
+    const float cx = r.MW() + 1.0f;
+    const float cy = r.MH();
+    g.DrawArc(color, cx - 0.5f, cy + 0.5f, r.W() * 0.36f, -35.0f, 235.0f, nullptr, stroke);
+    g.DrawLine(color, r.L + 1.5f, cy - 0.5f, r.L + 5.5f, cy - 4.5f, nullptr, stroke);
+    g.DrawLine(color, r.L + 1.5f, cy - 0.5f, r.L + 6.5f, cy + 1.5f, nullptr, stroke);
+  }
+
+  static void DrawSaveAsIcon(IGraphics& g, const IRECT& r, const IColor& color)
+  {
+    const float stroke = 1.25f;
+    const IRECT floppy = IRECT(r.L, r.T, r.R - 2.0f, r.B - 1.0f);
+    g.DrawRoundRect(color, floppy, 1.2f, nullptr, stroke);
+    g.DrawRect(color, IRECT(floppy.L + 2.0f, floppy.T + 2.0f, floppy.R - 3.0f, floppy.T + 5.0f), nullptr, stroke);
+    g.FillRect(color, IRECT(floppy.R - 4.0f, floppy.T + 2.0f, floppy.R - 2.0f, floppy.T + 5.0f));
+    g.DrawLine(color, floppy.L + 3.0f, floppy.B - 3.0f, floppy.R - 5.0f, floppy.B - 3.0f, nullptr, stroke);
+
+    const IRECT pencil = IRECT(r.MW() + 1.0f, r.MH() + 1.0f, r.R, r.B);
+    g.DrawLine(color, pencil.L, pencil.B - 1.0f, pencil.R - 1.0f, pencil.T, nullptr, 1.8f);
+    g.DrawLine(color, pencil.L - 1.5f, pencil.B, pencil.L + 1.0f, pencil.B - 0.5f, nullptr, stroke);
+  }
+
+  void OpenNameEditor(const IRECT& nameArea)
+  {
+    if (auto* ui = GetUI())
+    {
+      ui->CreateTextEntry(*this, IText(13.0f, COLOR_WHITE, "Roboto-Regular", EAlign::Center, EVAlign::Middle),
+                          nameArea, PLUG()->GetCurrentInternalPresetName());
+    }
+  }
+
+  void OpenPresetMenu(bool saveTarget)
+  {
+    mMenuMode = saveTarget ? MenuMode::SaveTarget : MenuMode::Recall;
+    mMenu.Clear();
+    mMenu.SetNItemsPerColumn(32);
+    const int current = PLUG()->GetCurrentInternalPresetIndex();
+    for (int i = 0; i < 128; ++i)
+    {
+      WDL_String item;
+      item.SetFormatted(180, "%03d  %s%s", i + 1, PLUG()->GetInternalPresetName(i),
+                        !saveTarget && i == current && PLUG()->IsCurrentInternalPresetDirty() ? " *" : "");
+      if (!saveTarget && i == current)
+        mMenu.AddItem(item.Get(), -1, IPopupMenu::Item::kChecked);
+      else
+        mMenu.AddItem(item.Get());
+    }
+    GetUI()->CreatePopupMenu(*this, mMenu, mRECT);
+  }
+
+  ISVG mLeftSVG;
+  ISVG mRightSVG;
+  IPopupMenu mMenu {"Internal Presets"};
+  MenuMode mMenuMode = MenuMode::Recall;
+};
+
 class NAMFilterKnobControl : public IVKnobControl, public IBitmapBase
 {
 public:
@@ -224,6 +455,17 @@ public:
   }
 
   void OnRescale() override { mBitmap = GetUI()->GetScaledBitmap(mBitmap); }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    if (mod.R && PLUG()->IsMidiAssignableParam(GetParamIdx()))
+    {
+      PLUG()->StartMidiLearnForParam(GetParamIdx());
+      SetTooltip("MIDI learn armed: move a MIDI CC to assign it to this control");
+      return;
+    }
+    IVKnobControl::OnMouseDown(x, y, mod);
+  }
 
   void DrawWidget(IGraphics& g) override
   {
@@ -283,6 +525,17 @@ public:
   {
     DrawTrack(g, mWidgetBounds);
     DrawHandle(g, mHandleBounds);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    if (mod.R && PLUG()->IsMidiAssignableParam(GetParamIdx()))
+    {
+      PLUG()->StartMidiLearnForParam(GetParamIdx());
+      SetTooltip("MIDI learn armed: move a MIDI CC to assign it to this switch");
+      return;
+    }
+    IVSlideSwitchControl::OnMouseDown(x, y, mod);
   }
 
   void DrawTrack(IGraphics& g, const IRECT& bounds) override
@@ -1009,43 +1262,96 @@ public:
     }
     mTabLabels.Get(2)->Set(ss.str().c_str());
   };
+
+  void DrawWidget(IGraphics& g) override
+  {
+    const int hit = GetSelectedIdx();
+    for (int i = 0; i < mNumStates; i++)
+    {
+      IRECT r = mButtons.Get()[i];
+      DrawButton(g, r.GetFromLeft(mButtonAreaWidth).GetCentredInside(mButtonSize), i == hit, mMouseOverButton == i,
+                 ETabSegment::Mid, IsDisabled() || GetStateDisabled(i));
+
+      if (mTabLabels.Get(i))
+      {
+        r = r.GetFromRight(r.W() - mButtonAreaWidth);
+        const bool unavailable = IsDisabled() || GetStateDisabled(i);
+        const IColor textColor = unavailable ? PluginColors::HELP_TEXT.WithOpacity(0.35f)
+                               : i == hit      ? PluginColors::NAM_THEMECOLOR
+                                               : COLOR_WHITE;
+        g.DrawText(mStyle.valueText.WithFGColor(textColor), mTabLabels.Get(i)->Get(), r, &mBlend);
+      }
+    }
+  }
 };
 
-class OversamplingControl : public IVRadioButtonControl
+class NAMOversamplingRadioButtonControl : public IVRadioButtonControl
+{
+public:
+  NAMOversamplingRadioButtonControl(const IRECT& bounds, int paramIdx, const std::initializer_list<const char*>& options,
+                                    const IVStyle& style, float buttonSize,
+                                    EDirection direction = EDirection::Vertical)
+  : IVRadioButtonControl(bounds, paramIdx, options, "", style, EVShape::Ellipse, direction, buttonSize)
+  {
+  }
+
+  void DrawWidget(IGraphics& g) override
+  {
+    const int hit = GetSelectedIdx();
+    for (int i = 0; i < mNumStates; i++)
+    {
+      IRECT r = mButtons.Get()[i];
+      DrawButton(g, r.GetFromLeft(mButtonAreaWidth).GetCentredInside(mButtonSize), i == hit, mMouseOverButton == i,
+                 ETabSegment::Mid, IsDisabled() || GetStateDisabled(i));
+
+      if (mTabLabels.Get(i))
+      {
+        r = r.GetFromRight(r.W() - mButtonAreaWidth);
+        const bool unavailable = IsDisabled() || GetStateDisabled(i);
+        const IColor textColor = unavailable ? PluginColors::HELP_TEXT.WithOpacity(0.35f)
+                               : i == hit      ? PluginColors::NAM_THEMECOLOR
+                                               : PluginColors::HELP_TEXT;
+        g.DrawText(mStyle.valueText.WithFGColor(textColor), mTabLabels.Get(i)->Get(), r, &mBlend);
+      }
+    }
+  }
+};
+
+class OversamplingControl : public NAMOversamplingRadioButtonControl
 {
 public:
   OversamplingControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
                       EDirection direction = EDirection::Vertical)
-  : IVRadioButtonControl(bounds, paramIdx, {"OFF", "2x", "4x", "8x", "16x", "32x"}, "", style,
-                         EVShape::Ellipse, direction, buttonSize) {};
+  : NAMOversamplingRadioButtonControl(bounds, paramIdx, {"OFF", "2x", "4x", "8x", "16x", "32x"}, style, buttonSize,
+                                      direction) {};
 };
 
-class AntiAliasFilterPhaseControl : public IVRadioButtonControl
+class AntiAliasFilterPhaseControl : public NAMOversamplingRadioButtonControl
 {
 public:
   AntiAliasFilterPhaseControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
                               EDirection direction = EDirection::Vertical)
-  : IVRadioButtonControl(bounds, paramIdx,
-                         {"Minimum Phase", "Linear Phase (short)", "Linear Phase (long)"}, "", style,
-                         EVShape::Ellipse, direction, buttonSize) {};
+  : NAMOversamplingRadioButtonControl(bounds, paramIdx,
+                                      {"Minimum Phase", "Linear Phase (short)", "Linear Phase (long)"}, style,
+                                      buttonSize, direction) {};
 };
 
 
-class PhaseMulticoreControl : public IVRadioButtonControl
+class PhaseMulticoreControl : public NAMOversamplingRadioButtonControl
 {
 public:
   PhaseMulticoreControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
                         EDirection direction = EDirection::Vertical)
-  : IVRadioButtonControl(bounds, paramIdx, {"OFF", "ON"}, "", style, EVShape::Ellipse, direction, buttonSize) {};
+  : NAMOversamplingRadioButtonControl(bounds, paramIdx, {"OFF", "ON"}, style, buttonSize, direction) {};
 };
 
-class PhaseThreadControl : public IVRadioButtonControl
+class PhaseThreadControl : public NAMOversamplingRadioButtonControl
 {
 public:
   PhaseThreadControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
                      EDirection direction = EDirection::Vertical)
-  : IVRadioButtonControl(bounds, paramIdx, {"Auto", "2", "4", "8", "12", "16", "20", "24", "32"}, "", style,
-                         EVShape::Ellipse, direction, buttonSize) {};
+  : NAMOversamplingRadioButtonControl(bounds, paramIdx, {"Auto", "2", "4", "8", "12", "16", "20", "24", "32"},
+                                      style, buttonSize, direction) {};
 };
 
 class ToneStackTypeControl : public IVRadioButtonControl
@@ -1988,6 +2294,9 @@ private:
           opened = OpenNoticesPath(GetUI(), path);
 
         if (!opened)
+          opened = OpenEmbeddedNotices(GetUI());
+
+        if (!opened)
           ShowOpenError(GetUI());
 
         GetUI()->ReleaseMouseCapture();
@@ -2105,6 +2414,72 @@ private:
         return ShellExecuteW(nullptr, L"open", launchPath, nullptr, nullptr, SW_SHOWNORMAL) > HINSTANCE(32);
 #else
         return pGraphics->OpenURL(path.Get());
+#endif
+      }
+
+      static bool OpenEmbeddedNotices(IGraphics* pGraphics)
+      {
+        if (pGraphics == nullptr)
+          return false;
+
+#ifdef OS_WIN
+        HMODULE module = static_cast<HMODULE>(pGraphics->GetWinModuleHandle());
+        HRSRC resource = nullptr;
+        const char* const names[] = {
+          "\"ThirdPartyNotices.txt\"",
+          "ThirdPartyNotices.txt",
+          "thirdpartynotices.txt",
+          "THIRDPARTYNOTICES.TXT",
+          "\"thirdpartynotices.txt\"",
+          "\"THIRDPARTYNOTICES.TXT\"",
+        };
+        const char* const types[] = {"TXT", "txt"};
+        for (const char* type : types)
+        {
+          for (const char* name : names)
+          {
+            resource = FindResourceA(module, name, type);
+            if (resource != nullptr)
+              break;
+          }
+          if (resource != nullptr)
+            break;
+        }
+        if (resource == nullptr)
+          return false;
+
+        const DWORD resourceSize = SizeofResource(module, resource);
+        HGLOBAL loadedResource = LoadResource(module, resource);
+        const void* resourceData = loadedResource != nullptr ? LockResource(loadedResource) : nullptr;
+        if (resourceSize == 0 || resourceData == nullptr)
+          return false;
+
+        char tempDir[MAX_PATH];
+        const DWORD tempDirLen = GetTempPathA(MAX_PATH, tempDir);
+        if (tempDirLen == 0 || tempDirLen >= MAX_PATH)
+          return false;
+
+        WDL_String tempPath(tempDir);
+        if (tempPath.GetLength() > 0 && !WDL_IS_DIRCHAR(tempPath.Get()[tempPath.GetLength() - 1]))
+          tempPath.Append(WDL_DIRCHAR_STR);
+        tempPath.Append("NAM On Steroids - ThirdPartyNotices.txt");
+
+        FILE* file = WDL_fopenA(tempPath.Get(), "wb");
+        if (file == nullptr)
+          return false;
+
+        const size_t written = fwrite(resourceData, 1, static_cast<size_t>(resourceSize), file);
+        fclose(file);
+
+        if (written != static_cast<size_t>(resourceSize))
+          return false;
+
+        return OpenNoticesPath(pGraphics, tempPath);
+#else
+        auto data = pGraphics->LoadResource(kNoticesFileName, "txt");
+        if (data.GetSize() <= 0 || data.Get() == nullptr)
+          return false;
+        return false;
 #endif
       }
 

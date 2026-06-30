@@ -22,6 +22,7 @@
 
 void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
 {
+  mApplyingInternalPreset.store(true, std::memory_order_release);
   auto getParamByName = [&](std::string& name) {
     // Could use a map but eh
     for (int i = 0; i < kNumParams; i++)
@@ -52,6 +53,8 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
     }
   }
   OnParamReset(iplug::EParamSource::kPresetRecall);
+  _UnserializeApplyToneStackComponentState(config);
+  _UnserializeApplyInternalPresetState(config, true);
   LEAVE_PARAMS_MUTEX
 
   mNAMPath.Set(static_cast<std::string>(config["NAMPath"]).c_str());
@@ -65,6 +68,8 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
   {
     _StageIR(mIRPath);
   }
+  mApplyingInternalPreset.store(false, std::memory_order_release);
+  _RefreshCurrentInternalPresetDirty();
 }
 
 // Unserialize NAM Path, IR path, then named keys
@@ -101,12 +106,79 @@ void _RenameKeys(nlohmann::json& j, std::unordered_map<std::string, std::string>
 }
 
 void _UpdateConfigFrom_1_5_2(nlohmann::json& config);
+void _UpdateConfigFrom_1_6_0(nlohmann::json& config);
+int _GetConfigFrom_1_6_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config);
+
+// v2.0.1
+
+int _GetConfigFrom_2_0_1(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  int pos = _GetConfigFrom_1_6_0(chunk, startPos, config);
+  _UpdateConfigFrom_1_6_0(config);
+
+  auto tryReadToneStackComponentState = [&](int readPos) {
+    WDL_String toneStackComponentState;
+    const int nextPos = chunk.GetStr(toneStackComponentState, readPos);
+    if (nextPos < 0)
+      return -1;
+
+    try
+    {
+      config["ToneStack Components"] = nlohmann::json::parse(toneStackComponentState.Get());
+      return nextPos;
+    }
+    catch (...)
+    {
+      return -1;
+    }
+  };
+
+  auto tryReadInternalPresetState = [&](int readPos) {
+    WDL_String internalPresetState;
+    const int nextPos = chunk.GetStr(internalPresetState, readPos);
+    if (nextPos < 0)
+      return -1;
+
+    try
+    {
+      config["Internal Presets"] = nlohmann::json::parse(internalPresetState.Get());
+      return nextPos;
+    }
+    catch (...)
+    {
+      return -1;
+    }
+  };
+
+  double inputBoost = 0.0;
+  const int posAfterBoost = chunk.Get(&inputBoost, pos);
+  if (posAfterBoost >= 0)
+  {
+    const int posAfterToneStack = tryReadToneStackComponentState(posAfterBoost);
+    if (posAfterToneStack >= 0)
+    {
+      config["Input Boost"] = inputBoost;
+      const int posAfterInternalPresets = tryReadInternalPresetState(posAfterToneStack);
+      return posAfterInternalPresets >= 0 ? posAfterInternalPresets : posAfterToneStack;
+    }
+  }
+
+  const int posAfterLegacyToneStack = tryReadToneStackComponentState(pos);
+  if (posAfterLegacyToneStack >= 0)
+  {
+    const int posAfterInternalPresets = tryReadInternalPresetState(posAfterLegacyToneStack);
+    return posAfterInternalPresets >= 0 ? posAfterInternalPresets : posAfterLegacyToneStack;
+  }
+  return pos;
+}
 
 // v1.6.0
 
 void _UpdateConfigFrom_1_6_0(nlohmann::json& config)
 {
   _UpdateConfigFrom_1_5_2(config);
+  if (!config.contains("Input Boost"))
+    config["Input Boost"] = 0.0;
 }
 
 int _GetConfigFrom_1_6_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
@@ -569,7 +641,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   _Version version(versionStr);
   // Act accordingly
   nlohmann::json config;
-  if (version >= _Version(1, 6, 0))
+  if (version >= _Version(2, 0, 1))
+  {
+    pos = _GetConfigFrom_2_0_1(chunk, pos, config);
+  }
+  else if (version >= _Version(1, 6, 0))
   {
     pos = _GetConfigFrom_1_6_0(chunk, pos, config);
   }

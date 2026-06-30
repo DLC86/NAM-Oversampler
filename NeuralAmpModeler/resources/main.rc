@@ -183,7 +183,8 @@ BEGIN
     "SLIDESWITCHHANDLE3X_FN PNG SLIDESWITCHHANDLE3X_FN\r\n"
     "METERBACKGROUND_FN PNG METERBACKGROUND_FN\r\n"
     "METERBACKGROUND2X_FN PNG METERBACKGROUND2X_FN\r\n"
-    "METERBACKGROUND3X_FN PNG METERBACKGROUND3X_FN\0"
+    "METERBACKGROUND3X_FN PNG METERBACKGROUND3X_FN\r\n"
+    "\"ThirdPartyNotices.txt\" TXT \"..\\installer\\ThirdPartyNotices.txt\"\0"
 END
 
 #endif    // APSTUDIO_INVOKED
@@ -220,8 +221,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 2,0,0,0
- PRODUCTVERSION 2,0,0,0
+ FILEVERSION 2,1,0,0
+ PRODUCTVERSION 2,1,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -236,8 +237,8 @@ BEGIN
     BEGIN
         BLOCK "040004e4"
         BEGIN
-            VALUE "FileVersion", "2.0.0"
-            VALUE "ProductVersion", "2.0.0"
+            VALUE "FileVersion", "2.1.0"
+            VALUE "ProductVersion", "2.1.0"
             VALUE "FileDescription", "NAM On Steroids"
             VALUE "InternalName", "NAM On Steroids"
             VALUE "ProductName", "NAM On Steroids"
@@ -298,5 +299,6 @@ SLIDESWITCHHANDLE3X_FN PNG SLIDESWITCHHANDLE3X_FN
 METERBACKGROUND_FN PNG METERBACKGROUND_FN
 METERBACKGROUND2X_FN PNG METERBACKGROUND2X_FN
 METERBACKGROUND3X_FN PNG METERBACKGROUND3X_FN
+"ThirdPartyNotices.txt" TXT "..\\installer\\ThirdPartyNotices.txt"
 /////////////////////////////////////////////////////////////////////////////
 #endif    // not APSTUDIO_INVOKED

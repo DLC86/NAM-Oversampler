@@ -45,6 +45,7 @@
 #include <condition_variable>
 #include <memory>
 #include <array>
+#include <unordered_map>
 
 #if defined(__APPLE__)
 #include <pthread.h>
@@ -113,6 +114,7 @@ enum EParams
   kHighCutFrequency,
   kHighCutSlope,
   kHighCutPostNAM,
+  kInputBoost,
   kNumParams
 };
 
@@ -147,6 +149,7 @@ enum ECtrlTags
   kCtrlTagToneStackSelector,
   kCtrlTagCutFiltersButton,
   kCtrlTagCutFiltersBox,
+  kCtrlTagInternalPresetSlot,
   kNumCtrlTags
 };
 
@@ -1468,6 +1471,7 @@ public:
 
   bool SerializeState(iplug::IByteChunk& chunk) const override;
   int UnserializeState(const iplug::IByteChunk& chunk, int startPos) override;
+  void ProcessMidiMsg(const iplug::IMidiMsg& msg) override;
   void OnUIOpen() override;
   void OnUIClose() override;
   bool OnHostRequestingSupportedViewConfiguration(int width, int height) override { return true; }
@@ -1486,8 +1490,34 @@ public:
   double GetToneStackComponentValue(int type, int component) const;
   void SetToneStackComponentValue(int type, int component, double value);
   void ResetToneStackComponentValues(int type);
+  int GetCurrentInternalPresetIndex() const { return mCurrentInternalPreset.load(std::memory_order_acquire); }
+  const char* GetCurrentInternalPresetName() const;
+  const char* GetInternalPresetName(int index) const;
+  bool IsCurrentInternalPresetDirty() const;
+  void SelectInternalPreset(int index);
+  void SelectAdjacentInternalPreset(int delta);
+  void SaveCurrentInternalPreset();
+  void SaveCurrentInternalPresetToSlot(int index);
+  void RenameCurrentInternalPreset(const char* name);
+  bool IsMidiAssignableParam(int paramIdx) const;
+  void StartMidiLearnForParam(int paramIdx);
 
 private:
+  static constexpr int kNumInternalPresets = 128;
+  static constexpr int kNoMidiCCAssignment = -1;
+
+  struct InternalPreset
+  {
+    std::string name = "empty";
+    std::string editedName;
+    bool saved = false;
+    bool hasEditedName = false;
+    std::array<double, kNumParams> paramValues {};
+    std::string namPath;
+    std::string irPath;
+    std::string toneStackComponentState;
+  };
+
   // Allocates mInputPointers and mOutputPointers
   void _AllocateIOPointers(const size_t nChans);
   // Moves DSP modules from staging area to the main area.
@@ -1506,6 +1536,7 @@ private:
   bool _IsStereoRequested() const;
   bool _CanProcessStereo(const size_t nChansIn, const size_t nChansOut) const;
   void _SetStereoProcessingFromParam();
+  void _EnsureRightModelForStereo();
   std::unique_ptr<ResamplingNAM> _CreateModel(const WDL_String& modelPath);
   // Loads a NAM model and stores it to mStagedNAM
   // Returns an empty string on success, or an error message on failure.
@@ -1549,6 +1580,24 @@ private:
   void _ProcessTunerInput(
     iplug::sample** inputs, const size_t nFrames, const size_t nChans, const double sampleRate);
   iplug::sample** _ProcessCutFilters(iplug::sample** inputs, const size_t nChans, const size_t nFrames, bool postNAM);
+  std::string _SerializeToneStackComponentState() const;
+  void _UnserializeApplyToneStackComponentState(const nlohmann::json& config);
+  void _InitInternalPresets();
+  void _StoreInternalPreset(int index);
+  void _RecallInternalPreset(int index, bool allowFileStaging);
+  void _ApplyEmptyInternalPresetState();
+  bool _IsInternalPresetParam(int paramIdx) const;
+  std::string _SerializeInternalPresetState() const;
+  void _UnserializeApplyInternalPresetState(const nlohmann::json& config, bool mergeWithExisting = false);
+  bool _GetGlobalInternalPresetBankPath(std::filesystem::path& path) const;
+  void _LoadGlobalInternalPresetBank();
+  void _SaveGlobalInternalPresetBank() const;
+  void _ApplyParamNormalizedFromMidi(int paramIdx, double normalizedValue);
+  void _MarkInternalPresetUIDirty();
+  void _MarkCurrentInternalPresetDirty();
+  bool _IsCurrentInternalPresetModified() const;
+  void _RefreshCurrentInternalPresetDirty();
+  bool _InternalPresetPathsEqual(const std::string& lhs, const char* rhs) const;
 
   // See: Unserialization.cpp
   void _UnserializeApplyConfig(nlohmann::json& config);
@@ -1657,4 +1706,15 @@ private:
   iplug::sample* mStereoIRPointers[kNumChannelsStereo] = {nullptr, nullptr};
 
   NAMSender mInputSender, mOutputSender;
+  std::array<InternalPreset, kNumInternalPresets> mInternalPresets;
+  std::string mInitInternalPresetEditedName;
+  bool mInitInternalPresetHasEditedName = false;
+  std::array<int, 128> mMidiCCToParam {};
+  std::atomic<int> mCurrentInternalPreset {-1};
+  std::atomic<int> mMidiLearnParam {-1};
+  std::atomic<int> mPendingInternalPresetFileRecall {-1};
+  std::atomic<bool> mInternalPresetUIDirty {false};
+  std::atomic<bool> mInternalPresetParamUIDirty {false};
+  std::atomic<bool> mCurrentInternalPresetDirty {true};
+  std::atomic<bool> mApplyingInternalPreset {false};
 };

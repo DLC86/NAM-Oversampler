@@ -7,9 +7,9 @@
 	<key>CFBundleExecutable</key>
 	<string>NAM On Steroids</string>
 	<key>CFBundleGetInfoString</key>
-	<string>2.0.0</string>
+	<string>NAM On Steroids v2.1.0 Copyright 2022 Steven Atkinson</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.TheToneScientist.app.NAMOnSteroids.AUv3</string>
+	<string>com.TheToneScientist.app.NAM On Steroids.AUv3</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>XPC!</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.0.0</string>
+	<string>2.1.0</string>
 	<key>CFBundleVersion</key>
-	<string>2.0.0</string>
+	<string>2.1.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>10.12.0</string>
 	<key>NSExtension</key>
@@ -27,7 +27,7 @@
 		<key>NSExtensionAttributes</key>
 		<dict>
 			<key>AudioComponentBundle</key>
-			<string>com.TheToneScientist.app.NAMOnSteroids.AUv3Framework</string>
+			<string>com.TheToneScientist.app.NAM On Steroids.AUv3Framework</string>
 			<key>AudioComponents</key>
 			<array>
 				<dict>
@@ -46,9 +46,9 @@
 						<string>Effects</string>
 					</array>
 					<key>type</key>
-					<string>aufx</string>
+					<string>aumf</string>
 					<key>version</key>
-					<integer>131072</integer>
+					<integer>131073</integer>
 				</dict>
 			</array>
 		</dict>
