@@ -54,7 +54,7 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
   }
   OnParamReset(iplug::EParamSource::kPresetRecall);
   _UnserializeApplyToneStackComponentState(config);
-  _UnserializeApplyInternalPresetState(config, true);
+  _UnserializeApplyInternalPresetState(config, false);
   LEAVE_PARAMS_MUTEX
 
   mNAMPath.Set(static_cast<std::string>(config["NAMPath"]).c_str());
@@ -70,7 +70,7 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
   }
   mApplyingInternalPreset.store(false, std::memory_order_release);
   mCurrentInternalPresetSnapshot = _CaptureCurrentInternalPresetSnapshot();
-  mCurrentInternalPresetDirty.store(false, std::memory_order_release);
+  mCurrentInternalPresetDirty.store(_IsCurrentInternalPresetModified(), std::memory_order_release);
   _MarkInternalPresetUIDirty();
 }
 
@@ -162,6 +162,20 @@ int _GetConfigFrom_2_0_1(const iplug::IByteChunk& chunk, int startPos, nlohmann:
       config["Input Boost"] = inputBoost;
       const int posAfterInternalPresets = tryReadInternalPresetState(posAfterToneStack);
       return posAfterInternalPresets >= 0 ? posAfterInternalPresets : posAfterToneStack;
+    }
+
+    double midiChannel = 0.0;
+    const int posAfterMidiChannel = chunk.Get(&midiChannel, posAfterBoost);
+    if (posAfterMidiChannel >= 0)
+    {
+      const int posAfterToneStackWithMidi = tryReadToneStackComponentState(posAfterMidiChannel);
+      if (posAfterToneStackWithMidi >= 0)
+      {
+        config["Input Boost"] = inputBoost;
+        config["MIDI Channel"] = midiChannel;
+        const int posAfterInternalPresets = tryReadInternalPresetState(posAfterToneStackWithMidi);
+        return posAfterInternalPresets >= 0 ? posAfterInternalPresets : posAfterToneStackWithMidi;
+      }
     }
   }
 

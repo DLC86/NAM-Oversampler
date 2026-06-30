@@ -101,7 +101,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 {
   _InitToneStack();
   _InitInternalPresets();
-  _LoadGlobalInternalPresetBank();
   nam::activations::Activation::enable_fast_tanh();
   GetParam(kInputLevel)->InitGain("Input", 0.0, -20.0, 20.0, 0.1);
   GetParam(kToneBass)->InitDouble("Bass", 5.0, 0.0, 10.0, 0.1);
@@ -150,6 +149,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                     "14", "15", "16"});
   NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
   MakeDefaultPreset("Default");
+  _LoadGlobalInternalPresetBank();
 
   mNoiseGateTrigger.AddListener(&mNoiseGateGain);
 
@@ -473,13 +473,19 @@ double NeuralAmpModeler::GetToneStackComponentValue(int type, int component) con
 void NeuralAmpModeler::SetToneStackComponentValue(int type, int component, double value)
 {
   if (auto* toneStack = dynamic_cast<dsp::tone_stack::BasicNamToneStack*>(mToneStack.get()))
+  {
     toneStack->SetComponentValue(type, component, value);
+    _MarkCurrentInternalPresetDirty();
+  }
 }
 
 void NeuralAmpModeler::ResetToneStackComponentValues(int type)
 {
   if (auto* toneStack = dynamic_cast<dsp::tone_stack::BasicNamToneStack*>(mToneStack.get()))
+  {
     toneStack->ResetComponentValues(type);
+    _MarkCurrentInternalPresetDirty();
+  }
 }
 
 void NeuralAmpModeler::_InitInternalPresets()
@@ -758,7 +764,7 @@ void NeuralAmpModeler::_RefreshCurrentInternalPresetDirty()
   const std::string snapshot = _CaptureCurrentInternalPresetSnapshot();
   if (mCurrentInternalPresetSnapshot.empty())
     mCurrentInternalPresetSnapshot = snapshot;
-  mCurrentInternalPresetDirty.store(snapshot != mCurrentInternalPresetSnapshot, std::memory_order_release);
+  mCurrentInternalPresetDirty.store(_IsCurrentInternalPresetModified(), std::memory_order_release);
   _MarkInternalPresetUIDirty();
 }
 
@@ -872,25 +878,9 @@ void NeuralAmpModeler::_ApplyEmptyInternalPresetState()
     OnParamChange(i);
   }
 
-  _InitToneStack();
+  _ResetToneStackToDefaults();
 
-  {
-    std::lock_guard<std::mutex> lock(mDSPStagingMutex);
-    mModel = nullptr;
-    mModelRight = nullptr;
-    mStagedModel = nullptr;
-    mStagedModelRight = nullptr;
-    mIR = nullptr;
-    mIRRight = nullptr;
-    mStagedIR = nullptr;
-    mStagedIRRight = nullptr;
-    mNAMPath.Set("");
-    mIRPath.Set("");
-    mShouldRemoveModel = false;
-    mShouldRemoveIR = false;
-    mModelCleared = true;
-    mNewModelLoadedInDSP = false;
-  }
+  _ClearModelAndIRForInternalPreset();
 
   _SetInputGain();
   _SetOutputGain();
@@ -900,6 +890,16 @@ void NeuralAmpModeler::_ApplyEmptyInternalPresetState()
 
   mApplyingInternalPreset.store(false, std::memory_order_release);
   mCurrentInternalPresetSnapshot = _CaptureCurrentInternalPresetSnapshot();
+}
+
+void NeuralAmpModeler::_ClearModelAndIRForInternalPreset()
+{
+  OnMessage(kMsgTagClearModel, kCtrlTagModelFileBrowser, 0, nullptr);
+  OnMessage(kMsgTagClearIR, kCtrlTagIRFileBrowser, 0, nullptr);
+#if PLUG_HAS_UI
+  SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, 0, "");
+  SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, 0, "");
+#endif
 }
 
 void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
@@ -951,15 +951,40 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
     {
     }
   }
+  else
+  {
+    _ResetToneStackToDefaults();
+    OnParamChange(kToneStackType);
+  }
 
   if (allowFileStaging)
   {
-    if (!preset.namPath.empty() && preset.namPath != mNAMPath.Get())
+    const bool clearedAllFiles = preset.namPath.empty() && preset.irPath.empty();
+    if (clearedAllFiles)
+    {
+      _ClearModelAndIRForInternalPreset();
+    }
+    else if (preset.namPath.empty())
+    {
+      OnMessage(kMsgTagClearModel, kCtrlTagModelFileBrowser, 0, nullptr);
+#if PLUG_HAS_UI
+      SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, 0, "");
+#endif
+    }
+    else
     {
       WDL_String path(preset.namPath.c_str());
       _StageModel(path);
     }
-    if (!preset.irPath.empty() && preset.irPath != mIRPath.Get())
+
+    if (!clearedAllFiles && preset.irPath.empty())
+    {
+      OnMessage(kMsgTagClearIR, kCtrlTagIRFileBrowser, 0, nullptr);
+#if PLUG_HAS_UI
+      SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, 0, "");
+#endif
+    }
+    else
     {
       WDL_String path(preset.irPath.c_str());
       mIRPath.Set(path.Get());
@@ -1079,6 +1104,18 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
         const int paramCount = std::min((int)kNumParams, (int)p["params"].size());
         for (int paramIdx = 0; paramIdx < paramCount; ++paramIdx)
           preset.paramValues[paramIdx] = p["params"][paramIdx].get<double>();
+      }
+
+      if (!preset.saved)
+      {
+        preset.name = "empty";
+        preset.editedName.clear();
+        preset.hasEditedName = false;
+        preset.namPath.clear();
+        preset.irPath.clear();
+        preset.toneStackComponentState.clear();
+        for (int paramIdx = 0; paramIdx < kNumParams; ++paramIdx)
+          preset.paramValues[paramIdx] = GetParam(paramIdx)->GetDefault();
       }
     }
   }
@@ -1655,12 +1692,28 @@ void NeuralAmpModeler::OnIdle()
     if (preset.saved)
     {
       mApplyingInternalPreset.store(true, std::memory_order_release);
-      if (!preset.namPath.empty() && preset.namPath != mNAMPath.Get())
+      const bool clearedAllFiles = preset.namPath.empty() && preset.irPath.empty();
+      if (clearedAllFiles)
+      {
+        _ClearModelAndIRForInternalPreset();
+      }
+      else if (preset.namPath.empty())
+      {
+        OnMessage(kMsgTagClearModel, kCtrlTagModelFileBrowser, 0, nullptr);
+        SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, 0, "");
+      }
+      else
       {
         WDL_String path(preset.namPath.c_str());
         _StageModel(path);
       }
-      if (!preset.irPath.empty() && preset.irPath != mIRPath.Get())
+
+      if (!clearedAllFiles && preset.irPath.empty())
+      {
+        OnMessage(kMsgTagClearIR, kCtrlTagIRFileBrowser, 0, nullptr);
+        SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, 0, "");
+      }
+      else
       {
         WDL_String path(preset.irPath.c_str());
         mIRPath.Set(path.Get());
@@ -1968,7 +2021,7 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   std::lock_guard<std::mutex> lock(mDSPStagingMutex);
 
   // Remove marked modules
-  if (mShouldRemoveModel)
+  if (mShouldRemoveModel && mStagedModel == nullptr)
   {
     mModel = nullptr;
     mModelRight = nullptr;
@@ -1979,11 +2032,20 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     _SetInputGain();
     _SetOutputGain();
   }
-  if (mShouldRemoveIR)
+  else if (mShouldRemoveModel && mStagedModel != nullptr)
+  {
+    mShouldRemoveModel = false;
+  }
+
+  if (mShouldRemoveIR && mStagedIR == nullptr)
   {
     mIR = nullptr;
     mIRRight = nullptr;
     mIRPath.Set("");
+    mShouldRemoveIR = false;
+  }
+  else if (mShouldRemoveIR && mStagedIR != nullptr)
+  {
     mShouldRemoveIR = false;
   }
   // Move things from staged to live
@@ -2479,13 +2541,15 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       stagedModelRight = _CreateModel(modelPath);
 
     WDL_String loadedNAMPath;
-    {
-      std::lock_guard<std::mutex> lock(mDSPStagingMutex);
-      mStagedModel = std::move(stagedModel);
-      mStagedModelRight = std::move(stagedModelRight);
-      mNAMPath = modelPath;
-      loadedNAMPath = mNAMPath;
-    }
+  {
+    std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+    mStagedModel = std::move(stagedModel);
+    mStagedModelRight = std::move(stagedModelRight);
+    mNAMPath = modelPath;
+    mShouldRemoveModel = false;
+    mModelCleared = false;
+    loadedNAMPath = mNAMPath;
+  }
     _MarkCurrentInternalPresetDirty();
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, loadedNAMPath.GetLength(),
                                loadedNAMPath.Get());
@@ -2534,13 +2598,14 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
   if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
   {
     WDL_String loadedIRPath;
-    {
-      std::lock_guard<std::mutex> lock(mDSPStagingMutex);
-      mStagedIR = std::move(stagedIR);
-      mStagedIRRight = std::move(stagedIRRight);
-      mIRPath = irPath;
-      loadedIRPath = mIRPath;
-    }
+  {
+    std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+    mStagedIR = std::move(stagedIR);
+    mStagedIRRight = std::move(stagedIRRight);
+    mIRPath = irPath;
+    mShouldRemoveIR = false;
+    loadedIRPath = mIRPath;
+  }
     _MarkCurrentInternalPresetDirty();
     SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, loadedIRPath.GetLength(), loadedIRPath.Get());
   }
@@ -2576,6 +2641,29 @@ void NeuralAmpModeler::_InitToneStack()
   // If you want to customize the tone stack, then put it here!
   mToneStack = std::make_unique<dsp::tone_stack::BasicNamToneStack>();
 }
+
+void NeuralAmpModeler::_ResetToneStackToDefaults()
+{
+  if (mToneStack == nullptr)
+  {
+    _InitToneStack();
+    if (mToneStack != nullptr)
+      mToneStack->Reset(GetSampleRate(), GetBlockSize());
+  }
+
+  auto* toneStack = dynamic_cast<dsp::tone_stack::BasicNamToneStack*>(mToneStack.get());
+  if (toneStack == nullptr)
+    return;
+
+  for (int type = 0; type < dsp::tone_stack::kNumToneStackTypes; ++type)
+    toneStack->ResetComponentValues(type);
+
+  toneStack->SetParam("bass", GetParam(kToneBass)->Value());
+  toneStack->SetParam("middle", GetParam(kToneMid)->Value());
+  toneStack->SetParam("treble", GetParam(kToneTreble)->Value());
+  toneStack->SetParam("type", GetParam(kToneStackType)->Value());
+}
+
 void NeuralAmpModeler::_PrepareBuffers(const size_t numChannels, const size_t numFrames)
 {
   const bool updateChannels = numChannels != _GetBufferNumChannels();

@@ -276,12 +276,18 @@ protected:
     return true;
   }
 
-  bool HandleMidiLearnBadgeClick(IControl* owner, const IRECT& r, float x, float y, int paramIdx)
+  bool IsMidiLearnBadgeHit(IControl* owner, const IRECT& r, float x, float y, int paramIdx) const
   {
     auto* plug = owner != nullptr ? static_cast<NeuralAmpModeler*>(owner->GetDelegate()) : nullptr;
-    if (plug == nullptr || !plug->IsMidiLearnArmedForParam(paramIdx) || !GetMidiLearnBadgeRect(r).Contains(x, y))
+    return plug != nullptr && plug->IsMidiLearnArmedForParam(paramIdx) && GetMidiLearnBadgeRect(r).Contains(x, y);
+  }
+
+  bool HandleMidiLearnBadgeClick(IControl* owner, const IRECT& r, float x, float y, int paramIdx)
+  {
+    if (!IsMidiLearnBadgeHit(owner, r, x, y, paramIdx))
       return false;
 
+    auto* plug = static_cast<NeuralAmpModeler*>(owner->GetDelegate());
     plug->StopMidiLearn();
     owner->SetDirty(false);
     return true;
@@ -332,6 +338,12 @@ public:
       return;
     }
     IVKnobControl::OnMouseDown(x, y, mod);
+  }
+
+  bool IsHit(float x, float y) const override
+  {
+    return IVKnobControl::IsHit(x, y) ||
+           IsMidiLearnBadgeHit(const_cast<NAMKnobControl*>(this), mRECT, x, y, GetParamIdx());
   }
 
   void CreateContextMenu(IPopupMenu& contextMenu) override
@@ -574,7 +586,7 @@ private:
   {
     mMenuMode = saveTarget ? MenuMode::SaveTarget : MenuMode::Recall;
     mMenu.Clear();
-    mMenu.SetNItemsPerColumn(32);
+    mMenu.SetNItemsPerColumn(64);
     const int current = PLUG()->GetCurrentInternalPresetIndex();
     for (int i = 0; i < 128; ++i)
     {
@@ -620,6 +632,12 @@ public:
       return;
     }
     IVKnobControl::OnMouseDown(x, y, mod);
+  }
+
+  bool IsHit(float x, float y) const override
+  {
+    return IVKnobControl::IsHit(x, y) ||
+           IsMidiLearnBadgeHit(const_cast<NAMFilterKnobControl*>(this), mRECT, x, y, GetParamIdx());
   }
 
   void CreateContextMenu(IPopupMenu& contextMenu) override
@@ -703,9 +721,20 @@ public:
     DrawHandle(g, mHandleBounds);
   }
 
+  void Draw(IGraphics& g) override
+  {
+    DrawBackground(g, mRECT);
+    DrawWidget(g);
+    DrawLabel(g);
+    DrawMidiLearnBadge(g, this, GetMidiLearnBadgeArea(), GetParamIdx());
+
+    if (!GetAnimationFunction())
+      DrawValue(g, false);
+  }
+
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
-    if (HandleMidiLearnBadgeClick(this, mRECT, x, y, GetParamIdx()))
+    if (HandleMidiLearnBadgeClick(this, GetMidiLearnBadgeArea(), x, y, GetParamIdx()))
       return;
 
     if (mod.R && PLUG()->IsMidiAssignableParam(GetParamIdx()))
@@ -714,6 +743,12 @@ public:
       return;
     }
     IVSlideSwitchControl::OnMouseDown(x, y, mod);
+  }
+
+  bool IsHit(float x, float y) const override
+  {
+    return IVSlideSwitchControl::IsHit(x, y) ||
+           IsMidiLearnBadgeHit(const_cast<NAMSwitchControl*>(this), GetMidiLearnBadgeArea(), x, y, GetParamIdx());
   }
 
   void CreateContextMenu(IPopupMenu& contextMenu) override
@@ -780,7 +815,6 @@ public:
 
     if (mStyle.drawFrame)
       g.DrawRoundRect(GetColor(kFR), handleBounds, tlr, trr, blr, brr, &mBlend, mStyle.frameThickness);
-    DrawMidiLearnBadge(g, this, mRECT, GetParamIdx());
   }
 
   void DrawHandle(IGraphics& g, const IRECT& filledArea) override
@@ -796,6 +830,15 @@ public:
     }
 
     g.DrawBitmap(mBitmap, r, 0, 0, nullptr);
+  }
+
+private:
+  IRECT GetMidiLearnBadgeArea() const
+  {
+    if (!mLabelBounds.Empty())
+      return mLabelBounds.GetCentredInside(44.0f, 14.0f);
+
+    return mRECT.GetFromBottom(18.0f).GetCentredInside(44.0f, 14.0f);
   }
 };
 
@@ -1086,6 +1129,15 @@ public:
       case kMsgTagLoadedModel:
       case kMsgTagLoadedIR:
       {
+        if (pData == nullptr || dataSize <= 0 || reinterpret_cast<const char*>(pData)[0] == '\0')
+        {
+          ClearPathList();
+          SetupMenu();
+          mFileNameControl->SetLabelAndTooltipEllipsizing(mDefaultLabelStr);
+          SetBrowserState(NAMBrowserState::Empty);
+          break;
+        }
+
         WDL_String fileName, directory;
         fileName.Set(reinterpret_cast<const char*>(pData));
         directory.Set(reinterpret_cast<const char*>(pData));

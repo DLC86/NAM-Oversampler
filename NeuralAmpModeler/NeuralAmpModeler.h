@@ -1540,6 +1540,7 @@ private:
   size_t _GetBufferNumChannels() const;
   size_t _GetBufferNumFrames() const;
   void _InitToneStack();
+  void _ResetToneStackToDefaults();
   bool _IsStereoRequested() const;
   bool _CanProcessStereo(const size_t nChansIn, const size_t nChansOut) const;
   void _SetStereoProcessingFromParam();
@@ -1593,6 +1594,7 @@ private:
   void _StoreInternalPreset(int index);
   void _RecallInternalPreset(int index, bool allowFileStaging);
   void _ApplyEmptyInternalPresetState();
+  void _ClearModelAndIRForInternalPreset();
   bool _IsInternalPresetParam(int paramIdx) const;
   std::string _SerializeInternalPresetState() const;
   void _UnserializeApplyInternalPresetState(const nlohmann::json& config, bool mergeWithExisting = false);
