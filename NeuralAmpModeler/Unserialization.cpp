@@ -69,7 +69,9 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
     _StageIR(mIRPath);
   }
   mApplyingInternalPreset.store(false, std::memory_order_release);
-  _RefreshCurrentInternalPresetDirty();
+  mCurrentInternalPresetSnapshot = _CaptureCurrentInternalPresetSnapshot();
+  mCurrentInternalPresetDirty.store(false, std::memory_order_release);
+  _MarkInternalPresetUIDirty();
 }
 
 // Unserialize NAM Path, IR path, then named keys

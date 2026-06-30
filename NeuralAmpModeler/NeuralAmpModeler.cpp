@@ -132,6 +132,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kEQPostNAM)->InitBool("EQ Post", true);
   GetParam(kChannelMode)->InitEnum("Channel Mode", 0, {"Mono", "Stereo"});
   GetParam(kInputBoost)->InitBool("Input Boost", false);
+  GetParam(kMidiChannel)->InitEnum("MIDI Channel", 0,
+                                   {"Omni", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13",
+                                    "14", "15", "16"});
   NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
   MakeDefaultPreset("Default");
 
@@ -591,6 +594,23 @@ bool NeuralAmpModeler::_InternalPresetPathsEqual(const std::string& lhs, const c
   return normalize(lhs) == normalize(right);
 }
 
+std::string NeuralAmpModeler::_CaptureCurrentInternalPresetSnapshot() const
+{
+  nlohmann::json snapshot = nlohmann::json::object();
+  snapshot["current"] = mCurrentInternalPreset.load(std::memory_order_acquire);
+  snapshot["name"] = GetCurrentInternalPresetName();
+  snapshot["namPath"] = mNAMPath.Get();
+  snapshot["irPath"] = mIRPath.Get();
+  snapshot["toneStackComponents"] = _SerializeToneStackComponentState();
+  snapshot["params"] = nlohmann::json::array();
+  for (int i = 0; i < kNumParams; ++i)
+  {
+    if (_IsInternalPresetParam(i))
+      snapshot["params"].push_back({i, GetParam(i)->Value()});
+  }
+  return snapshot.dump();
+}
+
 bool NeuralAmpModeler::_IsInternalPresetParam(int paramIdx) const
 {
   switch (paramIdx)
@@ -605,6 +625,7 @@ bool NeuralAmpModeler::_IsInternalPresetParam(int paramIdx) const
     case kPhaseMulticoreEnabled:
     case kPhaseMulticoreThreadCount:
     case kChannelMode:
+    case kMidiChannel:
       return false;
     default:
       return paramIdx >= 0 && paramIdx < kNumParams;
@@ -637,7 +658,45 @@ bool NeuralAmpModeler::IsMidiAssignableParam(int paramIdx) const
 void NeuralAmpModeler::StartMidiLearnForParam(int paramIdx)
 {
   if (IsMidiAssignableParam(paramIdx))
+  {
     mMidiLearnParam.store(paramIdx, std::memory_order_release);
+    _MarkInternalPresetUIDirty();
+  }
+}
+
+void NeuralAmpModeler::AssignMidiCCToParam(int paramIdx, int cc)
+{
+  if (!IsMidiAssignableParam(paramIdx) || cc < 0 || cc >= 128)
+    return;
+
+  for (int i = 0; i < 128; ++i)
+  {
+    if (mMidiCCToParam[i] == paramIdx)
+      mMidiCCToParam[i] = kNoMidiCCAssignment;
+  }
+
+  mMidiCCToParam[cc] = paramIdx;
+  mMidiLearnParam.store(-1, std::memory_order_release);
+  _SaveGlobalInternalPresetBank();
+  _MarkInternalPresetUIDirty();
+}
+
+int NeuralAmpModeler::GetMidiCCForParam(int paramIdx) const
+{
+  if (!IsMidiAssignableParam(paramIdx))
+    return kNoMidiCCAssignment;
+
+  for (int cc = 0; cc < 128; ++cc)
+  {
+    if (mMidiCCToParam[cc] == paramIdx)
+      return cc;
+  }
+  return kNoMidiCCAssignment;
+}
+
+bool NeuralAmpModeler::IsMidiLearnArmedForParam(int paramIdx) const
+{
+  return IsMidiAssignableParam(paramIdx) && mMidiLearnParam.load(std::memory_order_acquire) == paramIdx;
 }
 
 void NeuralAmpModeler::_MarkInternalPresetUIDirty()
@@ -647,7 +706,10 @@ void NeuralAmpModeler::_MarkInternalPresetUIDirty()
 
 void NeuralAmpModeler::_RefreshCurrentInternalPresetDirty()
 {
-  mCurrentInternalPresetDirty.store(_IsCurrentInternalPresetModified(), std::memory_order_release);
+  const std::string snapshot = _CaptureCurrentInternalPresetSnapshot();
+  if (mCurrentInternalPresetSnapshot.empty())
+    mCurrentInternalPresetSnapshot = snapshot;
+  mCurrentInternalPresetDirty.store(snapshot != mCurrentInternalPresetSnapshot, std::memory_order_release);
   _MarkInternalPresetUIDirty();
 }
 
@@ -690,6 +752,7 @@ void NeuralAmpModeler::SaveCurrentInternalPreset()
     return;
 
   _StoreInternalPreset(current);
+  mCurrentInternalPresetSnapshot = _CaptureCurrentInternalPresetSnapshot();
   mCurrentInternalPresetDirty.store(false, std::memory_order_release);
   _SaveGlobalInternalPresetBank();
   _MarkInternalPresetUIDirty();
@@ -717,6 +780,7 @@ void NeuralAmpModeler::SaveCurrentInternalPresetToSlot(int index)
   mInternalPresets[index].name = sourceName;
   mInternalPresets[index].editedName.clear();
   mInternalPresets[index].hasEditedName = false;
+  mCurrentInternalPresetSnapshot = _CaptureCurrentInternalPresetSnapshot();
   mCurrentInternalPresetDirty.store(false, std::memory_order_release);
   _SaveGlobalInternalPresetBank();
   _MarkInternalPresetUIDirty();
@@ -786,6 +850,7 @@ void NeuralAmpModeler::_ApplyEmptyInternalPresetState()
   OnParamReset(iplug::EParamSource::kPresetRecall);
 
   mApplyingInternalPreset.store(false, std::memory_order_release);
+  mCurrentInternalPresetSnapshot = _CaptureCurrentInternalPresetSnapshot();
 }
 
 void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
@@ -803,6 +868,7 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
   if (!preset.saved)
   {
     _ApplyEmptyInternalPresetState();
+    mCurrentInternalPresetSnapshot = _CaptureCurrentInternalPresetSnapshot();
     mCurrentInternalPresetDirty.store(false, std::memory_order_release);
 #if PLUG_HAS_UI
     if (allowFileStaging)
@@ -855,6 +921,7 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
   if (allowFileStaging)
     OnParamReset(iplug::EParamSource::kPresetRecall);
   mApplyingInternalPreset.store(false, std::memory_order_release);
+  mCurrentInternalPresetSnapshot = _CaptureCurrentInternalPresetSnapshot();
   mCurrentInternalPresetDirty.store(false, std::memory_order_release);
 #if PLUG_HAS_UI
   if (allowFileStaging)
@@ -895,6 +962,7 @@ std::string NeuralAmpModeler::_SerializeInternalPresetState() const
   state["midiCC"] = nlohmann::json::array();
   for (int cc = 0; cc < 128; ++cc)
     state["midiCC"].push_back(mMidiCCToParam[cc]);
+  state["midiChannel"] = GetParam(kMidiChannel)->Int();
 
   state["presets"] = nlohmann::json::array();
   for (const auto& preset : mInternalPresets)
@@ -929,6 +997,12 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
       if (!mergeWithExisting || mMidiCCToParam[cc] == kNoMidiCCAssignment)
         mMidiCCToParam[cc] = IsMidiAssignableParam(paramIdx) ? paramIdx : kNoMidiCCAssignment;
     }
+  }
+
+  if (state.contains("midiChannel"))
+  {
+    const int channel = std::clamp(state["midiChannel"].get<int>(), 0, 16);
+    GetParam(kMidiChannel)->Set(channel);
   }
 
   if (state.contains("presets") && state["presets"].is_array())
@@ -1041,13 +1115,27 @@ void NeuralAmpModeler::_ApplyParamNormalizedFromMidi(int paramIdx, double normal
     return;
 
   normalizedValue = std::clamp(normalizedValue, 0.0, 1.0);
+  if (GetParam(paramIdx)->Type() == IParam::kTypeBool)
+    normalizedValue = normalizedValue >= (64.0 / 127.0) ? 1.0 : 0.0;
   GetParam(paramIdx)->SetNormalized(normalizedValue);
   OnParamChange(paramIdx);
   SendParameterValueFromDelegate(paramIdx, normalizedValue, true);
 }
 
+bool NeuralAmpModeler::_MidiMessageMatchesSelectedChannel(const IMidiMsg& msg) const
+{
+  const int selected = GetParam(kMidiChannel)->Int();
+  if (selected <= 0)
+    return true;
+
+  return msg.Channel() == selected - 1;
+}
+
 void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
 {
+  if (!_MidiMessageMatchesSelectedChannel(msg))
+    return;
+
   if (msg.StatusMsg() == IMidiMsg::kProgramChange)
   {
     const int program = std::clamp(msg.Program(), 0, kNumInternalPresets - 1);

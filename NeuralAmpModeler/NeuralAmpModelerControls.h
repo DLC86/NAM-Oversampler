@@ -179,7 +179,67 @@ private:
   IActionFunction mDismiss;
 };
 
-class NAMKnobControl : public IVKnobControl, public IBitmapBase
+class NAMMidiCCMenuMixin
+{
+protected:
+  void OpenMidiCCMenu(IControl* owner, int paramIdx)
+  {
+    auto* plug = owner != nullptr ? static_cast<NeuralAmpModeler*>(owner->GetDelegate()) : nullptr;
+    if (owner == nullptr || owner->GetUI() == nullptr || plug == nullptr || !plug->IsMidiAssignableParam(paramIdx))
+      return;
+
+    mMidiCCMenuParamIdx = paramIdx;
+    mMidiCCMenu.Clear();
+    mMidiCCMenu.SetNItemsPerColumn(33);
+    mMidiCCMenu.AddItem("Learn");
+    const int assignedCC = plug->GetMidiCCForParam(paramIdx);
+    for (int cc = 0; cc < 128; ++cc)
+    {
+      WDL_String item;
+      item.SetFormatted(32, "CC %03d", cc);
+      mMidiCCMenu.AddItem(item.Get(), -1, cc == assignedCC ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
+    }
+    owner->GetUI()->CreatePopupMenu(*owner, mMidiCCMenu, owner->GetRECT());
+  }
+
+  bool HandleMidiCCMenuSelection(IPopupMenu* pSelectedMenu, IControl* owner)
+  {
+    if (pSelectedMenu != &mMidiCCMenu || mMidiCCMenuParamIdx < 0 || !pSelectedMenu->GetChosenItem())
+      return false;
+
+    auto* plug = owner != nullptr ? static_cast<NeuralAmpModeler*>(owner->GetDelegate()) : nullptr;
+    if (plug == nullptr)
+      return false;
+
+    const int chosen = pSelectedMenu->GetChosenItemIdx();
+    if (chosen == 0)
+      plug->StartMidiLearnForParam(mMidiCCMenuParamIdx);
+    else if (chosen >= 1 && chosen <= 128)
+      plug->AssignMidiCCToParam(mMidiCCMenuParamIdx, chosen - 1);
+
+    mMidiCCMenuParamIdx = -1;
+    return true;
+  }
+
+  void DrawMidiLearnBadge(IGraphics& g, IControl* owner, const IRECT& r, int paramIdx)
+  {
+    auto* plug = owner != nullptr ? static_cast<NeuralAmpModeler*>(owner->GetDelegate()) : nullptr;
+    if (plug == nullptr || !plug->IsMidiLearnArmedForParam(paramIdx))
+      return;
+
+    const IRECT badge = r.GetFromTop(16.0f).GetCentredInside(44.0f, 14.0f);
+    g.FillRoundRect(COLOR_BLACK.WithOpacity(0.85f), badge, 3.0f);
+    g.DrawRoundRect(PluginColors::NAM_THEMECOLOR, badge, 3.0f, nullptr, 1.0f);
+    g.DrawText(IText(9.0f, PluginColors::NAM_THEMECOLOR, "Roboto-Regular", EAlign::Center, EVAlign::Middle),
+               "LEARN", badge);
+  }
+
+private:
+  IPopupMenu mMidiCCMenu {"MIDI CC"};
+  int mMidiCCMenuParamIdx = -1;
+};
+
+class NAMKnobControl : public IVKnobControl, public IBitmapBase, public NAMMidiCCMenuMixin
 {
 public:
   NAMKnobControl(const IRECT& bounds, int paramIdx, const char* label, const IVStyle& style, IBitmap bitmap)
@@ -195,11 +255,17 @@ public:
   {
     if (mod.R && PLUG()->IsMidiAssignableParam(GetParamIdx()))
     {
-      PLUG()->StartMidiLearnForParam(GetParamIdx());
-      SetTooltip("MIDI learn armed: move a MIDI CC to assign it to this control");
+      OpenMidiCCMenu(this, GetParamIdx());
       return;
     }
     IVKnobControl::OnMouseDown(x, y, mod);
+  }
+
+  void OnPopupMenuSelection(IPopupMenu* pSelectedMenu, int valIdx) override
+  {
+    if (!HandleMidiCCMenuSelection(pSelectedMenu, this))
+      IVKnobControl::OnPopupMenuSelection(pSelectedMenu, valIdx);
+    SetDirty(false);
   }
 
   void DrawWidget(IGraphics& g) override
@@ -219,6 +285,7 @@ public:
                                                {COLOR_TRANSPARENT, 1.0f}}),
                {}, &mBlend);
     g.DrawCircle(COLOR_BLACK.WithOpacity(0.5f), data[1][0], data[1][1], 3, &mBlend);
+    DrawMidiLearnBadge(g, this, mRECT, GetParamIdx());
   }
 };
 
@@ -442,7 +509,7 @@ private:
   MenuMode mMenuMode = MenuMode::Recall;
 };
 
-class NAMFilterKnobControl : public IVKnobControl, public IBitmapBase
+class NAMFilterKnobControl : public IVKnobControl, public IBitmapBase, public NAMMidiCCMenuMixin
 {
 public:
   NAMFilterKnobControl(const IRECT& bounds, int paramIdx, const char* label, const IVStyle& style, IBitmap bitmap,
@@ -460,11 +527,17 @@ public:
   {
     if (mod.R && PLUG()->IsMidiAssignableParam(GetParamIdx()))
     {
-      PLUG()->StartMidiLearnForParam(GetParamIdx());
-      SetTooltip("MIDI learn armed: move a MIDI CC to assign it to this control");
+      OpenMidiCCMenu(this, GetParamIdx());
       return;
     }
     IVKnobControl::OnMouseDown(x, y, mod);
+  }
+
+  void OnPopupMenuSelection(IPopupMenu* pSelectedMenu, int valIdx) override
+  {
+    if (!HandleMidiCCMenuSelection(pSelectedMenu, this))
+      IVKnobControl::OnPopupMenuSelection(pSelectedMenu, valIdx);
+    SetDirty(false);
   }
 
   void DrawWidget(IGraphics& g) override
@@ -486,6 +559,7 @@ public:
                                                {COLOR_TRANSPARENT, 1.0f}}),
                {}, &mBlend);
     g.DrawCircle(COLOR_BLACK.WithOpacity(0.5f), data[1][0], data[1][1], 3, &mBlend);
+    DrawMidiLearnBadge(g, this, mRECT, GetParamIdx());
   }
 
 private:
@@ -503,7 +577,7 @@ private:
   bool mReverseTrack = false;
 };
 
-class NAMSwitchControl : public IVSlideSwitchControl, public IBitmapBase
+class NAMSwitchControl : public IVSlideSwitchControl, public IBitmapBase, public NAMMidiCCMenuMixin
 {
 public:
   NAMSwitchControl(const IRECT& bounds, int paramIdx, const char* label, const IVStyle& style, IBitmap bitmap)
@@ -531,11 +605,17 @@ public:
   {
     if (mod.R && PLUG()->IsMidiAssignableParam(GetParamIdx()))
     {
-      PLUG()->StartMidiLearnForParam(GetParamIdx());
-      SetTooltip("MIDI learn armed: move a MIDI CC to assign it to this switch");
+      OpenMidiCCMenu(this, GetParamIdx());
       return;
     }
     IVSlideSwitchControl::OnMouseDown(x, y, mod);
+  }
+
+  void OnPopupMenuSelection(IPopupMenu* pSelectedMenu, int valIdx) override
+  {
+    if (!HandleMidiCCMenuSelection(pSelectedMenu, this))
+      IVSlideSwitchControl::OnPopupMenuSelection(pSelectedMenu, valIdx);
+    SetDirty(false);
   }
 
   void DrawTrack(IGraphics& g, const IRECT& bounds) override
@@ -582,6 +662,7 @@ public:
 
     if (mStyle.drawFrame)
       g.DrawRoundRect(GetColor(kFR), handleBounds, tlr, trr, blr, brr, &mBlend, mStyle.frameThickness);
+    DrawMidiLearnBadge(g, this, mRECT, GetParamIdx());
   }
 
   void DrawHandle(IGraphics& g, const IRECT& filledArea) override
@@ -2154,6 +2235,14 @@ public:
       outputModeControl->SetTooltip(
         "How to adjust the level of the output.\nRaw=No adjustment.\nNormalized=Adjust the level so that all models "
         "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration.");
+
+      const auto midiChannelArea = outputArea.GetFromBottom(24.0f).GetTranslated(0.0f, 28.0f).GetMidHPadded(62.0f);
+      auto* midiChannelControl =
+        AddNamedChildControl(new IVMenuButtonControl(midiChannelArea, kMidiChannel, "MIDI Channel",
+                                                     mStyle.WithValueText(text).WithDrawFrame(false),
+                                                     EVShape::Rectangle),
+                             mControlNames.midiChannel);
+      midiChannelControl->SetTooltip("MIDI channel used for internal preset Program Change and assigned CCs.");
     }
 
     const float halfWidth = PLUG_WIDTH / 2.0f - pad;
@@ -2199,6 +2288,7 @@ private:
     const std::string calibrateInput = "CalibrateInput";
     const std::string close = "Close";
     const std::string inputCalibrationLevel = "InputCalibrationLevel";
+    const std::string midiChannel = "MidiChannel";
     const std::string modelInfo = "ModelInfo";
     const std::string outputMode = "OutputMode";
     const std::string title = "Title";

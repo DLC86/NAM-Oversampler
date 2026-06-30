@@ -115,6 +115,7 @@ enum EParams
   kHighCutSlope,
   kHighCutPostNAM,
   kInputBoost,
+  kMidiChannel,
   kNumParams
 };
 
@@ -1501,6 +1502,9 @@ public:
   void RenameCurrentInternalPreset(const char* name);
   bool IsMidiAssignableParam(int paramIdx) const;
   void StartMidiLearnForParam(int paramIdx);
+  void AssignMidiCCToParam(int paramIdx, int cc);
+  int GetMidiCCForParam(int paramIdx) const;
+  bool IsMidiLearnArmedForParam(int paramIdx) const;
 
 private:
   static constexpr int kNumInternalPresets = 128;
@@ -1593,11 +1597,13 @@ private:
   void _LoadGlobalInternalPresetBank();
   void _SaveGlobalInternalPresetBank() const;
   void _ApplyParamNormalizedFromMidi(int paramIdx, double normalizedValue);
+  bool _MidiMessageMatchesSelectedChannel(const iplug::IMidiMsg& msg) const;
   void _MarkInternalPresetUIDirty();
   void _MarkCurrentInternalPresetDirty();
   bool _IsCurrentInternalPresetModified() const;
   void _RefreshCurrentInternalPresetDirty();
   bool _InternalPresetPathsEqual(const std::string& lhs, const char* rhs) const;
+  std::string _CaptureCurrentInternalPresetSnapshot() const;
 
   // See: Unserialization.cpp
   void _UnserializeApplyConfig(nlohmann::json& config);
@@ -1710,6 +1716,7 @@ private:
   std::string mInitInternalPresetEditedName;
   bool mInitInternalPresetHasEditedName = false;
   std::array<int, 128> mMidiCCToParam {};
+  std::string mCurrentInternalPresetSnapshot;
   std::atomic<int> mCurrentInternalPreset {-1};
   std::atomic<int> mMidiLearnParam {-1};
   std::atomic<int> mPendingInternalPresetFileRecall {-1};
