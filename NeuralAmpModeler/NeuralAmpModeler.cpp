@@ -43,8 +43,6 @@ using namespace igraphics;
 
 const double kDCBlockerFrequency = 5.0;
 
-iplug::igraphics::IColor NAM_CUSTOMTHEMECOLOR = PluginColors::NAM_THEMECOLOR;
-
 #if PLUG_HAS_UI
 // Styles
 const IVColorSpec colorSpec{
@@ -320,23 +318,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                 fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl),
       kCtrlTagModelFileBrowser);
 
-/*    auto hideSlimOverlay = [](IControl* pCaller) {
-      IGraphics* ui = pCaller->GetUI();
-      if (auto* backdrop = ui->GetControlWithTag(kCtrlTagSlimOverlayBackdrop))
-        backdrop->Hide(true);
-      if (auto* knob = ui->GetControlWithTag(kCtrlTagSlimKnob))
-        knob->Hide(true);
-      ui->SetAllControlsDirty();
-    };
-    auto showSlimOverlay = [](IControl* pCaller) {
-      IGraphics* ui = pCaller->GetUI();
-      if (auto* backdrop = ui->GetControlWithTag(kCtrlTagSlimOverlayBackdrop))
-        backdrop->Hide(false);
-      if (auto* knob = ui->GetControlWithTag(kCtrlTagSlimKnob))
-        knob->Hide(false);
-      ui->SetAllControlsDirty();
-    };*/
-
     pGraphics
       ->AttachControl(new IVSliderControl(slimIconArea, kSlim, "Slimable",
                                           style.WithColor(kFG, PluginColors::OFF_WHITE)
@@ -446,14 +427,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                                    crossSVG, style, radioButtonStyle),
                       kCtrlTagCutFiltersBox)
       ->Hide(true);
-
-/*    const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
-    pGraphics->AttachControl(new NAMSlimOverlayBackdropControl(b, hideSlimOverlay), kCtrlTagSlimOverlayBackdrop)
-      ->Hide(true);
-    pGraphics
-      ->AttachControl(new NAMKnobControl(slimKnobArea, kSlim, "Model Size", style, knobBackgroundBitmap),
-                      kCtrlTagSlimKnob)
-      ->Hide(true);*/
 
     pGraphics->ForAllControlsFunc([](IControl* pControl) {
       pControl->SetMouseEventsWhenDisabled(true);
@@ -1774,18 +1747,14 @@ void NeuralAmpModeler::OnIdle()
       static_cast<NAMSettingsPageControl*>(pGraphics->GetControlWithTag(kCtrlTagSettingsBox))->ClearModelInfo();
       if (auto* p = pGraphics->GetControlWithTag(kCtrlTagSlimmableIcon))
         p->Hide(true);
-/*      if (auto* p = pGraphics->GetControlWithTag(kCtrlTagSlimOverlayBackdrop))
-        p->Hide(true);
-      if (auto* p = pGraphics->GetControlWithTag(kCtrlTagSlimKnob))
-        p->Hide(true);*/
+
       pGraphics->SetAllControlsDirty();
       mModelCleared = false;
     }
   }
 #endif
 
-  // is it a bad idea to move this here from OnUIOpen ??
-  NAM_CUSTOMTHEMECOLOR = PluginColors::NAM_THEMECOLOR; // why do i need to set it again here ???
+  // PluginColors::SetThemeColor(PluginColors::NAM_THEMECOLOR);
   GetUI()->ForStandardControlsFunc([&](IControl* pControl) {
     if (auto* pVectorBase = pControl->As<IVectorBase>())
     {
@@ -1794,17 +1763,18 @@ void NeuralAmpModeler::OnIdle()
         int r, g, b;
         GetTrackColor(r, g, b);
         if (r + g + b > 0) // is default color set in DAW ?
-          NAM_CUSTOMTHEMECOLOR = IColor(255, r, g, b);
+          PluginColors::SetThemeColor(IColor(255, r, g, b));
       }
       else
       {
         if (mHighLightColor.GetLength())
-          NAM_CUSTOMTHEMECOLOR = IColor::FromColorCodeStr(mHighLightColor.Get());
+          PluginColors::SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
       }
-      pVectorBase->SetColor(kX1, NAM_CUSTOMTHEMECOLOR);
-      pVectorBase->SetColor(kPR, NAM_CUSTOMTHEMECOLOR.WithOpacity(0.6f));
-      pVectorBase->SetColor(kFR, NAM_CUSTOMTHEMECOLOR.WithOpacity(0.1f));
-      pVectorBase->SetColor(kX3, NAM_CUSTOMTHEMECOLOR.WithContrast(0.1f));
+      pVectorBase->SetColor(kX1, PluginColors::GetThemeColor());
+      pVectorBase->SetColor(kPR, PluginColors::GetThemeColor().WithOpacity(0.6f));
+      pVectorBase->SetColor(kFR, PluginColors::GetThemeColor().WithOpacity(0.1f));
+      pVectorBase->SetColor(kX3, PluginColors::GetThemeColor().WithContrast(0.1f));
+      pVectorBase->SetColor(kOFF, PluginColors::GetThemeColor().WithOpacity(0.1f));
       pControl->GetUI()->SetAllControlsDirty();
     }
   });
@@ -2009,24 +1979,25 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
               int r, g, b;
               GetTrackColor(r, g, b);
               if (r + g + b > 0) // is default color set in DAW ?
-                NAM_CUSTOMTHEMECOLOR = IColor(255, r, g, b);
+                PluginColors::SetThemeColor(IColor(255, r, g, b));
             }
             else
             {
               if (mHighLightColor.GetLength())
-                NAM_CUSTOMTHEMECOLOR = IColor::FromColorCodeStr(mHighLightColor.Get());
+                PluginColors::SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
               else
-                NAM_CUSTOMTHEMECOLOR = PluginColors::NAM_THEMECOLOR;
+                PluginColors::SetThemeColor(PluginColors::NAM_THEMECOLOR);
             }
 
-            pVectorBase->SetColor(kX1, NAM_CUSTOMTHEMECOLOR);
-            pVectorBase->SetColor(kPR, NAM_CUSTOMTHEMECOLOR.WithOpacity(0.6f));
-            pVectorBase->SetColor(kFR, NAM_CUSTOMTHEMECOLOR.WithOpacity(0.1f));
-            pVectorBase->SetColor(kX3, NAM_CUSTOMTHEMECOLOR.WithContrast(0.1f));
+            pVectorBase->SetColor(kX1, PluginColors::GetThemeColor());
+            pVectorBase->SetColor(kPR, PluginColors::GetThemeColor().WithOpacity(0.6f));
+            pVectorBase->SetColor(kFR, PluginColors::GetThemeColor().WithOpacity(0.1f));
+            pVectorBase->SetColor(kX3, PluginColors::GetThemeColor().WithContrast(0.1f));
+            pVectorBase->SetColor(kOFF, PluginColors::GetThemeColor().WithOpacity(0.1f));
             pControl->GetUI()->SetAllControlsDirty();
           }
         });
-        updateToneStackControlAvailability(); // ??? needed ?
+        //updateToneStackControlAvailability(); // ??? needed ?
         break;
       case kNoiseGateActive: pGraphics->GetControlWithParamIdx(kNoiseGateThreshold)->SetDisabled(!active); break;
       case kEQActive:
@@ -2062,24 +2033,18 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
       mHighLightColor.Set((const char*)pData);
 
 #if PLUG_HAS_UI
-      IColor color = IColor::FromColorCodeStr(mHighLightColor.Get());
-      PluginColors::SetThemeColor(color);
+    GetUI()->ForStandardControlsFunc([&](IControl* pControl) {
+        if (auto* pVectorBase = pControl->As<IVectorBase>())
+        {
+        PluginColors::SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
 
-      if (GetUI())
-      {
-        GetUI()->ForStandardControlsFunc([&](IControl* pControl) {
-          if (auto* pVectorBase = pControl->As<IVectorBase>())
-          {
-           // NAM_CUSTOMTHEMECOLOR = IColor::FromColorCodeStr(mHighLightColor.Get());
-
-            pVectorBase->SetColor(kX1, NAM_CUSTOMTHEMECOLOR);
-            pVectorBase->SetColor(kPR, NAM_CUSTOMTHEMECOLOR.WithOpacity(0.3f));
-            pVectorBase->SetColor(kFR, NAM_CUSTOMTHEMECOLOR.WithOpacity(0.4f));
-            pVectorBase->SetColor(kX3, NAM_CUSTOMTHEMECOLOR.WithContrast(0.1f));
-          }
-          pControl->GetUI()->SetAllControlsDirty();
-        });
-      }
+        pVectorBase->SetColor(kX1, PluginColors::GetThemeColor());
+        pVectorBase->SetColor(kPR, PluginColors::GetThemeColor().WithOpacity(0.3f));
+        pVectorBase->SetColor(kFR, PluginColors::GetThemeColor().WithOpacity(0.4f));
+        pVectorBase->SetColor(kX3, PluginColors::GetThemeColor().WithContrast(0.1f));
+        }
+        pControl->GetUI()->SetAllControlsDirty();
+    });
 #endif
 
       return true;
