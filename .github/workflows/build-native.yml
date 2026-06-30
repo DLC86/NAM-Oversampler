@@ -20,9 +20,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-2022, ubuntu-latest]
+        os: [macos-15, windows-2022, ubuntu-latest]
         include:
-          - os: macos-latest
+          - os: macos-15
             build_dir: build-mac
             artifact_ext: mac
           - os: windows-2022
@@ -51,7 +51,7 @@ jobs:
       shell: bash
 
     - name: Build macOS
-      if: matrix.os == 'macos-latest'
+      if: matrix.os == 'macos-15'
       run: |
         cd ${{env.PROJECT_DIR}}/scripts
         ./makedist-mac.sh full zip

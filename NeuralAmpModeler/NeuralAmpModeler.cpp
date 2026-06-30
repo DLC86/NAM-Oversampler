@@ -2,6 +2,7 @@
 #include <cctype>
 #include <cmath> // pow
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -26,6 +27,7 @@
 // a bunch of stuff.
 #include "NeuralAmpModeler.h"
 #include "IPlug_include_in_plug_src.h"
+#include "IPlugPaths.h"
 // clang-format on
 #include "architecture.hpp"
 
@@ -1128,12 +1130,30 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
 
 bool NeuralAmpModeler::_GetGlobalInternalPresetBankPath(std::filesystem::path& path) const
 {
+#if defined(NAM_HEADLESS_LINUX)
+  const char* configHome = std::getenv("XDG_CONFIG_HOME");
+  if (CStringHasContents(configHome))
+  {
+    path = std::filesystem::u8path(configHome);
+  }
+  else
+  {
+    const char* home = std::getenv("HOME");
+    if (!CStringHasContents(home))
+      return false;
+
+    path = std::filesystem::u8path(home) / ".config";
+  }
+
+  path /= "NAM On Steroids";
+#else
   WDL_String appSupport;
   AppSupportPath(appSupport, false);
   if (!CStringHasContents(appSupport.Get()))
     return false;
 
   path = std::filesystem::u8path(appSupport.Get()) / "NAM On Steroids";
+#endif
   path /= "InternalPresets.json";
   return true;
 }
@@ -1606,15 +1626,18 @@ std::string NeuralAmpModeler::_FetchLatestStableReleaseTag()
 
 void NeuralAmpModeler::_MaybeStartUpdateCheck()
 {
+#if PLUG_HAS_UI
   if (mUpdateCheckStarted || mUpdateCheckConsumed || GetUI() == nullptr)
     return;
 
   mUpdateCheckStarted = true;
   mUpdateCheckFuture = std::async(std::launch::async, []() { return NeuralAmpModeler::_FetchLatestStableReleaseTag(); });
+#endif
 }
 
 void NeuralAmpModeler::_HandleUpdateCheckResult()
 {
+#if PLUG_HAS_UI
   if (mUpdateCheckConsumed || !mUpdateCheckStarted || !mUpdateCheckFuture.valid())
     return;
 
@@ -1652,6 +1675,7 @@ void NeuralAmpModeler::_HandleUpdateCheckResult()
       }
     });
   }
+#endif
 }
 
 void NeuralAmpModeler::OnIdle()
