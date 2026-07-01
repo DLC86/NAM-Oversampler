@@ -3,20 +3,19 @@ name: Materialize worker parking cleanup
 on:
   push:
     branches:
-      - worker-parking-cleanup
+      - main
 
 permissions:
   contents: write
 
 jobs:
   patch:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Check out branch
+      - name: Check out main
         uses: actions/checkout@v6
         with:
-          ref: worker-parking-cleanup
+          ref: main
           fetch-depth: 0
 
       - name: Apply promoted source changes
@@ -31,7 +30,7 @@ jobs:
           rm .github/scripts/materialize_worker_parking.py
           rm .github/workflows/materialize-worker-parking.yml
 
-      - name: Commit clean source patch
+      - name: Commit final main state
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
@@ -39,4 +38,4 @@ jobs:
           git add NeuralAmpModeler/NeuralAmpModeler.h NeuralAmpModeler/config/NeuralAmpModeler-mac.xcconfig
           git add -u .github/scripts/materialize_worker_parking.py .github/workflows/materialize-worker-parking.yml
           git commit -m "Park inactive phase workers and restore ARM64 SIMD"
-          git push origin HEAD:worker-parking-cleanup
+          git push origin HEAD:main
