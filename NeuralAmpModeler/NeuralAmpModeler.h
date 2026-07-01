@@ -1556,6 +1556,7 @@ private:
     std::array<double, kNumParams> paramValues {};
     std::string namPath;
     std::string irPath;
+    std::string toneStackTypeName;
     std::string toneStackComponentState;
   };
 
@@ -1579,6 +1580,9 @@ private:
   bool _CanProcessStereo(const size_t nChansIn, const size_t nChansOut) const;
   void _SetStereoProcessingFromParam();
   void _EnsureRightModelForStereo();
+  void _RestageCurrentModelAndIRForStereo();
+  bool _NeedsStereoModelRestageForPath(const std::string& modelPath);
+  bool _NeedsStereoIRRestageForPath(const std::string& irPath);
   std::unique_ptr<ResamplingNAM> _CreateModel(const WDL_String& modelPath);
   // Loads a NAM model and stores it to mStagedNAM
   // Returns an empty string on success, or an error message on failure.
@@ -1695,6 +1699,14 @@ private:
   std::unique_ptr<ResamplingNAM> mStagedModelRight;
   std::unique_ptr<dsp::ImpulseResponse> mStagedIR;
   std::unique_ptr<dsp::ImpulseResponse> mStagedIRRight;
+  std::string mLiveModelPath;
+  std::string mLiveModelRightPath;
+  std::string mStagedModelPath;
+  std::string mStagedModelRightPath;
+  std::string mLiveIRPath;
+  std::string mLiveIRRightPath;
+  std::string mStagedIRPath;
+  std::string mStagedIRRightPath;
   std::mutex mDSPStagingMutex;
   // Flags to take away the modules at a safe time.
   std::atomic<bool> mShouldRemoveModel = false;
