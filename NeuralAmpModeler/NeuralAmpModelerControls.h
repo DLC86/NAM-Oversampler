@@ -407,25 +407,26 @@ public:
   , mLeftSVG(leftSVG)
   , mRightSVG(rightSVG)
   {
-    SetTooltip("Internal presets: arrows recall, save writes current slot or asks for a slot from Init");
+    SetTooltip("Internal preset controls");
   }
 
   void Draw(IGraphics& g) override
   {
     const auto areas = GetAreas();
-    const IColor frame = PLUG()->GetThemeColor().WithOpacity(mMouseIsOver ? 0.9f : 0.55f);
+    const IColor slotFrame = PLUG()->GetThemeColor().WithOpacity(mHoverPart == HoverPart::Slot ? 0.9f : 0.55f);
     const IColor fill = COLOR_BLACK.WithOpacity(0.82f);
     const IText text(13.0f, COLOR_WHITE, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
 
     g.FillRoundRect(fill, areas.slot, 3.0f);
-    g.DrawRoundRect(frame, areas.slot, 3.0f, nullptr, 1.0f);
+    g.DrawRoundRect(slotFrame, areas.slot, 3.0f, nullptr, 1.0f);
     const bool canRevert = PLUG()->IsCurrentInternalPresetDirty();
     const IColor disabledFrame = PluginColors::HELP_TEXT.WithOpacity(0.22f);
     const IColor disabledIcon = PluginColors::HELP_TEXT.WithOpacity(0.32f);
-    DrawIconButton(g, areas.revert, canRevert ? frame : disabledFrame, fill);
-    DrawIconButton(g, areas.save, frame, fill);
-    DrawIconButton(g, areas.saveAs, frame, fill);
-    DrawIconButton(g, areas.list, frame, fill);
+    DrawIconButton(
+      g, areas.revert, canRevert ? PLUG()->GetThemeColor().WithOpacity(mHoverPart == HoverPart::Revert ? 0.9f : 0.55f) : disabledFrame, fill);
+    DrawIconButton(g, areas.save, PLUG()->GetThemeColor().WithOpacity(mHoverPart == HoverPart::Save ? 0.9f : 0.55f), fill);
+    DrawIconButton(g, areas.saveAs, PLUG()->GetThemeColor().WithOpacity(mHoverPart == HoverPart::SaveAs ? 0.9f : 0.55f), fill);
+    DrawIconButton(g, areas.list, PLUG()->GetThemeColor().WithOpacity(mHoverPart == HoverPart::List ? 0.9f : 0.55f), fill);
     g.DrawSVG(mLeftSVG, areas.left.GetCentredInside(10.0f, 10.0f));
     g.DrawSVG(mRightSVG, areas.right.GetCentredInside(10.0f, 10.0f));
     WDL_String name;
@@ -442,6 +443,27 @@ public:
     DrawFloppyIcon(g, areas.save.GetCentredInside(13.0f, 13.0f), PluginColors::NAM_THEMEFONTCOLOR);
     DrawSaveAsIcon(g, areas.saveAs.GetCentredInside(15.0f, 15.0f), PluginColors::NAM_THEMEFONTCOLOR);
     DrawHamburgerIcon(g, areas.list.GetCentredInside(13.0f, 13.0f), PluginColors::NAM_THEMEFONTCOLOR);
+  }
+
+  void OnMouseOver(float x, float y, const IMouseMod& mod) override
+  {
+    const HoverPart hoverPart = HitTest(x, y);
+    if (hoverPart != mHoverPart)
+    {
+      mHoverPart = hoverPart;
+      UpdateTooltipForHover();
+      SetDirty(false);
+    }
+  }
+
+  void OnMouseOut() override
+  {
+    if (mHoverPart != HoverPart::None)
+    {
+      mHoverPart = HoverPart::None;
+      UpdateTooltipForHover();
+      SetDirty(false);
+    }
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
@@ -504,6 +526,18 @@ private:
     SaveTarget
   };
 
+  enum class HoverPart
+  {
+    None,
+    Previous,
+    Next,
+    Slot,
+    Revert,
+    Save,
+    SaveAs,
+    List
+  };
+
   struct Areas
   {
     IRECT slot;
@@ -534,6 +568,42 @@ private:
     a.right = slot.ReduceFromRight(24.0f);
     a.name = slot;
     return a;
+  }
+
+  HoverPart HitTest(float x, float y)
+  {
+    const auto areas = GetAreas();
+    if (areas.left.Contains(x, y))
+      return HoverPart::Previous;
+    if (areas.right.Contains(x, y))
+      return HoverPart::Next;
+    if (areas.revert.Contains(x, y))
+      return PLUG()->IsCurrentInternalPresetDirty() ? HoverPart::Revert : HoverPart::None;
+    if (areas.save.Contains(x, y))
+      return HoverPart::Save;
+    if (areas.saveAs.Contains(x, y))
+      return HoverPart::SaveAs;
+    if (areas.list.Contains(x, y))
+      return HoverPart::List;
+    if (areas.slot.Contains(x, y))
+      return HoverPart::Slot;
+    return HoverPart::None;
+  }
+
+  void UpdateTooltipForHover()
+  {
+    switch (mHoverPart)
+    {
+      case HoverPart::Previous: SetTooltip("Recall the previous internal preset"); break;
+      case HoverPart::Next: SetTooltip("Recall the next internal preset"); break;
+      case HoverPart::Slot: SetTooltip("Current internal preset. Click the name to rename it."); break;
+      case HoverPart::Revert: SetTooltip("Reset the current preset to its last saved state"); break;
+      case HoverPart::Save: SetTooltip("Save the current settings into the selected internal preset"); break;
+      case HoverPart::SaveAs: SetTooltip("Save the current settings into another internal preset slot"); break;
+      case HoverPart::List: SetTooltip("Open the full internal preset list"); break;
+      case HoverPart::None:
+      default: SetTooltip("Internal preset controls"); break;
+    }
   }
 
   static void DrawIconButton(IGraphics& g, const IRECT& r, const IColor& frame, const IColor& fill)
@@ -617,6 +687,7 @@ private:
   ISVG mRightSVG;
   IPopupMenu mMenu {"Internal Presets"};
   MenuMode mMenuMode = MenuMode::Recall;
+  HoverPart mHoverPart = HoverPart::None;
 };
 
 class NAMFilterKnobControl : public IVKnobControl, public IBitmapBase, public NAMMidiCCMenuMixin
@@ -1623,13 +1694,53 @@ public:
   ToneStackTypeControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
                        EDirection direction = EDirection::Vertical)
   : IVRadioButtonControl(bounds, paramIdx,
-                         {"Default", "Bench", "Big Muff", "Crate", "Dmbl Jazz", "Dmbl Rock", "Fndr Bassman 5F6-A", "Fndr Brownface",
-                          "Fndr Deluxe 5E3", "Fndr E-series", "Fndr Princeton 5E2", "Fndr Princeton 5F2A",
-                          "Fndr Pro Jr", "Fndr TMB", "Hiwatt", "Marshall", "Neve", "Vox"},
+                         {"Default", "Air", "Bax Active Dual", "Bax Active Single", "Bax Passive Dual",
+                          "Bax Passive Single", "Bench", "Big Milf", "Big Milf Hoof", "Big Milf Musket",
+                          "Big Milf Pickle", "BlackHole HT5", "Bone Ray", "Crater",
+                          "Dmbl Jazz", "Dmbl Rock", "Fndr BMan 5F6-A", "Fndr BMaster 6G7", "Fndr BrownF",
+                          "Fndr Dlx 5E3", "Fndr E-series", "Fndr PrinceT 5E2", "Fndr PrinceT 5F2A",
+                          "Fndr Pro Jr", "Fndr TB", "Fndr TMB", "Fndr Twin 5D8", "Hwtt CP", "Hwtt DR",
+                          "James Active Dual", "James Active Single", "James Passive Dual",
+                          "James Passive Single", "Mr. Z", "Mrshll", "Snow", "Svtk MIG-100H", "Svtk MIG-60", "Vx"},
                          "", style, EVShape::Ellipse, direction, buttonSize) {};
 };
 
+class NAMToneStackPopupMixin
+{
+protected:
+  void BuildToneStackMenu(IControl* owner, IPopupMenu& menu) const
+  {
+    menu.Clear();
+    menu.SetNItemsPerColumn((dsp::tone_stack::kNumToneStackTypes + 1) / 2);
+    const int current = owner != nullptr && owner->GetParam() != nullptr
+                          ? std::max(0, std::min(dsp::tone_stack::kNumToneStackTypes - 1, owner->GetParam()->Int()))
+                          : 0;
+    for (int i = 0; i < dsp::tone_stack::kNumToneStackTypes; ++i)
+    {
+      const auto type = dsp::tone_stack::ToneStackTypeFromInt(i);
+      menu.AddItem(dsp::tone_stack::GetToneStackTypeName(type), -1,
+                   i == current ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
+    }
+  }
+
+  bool HandleToneStackMenuSelection(IPopupMenu* pSelectedMenu, IControl* owner)
+  {
+    if (pSelectedMenu == nullptr)
+      return false;
+    const int chosen = pSelectedMenu->GetChosenItemIdx();
+    if (chosen < 0 || chosen >= dsp::tone_stack::kNumToneStackTypes)
+      return false;
+
+    if (owner->GetParam() == nullptr)
+      return false;
+
+    owner->SetValueFromUserInput(owner->GetParam()->ToNormalized(chosen));
+    return true;
+  }
+};
+
 class NAMToneStackSelectorControl : public IControl
+                                  , public NAMToneStackPopupMixin
 {
 public:
   NAMToneStackSelectorControl(const IRECT& bounds, int paramIdx, const ISVG& leftSVG, const ISVG& rightSVG,
@@ -1640,6 +1751,7 @@ public:
   , mOpenAction(openAction)
   {
     SetParamIdx(paramIdx);
+    SetTooltip("Tone stack selector");
   }
 
   void Draw(IGraphics& g) override
@@ -1652,25 +1764,62 @@ public:
     CalculateAreas(g, buttonArea, labelArea, leftArrowArea, rightArrowArea, valueArea);
 
     const IColor frame = IsDisabled() ? PLUG()->GetThemeColor().WithOpacity(0.15f)
-                                     : PLUG()->GetThemeColor().WithOpacity(0.40f);
+                                     : PLUG()->GetThemeColor().WithOpacity(mButtonHover ? 0.85f : 0.40f);
     const IColor valueColor = IsDisabled() ? PluginColors::HELP_TEXT.WithOpacity(0.45f)
                                           : PluginColors::NAM_THEMEFONTCOLOR;
-    const IColor labelColor = IsDisabled() ? PluginColors::HELP_TEXT.WithOpacity(0.40f) : PluginColors::HELP_TEXT;
-    if (mMouseIsOver && !IsDisabled())
-      g.FillRoundRect(PluginColors::MOUSEOVER, buttonArea, 4.0f);
+    const IColor labelColor = IsDisabled() ? PluginColors::HELP_TEXT.WithOpacity(0.40f)
+                                           : (mLabelHover ? PLUG()->GetThemeColor() : PluginColors::HELP_TEXT);
 
-    g.FillRoundRect(COLOR_BLACK.WithOpacity(0.28f), buttonArea, 4.0f);
+    g.FillRoundRect(COLOR_BLACK, buttonArea, 4.0f);
     g.DrawRoundRect(frame, buttonArea, 4.0f, nullptr, 1.0f);
-    g.DrawSVG(mLeftSVG, leftArrowArea, &mBlend);
-    g.DrawSVG(mRightSVG, rightArrowArea, &mBlend);
+    g.DrawSVG(mLeftSVG, leftArrowArea.GetCentredInside(10.0f, 10.0f), &mBlend);
+    g.DrawSVG(mRightSVG, rightArrowArea.GetCentredInside(10.0f, 10.0f), &mBlend);
 
     const IText labelText(DEFAULT_TEXT_SIZE + 3.0f, labelColor, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
-    const IText valueText(11.0f, valueColor, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    const IText valueText(12.0f, valueColor, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
     g.DrawText(labelText, "Tonestack", labelArea);
 
     const int idx = std::max(0, std::min(dsp::tone_stack::kNumToneStackTypes - 1, PLUG()->GetParam(kToneStackType)->Int()));
     g.DrawText(valueText, dsp::tone_stack::GetToneStackTypeName(dsp::tone_stack::ToneStackTypeFromInt(idx)),
                valueArea);
+  }
+
+  void OnMouseOver(float x, float y, const IMouseMod& mod) override
+  {
+    IRECT buttonArea;
+    IRECT labelArea;
+    IRECT leftArrowArea;
+    IRECT rightArrowArea;
+    IRECT valueArea;
+    CalculateAreas(*GetUI(), buttonArea, labelArea, leftArrowArea, rightArrowArea, valueArea);
+
+    const bool buttonHover = buttonArea.Contains(x, y);
+    const bool labelHover = labelArea.Contains(x, y);
+    const HoverPart hoverPart = leftArrowArea.Contains(x, y)   ? HoverPart::Previous
+                                : rightArrowArea.Contains(x, y) ? HoverPart::Next
+                                : labelHover                    ? HoverPart::Label
+                                : buttonHover                   ? HoverPart::Button
+                                                                : HoverPart::None;
+    if (buttonHover != mButtonHover || labelHover != mLabelHover || hoverPart != mHoverPart)
+    {
+      mButtonHover = buttonHover;
+      mLabelHover = labelHover;
+      mHoverPart = hoverPart;
+      UpdateTooltipForHover();
+      SetDirty(false);
+    }
+  }
+
+  void OnMouseOut() override
+  {
+    if (mButtonHover || mLabelHover)
+    {
+      mButtonHover = false;
+      mLabelHover = false;
+      mHoverPart = HoverPart::None;
+      UpdateTooltipForHover();
+      SetDirty(false);
+    }
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
@@ -1695,11 +1844,33 @@ public:
       return;
     }
 
-    if (mOpenAction)
-      mOpenAction(this);
+    if (labelArea.Contains(x, y))
+    {
+      if (mOpenAction)
+        mOpenAction(this);
+      return;
+    }
+
+    BuildToneStackMenu(this, mToneStackMenu);
+    GetUI()->CreatePopupMenu(*this, mToneStackMenu, buttonArea);
+  }
+
+  void OnPopupMenuSelection(IPopupMenu* pSelectedMenu, int valIdx) override
+  {
+    if (!HandleToneStackMenuSelection(pSelectedMenu, this))
+      IControl::OnPopupMenuSelection(pSelectedMenu, valIdx);
   }
 
 private:
+  enum class HoverPart
+  {
+    None,
+    Button,
+    Label,
+    Previous,
+    Next
+  };
+
   void CalculateAreas(IGraphics& g, IRECT& buttonArea, IRECT& labelArea, IRECT& leftArrowArea,
                       IRECT& rightArrowArea, IRECT& valueArea) const
   {
@@ -1710,15 +1881,94 @@ private:
 
     labelArea = mRECT.GetFromBottom(measuredLabel.H()).GetCentredInside(measuredLabel.W(), measuredLabel.H());
     const IRECT clickableArea = mRECT.GetReducedFromBottom(measuredLabel.H());
-    buttonArea = clickableArea.GetCentredInside(std::min(122.0f, clickableArea.W()), clickableArea.H() * 0.5f);
+    buttonArea = clickableArea.GetCentredInside(std::min(122.0f, clickableArea.W()), clickableArea.H() * 0.62f);
     leftArrowArea = buttonArea.GetFromLeft(20.0f).GetPadded(-3.0f);
     rightArrowArea = buttonArea.GetFromRight(20.0f).GetPadded(-3.0f);
     valueArea = IRECT(leftArrowArea.R + 2.0f, buttonArea.T, rightArrowArea.L - 2.0f, buttonArea.B);
   }
 
+  void UpdateTooltipForHover()
+  {
+    switch (mHoverPart)
+    {
+      case HoverPart::Previous: SetTooltip("Select the previous tone stack type"); break;
+      case HoverPart::Next: SetTooltip("Select the next tone stack type"); break;
+      case HoverPart::Label: SetTooltip("Open the tone stack component editor"); break;
+      case HoverPart::Button: SetTooltip("Open the tone stack type list"); break;
+      case HoverPart::None:
+      default: SetTooltip("Tone stack selector"); break;
+    }
+  }
+
   ISVG mLeftSVG;
   ISVG mRightSVG;
   IActionFunction mOpenAction;
+  IPopupMenu mToneStackMenu {"Tone Stack"};
+  HoverPart mHoverPart = HoverPart::None;
+  bool mButtonHover = false;
+  bool mLabelHover = false;
+};
+
+class NAMToneStackMenuButtonControl : public IControl
+                                    , public NAMToneStackPopupMixin
+{
+public:
+  NAMToneStackMenuButtonControl(const IRECT& bounds, int paramIdx)
+  : IControl(bounds)
+  {
+    SetParamIdx(paramIdx);
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const IColor frame = IsDisabled() ? PLUG()->GetThemeColor().WithOpacity(0.15f)
+                                      : PLUG()->GetThemeColor().WithOpacity(mMouseIsOver ? 0.65f : 0.40f);
+    const IColor textColor = IsDisabled() ? PluginColors::HELP_TEXT.WithOpacity(0.45f)
+                                         : PluginColors::NAM_THEMEFONTCOLOR;
+    if (mMouseIsOver && !IsDisabled())
+      g.FillRoundRect(PluginColors::MOUSEOVER, mRECT, 4.0f);
+    g.FillRoundRect(COLOR_BLACK, mRECT, 4.0f);
+    g.DrawRoundRect(frame, mRECT, 4.0f, nullptr, 1.0f);
+
+    const IText valueText(13.0f, textColor, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
+    const int idx = std::max(0, std::min(dsp::tone_stack::kNumToneStackTypes - 1, PLUG()->GetParam(kToneStackType)->Int()));
+    g.DrawText(valueText, dsp::tone_stack::GetToneStackTypeName(dsp::tone_stack::ToneStackTypeFromInt(idx)), mRECT);
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    if (IsDisabled())
+      return;
+    BuildToneStackMenu(this, mToneStackMenu);
+    GetUI()->CreatePopupMenu(*this, mToneStackMenu, mRECT);
+  }
+
+  void OnPopupMenuSelection(IPopupMenu* pSelectedMenu, int valIdx) override
+  {
+    if (!HandleToneStackMenuSelection(pSelectedMenu, this))
+      IControl::OnPopupMenuSelection(pSelectedMenu, valIdx);
+  }
+
+private:
+  IPopupMenu mToneStackMenu {"Tone Stack"};
+};
+
+class NAMClickableLabelControl : public ITextControl
+{
+public:
+  NAMClickableLabelControl(const IRECT& bounds, const char* str, const IText& text, IActionFunction action)
+  : ITextControl(bounds, str, text)
+  , mAction(action)
+  {
+  }
+
+  void OnMouseDown(float x, float y, const IMouseMod& mod) override
+  {
+    if (mAction)
+      mAction(this);
+  }
+private:
+  IActionFunction mAction;
 };
 
 class NAMToneStackComponentFieldControl : public IEditableTextControl
@@ -1854,14 +2104,8 @@ public:
     AddNamedChildControl(new IVLabelControl(content.GetFromTop(50.0f), "TONESTACK", titleStyle), "Title");
 
     const auto selectorArea = content.GetReducedFromTop(52.0f).GetFromTop(30.0f).GetCentredInside(210.0f, 26.0f);
-    const auto selectorStyle = radioButtonStyle.WithDrawFrame(true)
-                               .WithColor(kBG, COLOR_BLACK)
-                               .WithColor(kFG, COLOR_BLACK)
-                               .WithColor(kFR, PLUG()->GetThemeColor().WithOpacity(0.40f));
     auto* stackControl =
-      AddNamedChildControl(new IVMenuButtonControl(selectorArea, kToneStackType, "", 
-                                                   selectorStyle, EVShape::Rectangle),
-                           "ToneStackType");
+      AddNamedChildControl(new NAMToneStackMenuButtonControl(selectorArea, kToneStackType), "ToneStackType");
     stackControl->SetTooltip("Select the EQ tone stack circuit used by the Bass, Middle and Treble controls");
 
     const auto gridArea = content.GetReducedFromTop(92.0f).GetFromTop(172.0f).GetCentredInside(555.0f, 172.0f);

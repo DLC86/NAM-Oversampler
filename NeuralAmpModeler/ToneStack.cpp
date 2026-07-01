@@ -54,6 +54,48 @@ CircuitSpec GetDefaultCircuitSpec(ToneStackType type)
   // treble/bass/mid pot resistance = Rt/Rb/Rm.
   switch (type)
   {
+    case ToneStackType::Aria:
+    {
+      CircuitSpec spec{100000.0, 1e-9, 1e-9, 220e-9, 100000.0, 100000.0, 100000.0,
+                       1000000.0, 0.10, 0.10, 0.10, 1.0};
+      spec.inputResistance = 1000.0;
+      return spec;
+    }
+    case ToneStackType::Bandmaster6G7:
+    {
+      CircuitSpec spec{100000.0, 250e-12, 50e-9, 10e-9, 250000.0, 250000.0, 1000000.0,
+                       1000000.0, 0.50, 0.10, 0.50, 1.0};
+      spec.inputResistance = 38000.0;
+      return spec;
+    }
+    case ToneStackType::BaxandallActiveDualBassCap:
+    {
+      CircuitSpec spec{22000.0, 560e-12, 47e-9, 47e-9, 100000.0, 100000.0, 1000000.0,
+                       1000000.0, 0.50, 0.50, 0.50, 1.0};
+      spec.inputResistance = 600.0;
+      return spec;
+    }
+    case ToneStackType::BaxandallActiveSingleBassCap:
+    {
+      CircuitSpec spec{22000.0, 560e-12, 47e-9, 47e-9, 100000.0, 100000.0, 1000000.0,
+                       1000000.0, 0.50, 0.50, 0.50, 1.0};
+      spec.inputResistance = 600.0;
+      return spec;
+    }
+    case ToneStackType::BaxandallPassiveDualBassCap:
+    {
+      CircuitSpec spec{100000.0, 330e-12, 470e-12, 4700e-12, 500000.0, 500000.0, 1000000.0,
+                       1000000.0, 0.10, 0.50, 0.10, 1.0};
+      spec.inputResistance = 38000.0;
+      return spec;
+    }
+    case ToneStackType::BaxandallPassiveSingleBassCap:
+    {
+      CircuitSpec spec{2200.0, 10e-9, 220e-9, 220e-9, 10000.0, 10000.0, 1000000.0,
+                       100000.0, 0.50, 0.50, 0.50, 1.0};
+      spec.inputResistance = 600.0;
+      return spec;
+    }
     case ToneStackType::Bench:
     {
       CircuitSpec spec{51000.0, 6.8e-9, 22e-9, 22e-9, 100000.0, 100000.0, 100000.0,
@@ -66,6 +108,41 @@ CircuitSpec GetDefaultCircuitSpec(ToneStackType type)
       CircuitSpec spec{39000.0, 10e-9, 4e-9, 10e-9, 100000.0, 100000.0, 100000.0,
                        1000000.0, 0.50, 0.50, 0.50, 1.0};
       spec.inputResistance = 1000.0;
+      return spec;
+    }
+    case ToneStackType::BigMuffHoof:
+    {
+      CircuitSpec spec{39000.0, 100e-9, 6.8e-9, 6.8e-9, 100000.0, 100000.0, 25000.0,
+                       100000.0, 0.50, 0.50, 0.50, 1.0};
+      spec.inputResistance = 15000.0;
+      return spec;
+    }
+    case ToneStackType::BigMuffMusket:
+    {
+      CircuitSpec spec{10000.0, 100e-9, 3.3e-9, 47e-9, 250000.0, 100000.0, 100000.0,
+                       100000.0, 0.50, 0.50, 0.50, 1.0};
+      spec.inputResistance = 12000.0;
+      return spec;
+    }
+    case ToneStackType::BigMuffPickle:
+    {
+      CircuitSpec spec{33000.0, 1e-6, 3.3e-9, 33e-9, 100000.0, 100000.0, 50000.0,
+                       100000.0, 0.50, 0.50, 0.50, 1.0};
+      spec.inputResistance = 15000.0;
+      return spec;
+    }
+    case ToneStackType::BlackstarHT5:
+    {
+      CircuitSpec spec{47000.0, 4.7e-9, 470e-9, 220e-9, 47000.0, 100000.0, 2200.0,
+                       470000.0, 0.50, 0.10, 0.10, 1.0};
+      spec.inputResistance = 47000.0;
+      return spec;
+    }
+    case ToneStackType::BoneRay:
+    {
+      CircuitSpec spec{470000.0, 220e-12, 1e-9, 4.7e-9, 1000000.0, 1000000.0, 1000000.0,
+                       1000000.0, 0.50, 0.10, 0.50, 1.0};
+      spec.inputResistance = 38000.0;
       return spec;
     }
     case ToneStackType::Crate:
@@ -81,6 +158,13 @@ CircuitSpec GetDefaultCircuitSpec(ToneStackType type)
       CircuitSpec spec{150000.0, 2e-9, 100e-9, 1e-9, 270000.0, 312000.0, 250000.0,
                        1000000.0, 0.10, 0.20, 0.20, 1.0};
       spec.inputResistance = 40000.0;
+      return spec;
+    }
+    case ToneStackType::DrZ:
+    {
+      CircuitSpec spec{330000.0, 120e-12, 10e-9, 4700e-12, 1000000.0, 1000000.0, 1000000.0,
+                       1000000.0, 0.30, 0.50, 0.50, 1.0};
+      spec.inputResistance = 38000.0;
       return spec;
     }
     case ToneStackType::FndrBassman5F6A:
@@ -99,7 +183,7 @@ CircuitSpec GetDefaultCircuitSpec(ToneStackType type)
     }
     case ToneStackType::FndrDeluxe5E3:
     {
-      CircuitSpec spec{20000.0, 100e-9, 4700e-12, 500e-12, 1000000.0, 1000000.0, 1000000.0,
+      CircuitSpec spec{20000.0, 100e-9, 4.7e-9, 500e-12, 1000000.0, 1000000.0, 1000000.0,
                        1000000.0, 0.10, 0.10, 0.10, 1.0};
       spec.inputResistance = 20000.0;
       return spec;
@@ -132,6 +216,13 @@ CircuitSpec GetDefaultCircuitSpec(ToneStackType type)
       spec.inputResistance = 38000.0;
       return spec;
     }
+    case ToneStackType::FndrTrebleBass:
+    {
+      CircuitSpec spec{100000.0, 250e-12, 100e-9, 47e-9, 250000.0, 250000.0, 6800.0,
+                       1000000.0, 0.30, 0.30, 0.50, 1.0};
+      spec.inputResistance = 38000.0;
+      return spec;
+    }
     case ToneStackType::FndrTMB:
     {
       CircuitSpec spec{100000.0, 250e-12, 100e-9, 47e-9, 250000.0, 250000.0, 10000.0,
@@ -153,6 +244,27 @@ CircuitSpec GetDefaultCircuitSpec(ToneStackType type)
       spec.inputResistance = 1.0;
       return spec;
     }
+    case ToneStackType::SovtekMIG100H:
+    {
+      CircuitSpec spec{47000.0, 470e-12, 22e-9, 22e-9, 500000.0, 1000000.0, 10000.0,
+                       1000000.0, 0.10, 0.10, 0.50, 1.0};
+      spec.inputResistance = 77000.0;
+      return spec;
+    }
+    case ToneStackType::SovtekMIG60:
+    {
+      CircuitSpec spec{56000.0, 470e-12, 33e-9, 22e-9, 250000.0, 1000000.0, 25000.0,
+                       1000000.0, 0.50, 0.10, 0.50, 1.0};
+      spec.inputResistance = 77000.0;
+      return spec;
+    }
+    case ToneStackType::Twin5D8:
+    {
+      CircuitSpec spec{270000.0, 220e-12, 100e-9, 4.7e-9, 1000000.0, 2000000.0, 1000000.0,
+                       1000000.0, 0.30, 0.30, 0.50, 1.0};
+      spec.inputResistance = 552.0;
+      return spec;
+    }
     case ToneStackType::Vox:
     {
       CircuitSpec spec{100000.0, 47e-12, 22e-9, 22e-9, 1000000.0, 1000000.0, 1000000.0,
@@ -165,6 +277,41 @@ CircuitSpec GetDefaultCircuitSpec(ToneStackType type)
       CircuitSpec spec{48400.0, 220e-12, 47e-9, 1e-9, 220000.0, 470000.0, 100000.0, 220000.0,
                        0.50, 0.20, 0.50, 1.0};
       spec.inputResistance = 48400.0;
+      return spec;
+    }
+    case ToneStackType::HiwattCP:
+    {
+      CircuitSpec spec{100000.0, 220e-12, 47e-9, 47e-9, 250000.0, 500000.0, 1000000.0,
+                       220000.0, 0.50, 0.10, 0.50, 1.0};
+      spec.inputResistance = 48400.0;
+      return spec;
+    }
+    case ToneStackType::JamesActiveDualBassCap:
+    {
+      CircuitSpec spec{2200.0, 10e-9, 220e-9, 220e-9, 10000.0, 10000.0, 1000000.0,
+                       100000.0, 0.50, 0.50, 0.50, 1.0};
+      spec.inputResistance = 600.0;
+      return spec;
+    }
+    case ToneStackType::JamesActiveSingleBassCap:
+    {
+      CircuitSpec spec{2200.0, 10e-9, 220e-9, 220e-9, 10000.0, 10000.0, 1000000.0,
+                       100000.0, 0.50, 0.50, 0.50, 1.0};
+      spec.inputResistance = 600.0;
+      return spec;
+    }
+    case ToneStackType::JamesPassiveDualBassCap:
+    {
+      CircuitSpec spec{100000.0, 330e-12, 470e-12, 4700e-12, 470000.0, 1000000.0, 1000000.0,
+                       1000000.0, 0.10, 0.50, 0.10, 1.0};
+      spec.inputResistance = 38000.0;
+      return spec;
+    }
+    case ToneStackType::JamesPassiveSingleBassCap:
+    {
+      CircuitSpec spec{2200.0, 10e-9, 220e-9, 220e-9, 10000.0, 10000.0, 1000000.0,
+                       100000.0, 0.50, 0.50, 0.50, 1.0};
+      spec.inputResistance = 600.0;
       return spec;
     }
     case ToneStackType::Default:
@@ -543,6 +690,69 @@ Complex EvaluateHiwattMna(const CircuitSpec& editableSpec, double bassValue, dou
   return voltages[OUT] * editableSpec.makeupGain;
 }
 
+Complex EvaluateHiwattCpMna(const CircuitSpec& spec, double bassValue, double trebleValue, Complex s)
+{
+  constexpr int kNodeCount = 8;
+  enum Node
+  {
+    IN = 0,
+    INPUT_NODE,
+    STACK_IN,
+    JUNCTION,
+    BASS_WIPER,
+    TREBLE_TOP,
+    OUT
+  };
+
+  std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
+  std::array<Complex, kNodeCount> current{};
+
+  auto stampAdmittance = [&](int a, int b, Complex admittance) {
+    if (a >= 0)
+      y[a][a] += admittance;
+    if (b >= 0)
+      y[b][b] += admittance;
+    if (a >= 0 && b >= 0)
+    {
+      y[a][b] -= admittance;
+      y[b][a] -= admittance;
+    }
+  };
+  auto stampResistor = [&](int a, int b, double resistance) {
+    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
+  };
+  auto stampCapacitor = [&](int a, int b, double capacitance) {
+    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
+  };
+  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
+    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
+    y[a][a] += conductance;
+    current[a] += conductance * voltage;
+  };
+  auto stampPot = [&](int top, int bottom, int wiper, double resistance, double position) {
+    stampResistor(top, wiper, resistance * (1.0 - position) + 1.0);
+    stampResistor(wiper, bottom, resistance * position + 1.0);
+  };
+
+  constexpr double r2 = 10000.0;
+  const double bass = LocalPotPosition(bassValue, spec.bassTaper);
+  const double treble = LocalPotPosition(trebleValue, spec.trebleTaper);
+
+  stampKnownVoltageThroughResistor(IN, 1.0, kMinimumResistance);
+  stampResistor(IN, INPUT_NODE, spec.inputResistance);
+  stampCapacitor(INPUT_NODE, STACK_IN, spec.bassCapacitance);
+  stampResistor(STACK_IN, JUNCTION, spec.sourceResistance);
+  stampResistor(BASS_WIPER, JUNCTION, r2);
+  stampCapacitor(-1, BASS_WIPER, spec.midCapacitance);
+  stampPot(JUNCTION, -1, BASS_WIPER, spec.bassPotResistance, bass);
+  stampCapacitor(STACK_IN, TREBLE_TOP, spec.trebleCapacitance);
+  stampPot(TREBLE_TOP, JUNCTION, OUT, spec.treblePotResistance, treble);
+  stampResistor(OUT, -1, spec.loadResistance);
+
+  const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
+  return voltages[OUT] * spec.makeupGain;
+}
+
 Complex EvaluateVoxMna(const CircuitSpec& spec, double bassValue, double trebleValue, Complex s)
 {
   constexpr int kNodeCount = 6;
@@ -606,7 +816,7 @@ Complex EvaluateVoxMna(const CircuitSpec& spec, double bassValue, double trebleV
 
 Complex EvaluateCrateMna(const CircuitSpec& spec, double bassValue, double midValue, double trebleValue, Complex s)
 {
-  constexpr int kNodeCount = 8;
+  constexpr int kNodeCount = 9;
   enum Node
   {
     IN = 0,
@@ -672,7 +882,7 @@ Complex EvaluateCrateMna(const CircuitSpec& spec, double bassValue, double midVa
 
 Complex EvaluateBenchMna(const CircuitSpec& spec, double bassValue, double midValue, double trebleValue, Complex s)
 {
-  constexpr int kNodeCount = 8;
+  constexpr int kNodeCount = 9;
   enum Node
   {
     IN = 0,
@@ -799,10 +1009,966 @@ Complex EvaluateBigMuffMna(const CircuitSpec& spec, double midValue, Complex s)
   return voltages[OUT] * spec.makeupGain;
 }
 
+Complex EvaluateBigMuffVariantMna(ToneStackType type, const CircuitSpec& spec, double midValue, double trebleValue,
+                                  Complex s)
+{
+  constexpr int kNodeCount = 9;
+  enum Node
+  {
+    IN = 0,
+    N2,
+    N3,
+    N4,
+    MID_BOTTOM,
+    TREBLE_WIPER,
+    OUT,
+    PICKLE_VOICE,
+    PICKLE_VOICE_WIPER
+  };
+
+  std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
+  std::array<Complex, kNodeCount> current{};
+
+  auto stampAdmittance = [&](int a, int b, Complex admittance) {
+    if (a >= 0)
+      y[a][a] += admittance;
+    if (b >= 0)
+      y[b][b] += admittance;
+    if (a >= 0 && b >= 0)
+    {
+      y[a][b] -= admittance;
+      y[b][a] -= admittance;
+    }
+  };
+  auto stampResistor = [&](int a, int b, double resistance) {
+    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
+  };
+  auto stampCapacitor = [&](int a, int b, double capacitance) {
+    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
+  };
+  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
+    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
+    y[a][a] += conductance;
+    current[a] += conductance * voltage;
+  };
+  auto stampPot = [&](int top, int bottom, int wiper, double resistance, double position) {
+    stampResistor(top, wiper, resistance * (1.0 - position) + 1.0);
+    stampResistor(wiper, bottom, resistance * position + 1.0);
+  };
+
+  const double mid = LocalPotPosition(midValue, spec.midTaper);
+  const double treble = LocalPotPosition(trebleValue, spec.trebleTaper);
+
+  stampKnownVoltageThroughResistor(IN, 1.0, kMinimumResistance);
+  stampResistor(IN, N2, spec.inputResistance);
+  stampResistor(N2, N3, spec.sourceResistance);
+  stampCapacitor(N3, -1, spec.midCapacitance);
+
+  if (type == ToneStackType::BigMuffHoof)
+  {
+    constexpr double r2 = 2200.0;
+    stampCapacitor(N2, N4, spec.bassCapacitance);
+    stampResistor(MID_BOTTOM, -1, r2);
+    stampResistor(MID_BOTTOM, N4, spec.midPotResistance * mid + 1.0);
+    stampPot(N4, N3, TREBLE_WIPER, spec.treblePotResistance, treble);
+    stampCapacitor(TREBLE_WIPER, OUT, spec.trebleCapacitance);
+  }
+  else if (type == ToneStackType::BigMuffMusket)
+  {
+    constexpr double r2 = 56000.0;
+    stampCapacitor(N2, N4, spec.bassCapacitance);
+    stampCapacitor(N2, PICKLE_VOICE, 47e-9);
+    stampResistor(N4, -1, r2);
+    stampResistor(PICKLE_VOICE, N4, spec.midPotResistance * mid + 1.0);
+    stampPot(N4, N3, TREBLE_WIPER, spec.treblePotResistance, treble);
+    stampCapacitor(TREBLE_WIPER, OUT, spec.trebleCapacitance);
+  }
+  else
+  {
+    constexpr double r2 = 1500.0;
+    constexpr double voicePot = 500000.0;
+    constexpr double voicePosition = 0.01;
+    stampCapacitor(N2, N4, spec.bassCapacitance);
+    stampCapacitor(N2, PICKLE_VOICE, 33e-9);
+    stampPot(PICKLE_VOICE, N4, PICKLE_VOICE_WIPER, voicePot, voicePosition);
+    stampResistor(MID_BOTTOM, PICKLE_VOICE_WIPER, spec.midPotResistance * mid + 1.0);
+    stampResistor(MID_BOTTOM, -1, r2);
+    stampPot(PICKLE_VOICE_WIPER, N3, TREBLE_WIPER, spec.treblePotResistance, treble);
+    stampCapacitor(TREBLE_WIPER, OUT, spec.trebleCapacitance);
+  }
+
+  stampResistor(OUT, -1, spec.loadResistance);
+  const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
+  return voltages[OUT] * spec.makeupGain;
+}
+
+Complex EvaluateBlackstarHt5Mna(const CircuitSpec& spec, double bassValue, double midValue, double trebleValue,
+                                Complex s)
+{
+  constexpr int kNodeCount = 13;
+  enum Node
+  {
+    VIN = 0,
+    TOP,
+    ISF_WIPER,
+    R1_TOP,
+    R1_BOTTOM,
+    MID_TOP,
+    MID_BOTTOM,
+    TREBLE_FEED,
+    ISF_BOTTOM,
+    TREBLE_TOP,
+    TREBLE_WIPER,
+    BASS_TOP,
+    OUT
+  };
+
+  std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
+  std::array<Complex, kNodeCount> current{};
+
+  auto stampAdmittance = [&](int a, int b, Complex admittance) {
+    if (a >= 0)
+      y[a][a] += admittance;
+    if (b >= 0)
+      y[b][b] += admittance;
+    if (a >= 0 && b >= 0)
+    {
+      y[a][b] -= admittance;
+      y[b][a] -= admittance;
+    }
+  };
+  auto stampResistor = [&](int a, int b, double resistance) {
+    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
+  };
+  auto stampCapacitor = [&](int a, int b, double capacitance) {
+    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
+  };
+  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
+    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
+    y[a][a] += conductance;
+    current[a] += conductance * voltage;
+  };
+
+  constexpr double r1 = 4700.0;
+  constexpr double r2 = 6800.0;
+  constexpr double r3 = 22000.0;
+  constexpr double r4 = 1000.0;
+  constexpr double inputCap = 22e-6;
+  constexpr double c1 = 220e-9;
+  constexpr double isfResistance = 10000.0;
+
+  const double bass = LocalPotPosition(bassValue, spec.bassTaper);
+  const double mid = LocalPotPosition(midValue, spec.midTaper);
+  const double treble = LocalPotPosition(trebleValue, spec.trebleTaper);
+
+  // Blackstar's extra ISF pot is intentionally fixed at 5/10 here. It shapes
+  // the network but is not exposed as a fourth user control.
+  constexpr double isf = 0.5;
+  const double isfTop = isfResistance * (1.0 - isf) + 1.0;
+  const double isfBottom = isfResistance * isf + 1.0;
+
+  stampKnownVoltageThroughResistor(VIN, 1.0, kMinimumResistance);
+  stampCapacitor(VIN, TOP, inputCap);
+  stampResistor(TOP, -1, spec.inputResistance);
+
+  stampResistor(TOP, ISF_WIPER, isfTop);
+  stampResistor(ISF_WIPER, R1_TOP, isfBottom);
+  stampResistor(R1_TOP, R1_BOTTOM, r1);
+  stampCapacitor(R1_BOTTOM, -1, c1);
+
+  stampCapacitor(TOP, TREBLE_FEED, spec.bassCapacitance);
+  stampResistor(TREBLE_FEED, MID_TOP, r2);
+  stampCapacitor(TOP, TREBLE_TOP, spec.trebleCapacitance);
+  stampResistor(TREBLE_TOP, ISF_BOTTOM, r3);
+  stampResistor(TREBLE_FEED, ISF_BOTTOM, isfBottom);
+  stampCapacitor(MID_TOP, ISF_BOTTOM, spec.midCapacitance);
+
+  stampResistor(MID_TOP, R1_BOTTOM, spec.midPotResistance * mid + 1.0);
+  stampResistor(ISF_BOTTOM, BASS_TOP, r4);
+  stampResistor(BASS_TOP, -1, spec.bassPotResistance * bass + 1.0);
+
+  stampResistor(TREBLE_TOP, TREBLE_WIPER, spec.treblePotResistance * (1.0 - treble) + 1.0);
+  stampResistor(TREBLE_WIPER, ISF_BOTTOM, spec.treblePotResistance * treble + 1.0);
+  stampCapacitor(TREBLE_WIPER, OUT, 100e-9);
+  stampResistor(OUT, -1, spec.loadResistance);
+
+  // Tiny leakage stabilises the two high-impedance internal nodes at extreme
+  // settings without changing the audio-band curve in a meaningful way.
+  stampResistor(MID_BOTTOM, -1, 1.0e12);
+
+  const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
+  return voltages[OUT] * spec.makeupGain;
+}
+
+Complex EvaluateSovtekMna(ToneStackType type, const CircuitSpec& spec, double bassValue, double midValue,
+                          double trebleValue, Complex s)
+{
+  constexpr int kNodeCount = 8;
+  enum Node
+  {
+    IN = 0,
+    RIN_RIGHT,
+    TREBLE_TOP,
+    R1_BOTTOM,
+    TONE_JUNCTION,
+    BASS_BOTTOM,
+    MID_TOP,
+    OUT
+  };
+
+  std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
+  std::array<Complex, kNodeCount> current{};
+
+  auto stampAdmittance = [&](int a, int b, Complex admittance) {
+    if (a >= 0)
+      y[a][a] += admittance;
+    if (b >= 0)
+      y[b][b] += admittance;
+    if (a >= 0 && b >= 0)
+    {
+      y[a][b] -= admittance;
+      y[b][a] -= admittance;
+    }
+  };
+  auto stampResistor = [&](int a, int b, double resistance) {
+    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
+  };
+  auto stampCapacitor = [&](int a, int b, double capacitance) {
+    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
+  };
+  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
+    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
+    y[a][a] += conductance;
+    current[a] += conductance * voltage;
+  };
+  auto stampPot = [&](int top, int bottom, int wiper, double resistance, double position) {
+    stampResistor(top, wiper, resistance * (1.0 - position) + 1.0);
+    stampResistor(wiper, bottom, resistance * position + 1.0);
+  };
+
+  const double bass = LocalPotPosition(bassValue, spec.bassTaper);
+  const double mid = LocalPotPosition(midValue, spec.midTaper);
+  const double treble = LocalPotPosition(trebleValue, spec.trebleTaper);
+
+  stampKnownVoltageThroughResistor(IN, 1.0, kMinimumResistance);
+  stampResistor(IN, RIN_RIGHT, spec.inputResistance);
+  stampCapacitor(RIN_RIGHT, TREBLE_TOP, spec.trebleCapacitance);
+  stampResistor(RIN_RIGHT, R1_BOTTOM, spec.sourceResistance);
+  stampCapacitor(R1_BOTTOM, TONE_JUNCTION, spec.midCapacitance);
+  stampCapacitor(R1_BOTTOM, MID_TOP, spec.bassCapacitance);
+  stampPot(TREBLE_TOP, TONE_JUNCTION, OUT, spec.treblePotResistance, treble);
+  stampResistor(TONE_JUNCTION, BASS_BOTTOM, spec.bassPotResistance * bass + 1.0);
+
+  if (type == ToneStackType::SovtekMIG100H)
+  {
+    constexpr double r2 = 100.0;
+    constexpr double r3 = 33000.0;
+    stampResistor(MID_TOP, BASS_BOTTOM, r2);
+    stampResistor(MID_TOP, -1, r3);
+    stampPot(-1, BASS_BOTTOM, MID_TOP, spec.midPotResistance, mid);
+  }
+  else
+  {
+    constexpr double c4 = 470e-12;
+    stampCapacitor(MID_TOP, -1, c4);
+    stampPot(-1, BASS_BOTTOM, MID_TOP, spec.midPotResistance, mid);
+  }
+
+  stampResistor(OUT, -1, spec.loadResistance);
+  const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
+  return voltages[OUT] * spec.makeupGain;
+}
+
+Complex EvaluateDrZMna(const CircuitSpec& spec, double trebleValue, Complex s)
+{
+  constexpr int kNodeCount = 5;
+  enum Node
+  {
+    IN = 0,
+    COUPLED,
+    OUT,
+    WIPER,
+    DUMMY
+  };
+
+  std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
+  std::array<Complex, kNodeCount> current{};
+
+  auto stampAdmittance = [&](int a, int b, Complex admittance) {
+    if (a >= 0)
+      y[a][a] += admittance;
+    if (b >= 0)
+      y[b][b] += admittance;
+    if (a >= 0 && b >= 0)
+    {
+      y[a][b] -= admittance;
+      y[b][a] -= admittance;
+    }
+  };
+  auto stampResistor = [&](int a, int b, double resistance) {
+    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
+  };
+  auto stampCapacitor = [&](int a, int b, double capacitance) {
+    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
+  };
+  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
+    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
+    y[a][a] += conductance;
+    current[a] += conductance * voltage;
+  };
+
+  const double treble = LocalPotPosition(trebleValue, spec.trebleTaper);
+
+  stampKnownVoltageThroughResistor(IN, 1.0, kMinimumResistance);
+  stampResistor(IN, COUPLED, spec.inputResistance);
+  stampCapacitor(COUPLED, OUT, spec.midCapacitance);
+  stampResistor(OUT, WIPER, spec.sourceResistance);
+  stampCapacitor(OUT, WIPER, spec.trebleCapacitance);
+  stampResistor(OUT, WIPER, 330000.0);
+  stampCapacitor(WIPER, -1, spec.bassCapacitance);
+  stampResistor(OUT, WIPER, spec.treblePotResistance * treble + 1.0);
+  stampResistor(WIPER, -1, spec.treblePotResistance * (1.0 - treble) + 1.0);
+  stampResistor(OUT, -1, spec.loadResistance);
+  stampResistor(DUMMY, -1, 1.0e12);
+
+  const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
+  return voltages[OUT] * spec.makeupGain;
+}
+
+Complex EvaluateBandmaster6G7Mna(const CircuitSpec& spec, double bassValue, double trebleValue, Complex s)
+{
+  constexpr int kNodeCount = 8;
+  enum Node
+  {
+    IN = 0,
+    RIN_RIGHT,
+    STACK_IN,
+    TREBLE_TOP,
+    TONE_JUNCTION,
+    BASS_WIPER,
+    VOLUME_TOP,
+    OUT
+  };
+
+  std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
+  std::array<Complex, kNodeCount> current{};
+
+  auto stampAdmittance = [&](int a, int b, Complex admittance) {
+    if (a >= 0)
+      y[a][a] += admittance;
+    if (b >= 0)
+      y[b][b] += admittance;
+    if (a >= 0 && b >= 0)
+    {
+      y[a][b] -= admittance;
+      y[b][a] -= admittance;
+    }
+  };
+  auto stampResistor = [&](int a, int b, double resistance) {
+    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
+  };
+  auto stampCapacitor = [&](int a, int b, double capacitance) {
+    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
+  };
+  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
+    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
+    y[a][a] += conductance;
+    current[a] += conductance * voltage;
+  };
+  auto stampPot = [&](int top, int bottom, int wiper, double resistance, double position) {
+    stampResistor(top, wiper, resistance * (1.0 - position) + 1.0);
+    stampResistor(wiper, bottom, resistance * position + 1.0);
+  };
+
+  constexpr double r2 = 10000.0;
+  constexpr double volumePot = 500000.0;
+  constexpr double brightCap = 47e-12;
+  const double bass = LocalPotPosition(bassValue, spec.bassTaper);
+  const double treble = LocalPotPosition(trebleValue, spec.trebleTaper);
+
+  stampKnownVoltageThroughResistor(IN, 1.0, kMinimumResistance);
+  stampResistor(IN, RIN_RIGHT, spec.inputResistance);
+  stampCapacitor(RIN_RIGHT, STACK_IN, spec.bassCapacitance);
+  stampCapacitor(STACK_IN, TREBLE_TOP, spec.trebleCapacitance);
+  stampResistor(STACK_IN, TONE_JUNCTION, spec.sourceResistance);
+  stampPot(TREBLE_TOP, TONE_JUNCTION, VOLUME_TOP, spec.treblePotResistance, treble);
+  stampPot(-1, TONE_JUNCTION, BASS_WIPER, spec.bassPotResistance, bass);
+  stampCapacitor(TONE_JUNCTION, BASS_WIPER, spec.midCapacitance);
+  stampResistor(BASS_WIPER, -1, r2);
+
+  // Post-stack volume fixed at 10, with the 6G7 bright cap still in circuit.
+  stampResistor(VOLUME_TOP, OUT, 1.0);
+  stampResistor(OUT, -1, volumePot + 1.0);
+  stampCapacitor(VOLUME_TOP, OUT, brightCap);
+  stampResistor(OUT, -1, spec.loadResistance);
+
+  const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
+  return voltages[OUT] * spec.makeupGain;
+}
+
+Complex EvaluateBoneRayMna(const CircuitSpec& spec, double midValue, double trebleValue, Complex s)
+{
+  constexpr int kNodeCount = 6;
+  enum Node
+  {
+    IN = 0,
+    RIN_RIGHT,
+    TILT_LEFT,
+    TILT_RIGHT,
+    C2_BOTTOM,
+    OUT
+  };
+
+  std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
+  std::array<Complex, kNodeCount> current{};
+
+  auto stampAdmittance = [&](int a, int b, Complex admittance) {
+    if (a >= 0)
+      y[a][a] += admittance;
+    if (b >= 0)
+      y[b][b] += admittance;
+    if (a >= 0 && b >= 0)
+    {
+      y[a][b] -= admittance;
+      y[b][a] -= admittance;
+    }
+  };
+  auto stampResistor = [&](int a, int b, double resistance) {
+    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
+  };
+  auto stampCapacitor = [&](int a, int b, double capacitance) {
+    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
+  };
+  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
+    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
+    y[a][a] += conductance;
+    current[a] += conductance * voltage;
+  };
+  auto stampPot = [&](int top, int bottom, int wiper, double resistance, double position) {
+    stampResistor(top, wiper, resistance * (1.0 - position) + 1.0);
+    stampResistor(wiper, bottom, resistance * position + 1.0);
+  };
+
+  constexpr double r2 = 470000.0;
+  constexpr double c3 = 4.7e-9;
+  constexpr double c4 = 4.7e-9;
+  const double mid = LocalPotPosition(midValue, spec.midTaper);
+  const double treble = LocalPotPosition(trebleValue, spec.trebleTaper);
+
+  stampKnownVoltageThroughResistor(IN, 1.0, kMinimumResistance);
+  stampResistor(IN, RIN_RIGHT, spec.inputResistance);
+  stampCapacitor(RIN_RIGHT, TILT_LEFT, spec.trebleCapacitance);
+  stampResistor(TILT_LEFT, -1, spec.sourceResistance);
+  stampResistor(RIN_RIGHT, TILT_RIGHT, r2);
+  stampPot(TILT_LEFT, TILT_RIGHT, OUT, spec.treblePotResistance, treble);
+  stampCapacitor(TILT_RIGHT, C2_BOTTOM, spec.midCapacitance);
+  stampCapacitor(C2_BOTTOM, -1, c3);
+  stampCapacitor(OUT, TILT_LEFT, c4);
+  stampPot(C2_BOTTOM, TILT_LEFT, TILT_RIGHT, spec.midPotResistance, mid);
+  stampResistor(OUT, -1, spec.loadResistance);
+
+  const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
+  return voltages[OUT] * spec.makeupGain;
+}
+
+Complex EvaluateTwin5D8Mna(const CircuitSpec& spec, double bassValue, double trebleValue, Complex s)
+{
+  constexpr int kNodeCount = 9;
+  enum Node
+  {
+    IN = 0,
+    RIN_RIGHT,
+    BASS_TOP,
+    BASS_BOTTOM,
+    BASS_WIPER,
+    TREBLE_BOTTOM,
+    TREBLE_TOP,
+    OUT,
+    GROUND_BUS
+  };
+
+  std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
+  std::array<Complex, kNodeCount> current{};
+
+  auto stampAdmittance = [&](int a, int b, Complex admittance) {
+    if (a >= 0)
+      y[a][a] += admittance;
+    if (b >= 0)
+      y[b][b] += admittance;
+    if (a >= 0 && b >= 0)
+    {
+      y[a][b] -= admittance;
+      y[b][a] -= admittance;
+    }
+  };
+  auto stampResistor = [&](int a, int b, double resistance) {
+    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
+  };
+  auto stampCapacitor = [&](int a, int b, double capacitance) {
+    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
+  };
+  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
+    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
+    y[a][a] += conductance;
+    current[a] += conductance * voltage;
+  };
+  auto stampPot = [&](int top, int bottom, int wiper, double resistance, double position) {
+    stampResistor(top, wiper, resistance * (1.0 - position) + 1.0);
+    stampResistor(wiper, bottom, resistance * position + 1.0);
+  };
+
+  constexpr double r2 = 56000.0;
+  constexpr double r3 = 270000.0;
+  constexpr double r4 = 270000.0;
+  constexpr double cb1 = 100e-12;
+  constexpr double ct2 = 3e-9;
+  const double bass = LocalPotPosition(bassValue, spec.bassTaper);
+  const double treble = LocalPotPosition(trebleValue, spec.trebleTaper);
+
+  stampKnownVoltageThroughResistor(IN, 1.0, kMinimumResistance);
+  stampResistor(IN, RIN_RIGHT, spec.inputResistance);
+  stampCapacitor(RIN_RIGHT, BASS_TOP, spec.midCapacitance);
+  stampResistor(BASS_TOP, BASS_BOTTOM, spec.sourceResistance);
+  stampPot(BASS_TOP, BASS_BOTTOM, BASS_WIPER, spec.bassPotResistance, bass);
+  stampResistor(BASS_BOTTOM, GROUND_BUS, r2);
+  stampResistor(GROUND_BUS, BASS_TOP, r3);
+  stampCapacitor(BASS_TOP, BASS_WIPER, cb1);
+  stampCapacitor(BASS_WIPER, BASS_BOTTOM, spec.bassCapacitance);
+  stampResistor(BASS_WIPER, OUT, r4);
+
+  stampCapacitor(RIN_RIGHT, TREBLE_TOP, spec.trebleCapacitance);
+  stampCapacitor(TREBLE_BOTTOM, GROUND_BUS, ct2);
+  stampPot(TREBLE_TOP, TREBLE_BOTTOM, OUT, spec.treblePotResistance, treble);
+  stampResistor(OUT, GROUND_BUS, spec.loadResistance);
+  stampResistor(GROUND_BUS, -1, kMinimumResistance);
+
+  const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
+  return voltages[OUT] * spec.makeupGain;
+}
+
+Complex EvaluateAriaMna(const CircuitSpec& spec, double bassValue, double midValue, double trebleValue, Complex s)
+{
+  constexpr int kNodeCount = 8;
+  enum Node
+  {
+    IN = 0,
+    RIN_RIGHT,
+    TREBLE_TOP,
+    TREBLE_WIPER,
+    MID_WIPER,
+    BASS_TOP,
+    BASS_WIPER,
+    OUT
+  };
+
+  std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
+  std::array<Complex, kNodeCount> current{};
+
+  auto stampAdmittance = [&](int a, int b, Complex admittance) {
+    if (a >= 0)
+      y[a][a] += admittance;
+    if (b >= 0)
+      y[b][b] += admittance;
+    if (a >= 0 && b >= 0)
+    {
+      y[a][b] -= admittance;
+      y[b][a] -= admittance;
+    }
+  };
+  auto stampResistor = [&](int a, int b, double resistance) {
+    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
+  };
+  auto stampCapacitor = [&](int a, int b, double capacitance) {
+    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
+  };
+  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
+    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
+    y[a][a] += conductance;
+    current[a] += conductance * voltage;
+  };
+  auto stampPotToGround = [&](int top, int wiper, double resistance, double position) {
+    stampResistor(top, wiper, resistance * (1.0 - position) + 1.0);
+    stampResistor(wiper, -1, resistance * position + 1.0);
+  };
+
+  constexpr double trebleSeries = 220000.0;
+  constexpr double midSeries = 1000000.0;
+  constexpr double bassSeries = 33000.0;
+  constexpr double bassFeed = 100000.0;
+  constexpr double trebleOutputCap = 1e-9;
+  const double bass = LocalPotPosition(bassValue, spec.bassTaper);
+  const double mid = LocalPotPosition(midValue, spec.midTaper);
+  const double treble = LocalPotPosition(trebleValue, spec.trebleTaper);
+
+  stampKnownVoltageThroughResistor(IN, 1.0, kMinimumResistance);
+  stampResistor(IN, RIN_RIGHT, spec.inputResistance);
+
+  stampCapacitor(RIN_RIGHT, TREBLE_TOP, spec.trebleCapacitance);
+  stampPotToGround(TREBLE_TOP, TREBLE_WIPER, spec.treblePotResistance, treble);
+  stampResistor(TREBLE_WIPER, OUT, trebleSeries);
+  stampCapacitor(TREBLE_WIPER, OUT, trebleOutputCap);
+
+  stampPotToGround(RIN_RIGHT, MID_WIPER, spec.midPotResistance, mid);
+  stampResistor(MID_WIPER, OUT, midSeries);
+
+  stampResistor(RIN_RIGHT, BASS_TOP, bassFeed);
+  stampPotToGround(BASS_TOP, BASS_WIPER, spec.bassPotResistance, bass);
+  stampCapacitor(BASS_TOP, -1, spec.bassCapacitance);
+  stampResistor(BASS_WIPER, OUT, bassSeries);
+
+  stampResistor(OUT, -1, spec.loadResistance);
+  const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
+  return voltages[OUT] * spec.makeupGain;
+}
+
+Complex EvaluateJamesPassiveMna(ToneStackType type, const CircuitSpec& spec, double bassValue, double trebleValue,
+                                Complex s)
+{
+  constexpr int kNodeCount = 8;
+  enum Node
+  {
+    IN = 0,
+    TOP,
+    BASS_TOP,
+    BASS_BOTTOM,
+    BASS_WIPER,
+    TREBLE_TOP,
+    TREBLE_BOTTOM,
+    OUT
+  };
+
+  std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
+  std::array<Complex, kNodeCount> current{};
+
+  auto stampAdmittance = [&](int a, int b, Complex admittance) {
+    if (a >= 0)
+      y[a][a] += admittance;
+    if (b >= 0)
+      y[b][b] += admittance;
+    if (a >= 0 && b >= 0)
+    {
+      y[a][b] -= admittance;
+      y[b][a] -= admittance;
+    }
+  };
+  auto stampResistor = [&](int a, int b, double resistance) {
+    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
+  };
+  auto stampCapacitor = [&](int a, int b, double capacitance) {
+    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
+  };
+  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
+    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
+    y[a][a] += conductance;
+    current[a] += conductance * voltage;
+  };
+  auto stampPot = [&](int top, int bottom, int wiper, double resistance, double position) {
+    stampResistor(top, wiper, resistance * (1.0 - position) + 1.0);
+    stampResistor(wiper, bottom, resistance * position + 1.0);
+  };
+
+  const bool dualBassCap = type == ToneStackType::JamesPassiveDualBassCap;
+  const double r2 = dualBassCap ? 10000.0 : 2200.0;
+  const double r3 = dualBassCap ? 180000.0 : 2200.0;
+  const double ct2 = dualBassCap ? 3300e-12 : 10e-9;
+  const double bass = LocalPotPosition(bassValue, spec.bassTaper);
+  const double treble = LocalPotPosition(trebleValue, spec.trebleTaper);
+
+  stampKnownVoltageThroughResistor(IN, 1.0, kMinimumResistance);
+  stampResistor(IN, TOP, spec.inputResistance);
+  stampResistor(TOP, BASS_TOP, spec.sourceResistance);
+  stampResistor(BASS_BOTTOM, -1, r2);
+  stampPot(BASS_TOP, BASS_BOTTOM, BASS_WIPER, spec.bassPotResistance, bass);
+  if (dualBassCap)
+  {
+    stampCapacitor(BASS_TOP, BASS_WIPER, spec.midCapacitance);
+    stampCapacitor(BASS_BOTTOM, BASS_WIPER, spec.bassCapacitance);
+  }
+  else
+  {
+    stampCapacitor(BASS_TOP, BASS_BOTTOM, spec.bassCapacitance);
+  }
+  stampResistor(BASS_WIPER, OUT, r3);
+
+  stampCapacitor(TOP, TREBLE_TOP, spec.trebleCapacitance);
+  stampCapacitor(TREBLE_BOTTOM, -1, ct2);
+  stampPot(TREBLE_TOP, TREBLE_BOTTOM, OUT, spec.treblePotResistance, treble);
+  stampResistor(OUT, -1, spec.loadResistance);
+
+  const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
+  return voltages[OUT] * spec.makeupGain;
+}
+
+Complex EvaluateBaxandallPassiveMna(ToneStackType type, const CircuitSpec& spec, double bassValue, double trebleValue,
+                                    Complex s)
+{
+  constexpr int kNodeCount = 9;
+  enum Node
+  {
+    IN = 0,
+    TOP,
+    BASS_TOP,
+    BASS_BOTTOM,
+    BASS_WIPER,
+    TREBLE_TOP,
+    TREBLE_BOTTOM,
+    TREBLE_WIPER,
+    OUT
+  };
+
+  std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
+  std::array<Complex, kNodeCount> current{};
+
+  auto stampAdmittance = [&](int a, int b, Complex admittance) {
+    if (a >= 0)
+      y[a][a] += admittance;
+    if (b >= 0)
+      y[b][b] += admittance;
+    if (a >= 0 && b >= 0)
+    {
+      y[a][b] -= admittance;
+      y[b][a] -= admittance;
+    }
+  };
+  auto stampResistor = [&](int a, int b, double resistance) {
+    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
+  };
+  auto stampCapacitor = [&](int a, int b, double capacitance) {
+    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
+  };
+  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
+    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
+    y[a][a] += conductance;
+    current[a] += conductance * voltage;
+  };
+  auto stampPot = [&](int top, int bottom, int wiper, double resistance, double position) {
+    stampResistor(top, wiper, resistance * (1.0 - position) + 1.0);
+    stampResistor(wiper, bottom, resistance * position + 1.0);
+  };
+
+  const bool dualBassCap = type == ToneStackType::BaxandallPassiveDualBassCap;
+  const double r2 = dualBassCap ? 10000.0 : 2200.0;
+  const double r3 = dualBassCap ? 180000.0 : 2200.0;
+  const double r4 = dualBassCap ? 10000.0 : 1000.0;
+  const double r5 = dualBassCap ? 10000.0 : 1000.0;
+  const double bass = LocalPotPosition(bassValue, spec.bassTaper);
+  const double treble = LocalPotPosition(trebleValue, spec.trebleTaper);
+
+  stampKnownVoltageThroughResistor(IN, 1.0, kMinimumResistance);
+  stampResistor(IN, TOP, spec.inputResistance);
+  stampResistor(TOP, BASS_TOP, spec.sourceResistance);
+  stampResistor(BASS_BOTTOM, -1, r2);
+  stampPot(BASS_TOP, BASS_BOTTOM, BASS_WIPER, spec.bassPotResistance, bass);
+  if (dualBassCap)
+  {
+    stampCapacitor(BASS_TOP, BASS_WIPER, spec.midCapacitance);
+    stampCapacitor(BASS_BOTTOM, BASS_WIPER, spec.bassCapacitance);
+  }
+  else
+  {
+    stampCapacitor(BASS_TOP, BASS_BOTTOM, spec.bassCapacitance);
+  }
+  stampResistor(BASS_WIPER, OUT, r3);
+
+  stampResistor(TOP, TREBLE_TOP, r4);
+  stampResistor(TREBLE_BOTTOM, -1, r5);
+  stampPot(TREBLE_TOP, TREBLE_BOTTOM, TREBLE_WIPER, spec.treblePotResistance, treble);
+  stampCapacitor(TREBLE_WIPER, OUT, spec.trebleCapacitance);
+  stampResistor(OUT, -1, spec.loadResistance);
+
+  const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
+  return voltages[OUT] * spec.makeupGain;
+}
+
+template <int NodeCount>
+Complex SolveInvertingOpAmpMna(std::array<std::array<Complex, NodeCount + 1>, NodeCount + 1> y,
+                               std::array<Complex, NodeCount + 1> current, int invertingNode, int outputNode)
+{
+  constexpr int opAmpCurrent = NodeCount;
+  y[outputNode][opAmpCurrent] += 1.0;
+  y[opAmpCurrent][invertingNode] += 1.0;
+  current[opAmpCurrent] = 0.0;
+  return SolveComplexLinearSystem<NodeCount + 1>(y, current)[outputNode];
+}
+
+Complex EvaluateJamesActiveMna(ToneStackType type, const CircuitSpec& spec, double bassValue, double trebleValue,
+                               Complex s)
+{
+  enum Node
+  {
+    TOP = 0,
+    BASS_TOP,
+    BASS_BOTTOM,
+    BASS_WIPER,
+    SUM,
+    FEEDBACK,
+    TREBLE_TOP,
+    TREBLE_BOTTOM,
+    OUT,
+    kNodeCount
+  };
+  std::array<std::array<Complex, kNodeCount + 1>, kNodeCount + 1> y{};
+  std::array<Complex, kNodeCount + 1> current{};
+
+  auto stampAdmittance = [&](int a, int b, Complex admittance) {
+    if (a >= 0)
+      y[a][a] += admittance;
+    if (b >= 0)
+      y[b][b] += admittance;
+    if (a >= 0 && b >= 0)
+    {
+      y[a][b] -= admittance;
+      y[b][a] -= admittance;
+    }
+  };
+  auto stampResistor = [&](int a, int b, double resistance) {
+    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
+  };
+  auto stampCapacitor = [&](int a, int b, double capacitance) {
+    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
+  };
+  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
+    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
+    y[a][a] += conductance;
+    current[a] += conductance * voltage;
+  };
+  auto stampPot = [&](int top, int bottom, int wiper, double resistance, double position) {
+    stampResistor(top, wiper, resistance * (1.0 - position) + 1.0);
+    stampResistor(wiper, bottom, resistance * position + 1.0);
+  };
+
+  const bool dualBassCap = type == ToneStackType::JamesActiveDualBassCap;
+  const double bass = LocalPotPosition(bassValue, spec.bassTaper);
+  const double treble = LocalPotPosition(trebleValue, spec.trebleTaper);
+
+  stampKnownVoltageThroughResistor(TOP, 1.0, spec.inputResistance);
+  stampResistor(TOP, BASS_TOP, 2200.0);
+  stampResistor(BASS_BOTTOM, FEEDBACK, 2200.0);
+  stampResistor(BASS_WIPER, SUM, 2200.0);
+  stampPot(BASS_TOP, BASS_BOTTOM, BASS_WIPER, spec.bassPotResistance, bass);
+  if (dualBassCap)
+  {
+    stampCapacitor(BASS_TOP, BASS_WIPER, spec.midCapacitance);
+    stampCapacitor(BASS_BOTTOM, BASS_WIPER, spec.bassCapacitance);
+  }
+  else
+  {
+    stampCapacitor(BASS_TOP, BASS_BOTTOM, spec.bassCapacitance);
+  }
+
+  stampCapacitor(TOP, TREBLE_TOP, spec.trebleCapacitance);
+  stampCapacitor(FEEDBACK, TREBLE_BOTTOM, dualBassCap ? 10e-9 : spec.trebleCapacitance);
+  stampPot(TREBLE_TOP, TREBLE_BOTTOM, SUM, spec.treblePotResistance, treble);
+  stampResistor(OUT, FEEDBACK, 600.0);
+
+  return SolveInvertingOpAmpMna<kNodeCount>(y, current, SUM, OUT);
+}
+
+Complex EvaluateBaxandallActiveMna(ToneStackType type, const CircuitSpec& spec, double bassValue, double trebleValue,
+                                   Complex s)
+{
+  enum Node
+  {
+    TOP = 0,
+    BASS_TOP,
+    BASS_BOTTOM,
+    BASS_WIPER,
+    SUM_LEFT,
+    SUM,
+    FEEDBACK,
+    TREBLE_TOP,
+    TREBLE_BOTTOM,
+    TREBLE_WIPER,
+    OUT,
+    kNodeCount
+  };
+  std::array<std::array<Complex, kNodeCount + 1>, kNodeCount + 1> y{};
+  std::array<Complex, kNodeCount + 1> current{};
+
+  auto stampAdmittance = [&](int a, int b, Complex admittance) {
+    if (a >= 0)
+      y[a][a] += admittance;
+    if (b >= 0)
+      y[b][b] += admittance;
+    if (a >= 0 && b >= 0)
+    {
+      y[a][b] -= admittance;
+      y[b][a] -= admittance;
+    }
+  };
+  auto stampResistor = [&](int a, int b, double resistance) {
+    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
+  };
+  auto stampCapacitor = [&](int a, int b, double capacitance) {
+    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
+  };
+  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
+    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
+    y[a][a] += conductance;
+    current[a] += conductance * voltage;
+  };
+  auto stampPot = [&](int top, int bottom, int wiper, double resistance, double position) {
+    stampResistor(top, wiper, resistance * (1.0 - position) + 1.0);
+    stampResistor(wiper, bottom, resistance * position + 1.0);
+  };
+
+  const bool dualBassCap = type == ToneStackType::BaxandallActiveDualBassCap;
+  const double r1 = 22000.0;
+  const double r2 = 22000.0;
+  const double r3 = 22000.0;
+  const double r4 = 10000.0;
+  const double r5 = 10000.0;
+  const double bass = LocalPotPosition(bassValue, spec.bassTaper);
+  const double treble = LocalPotPosition(trebleValue, spec.trebleTaper);
+
+  stampKnownVoltageThroughResistor(TOP, 1.0, spec.inputResistance);
+  stampResistor(TOP, BASS_TOP, r1);
+  stampResistor(BASS_BOTTOM, FEEDBACK, r2);
+  stampResistor(BASS_WIPER, SUM_LEFT, r3);
+  stampPot(BASS_TOP, BASS_BOTTOM, BASS_WIPER, spec.bassPotResistance, bass);
+  if (dualBassCap)
+  {
+    stampCapacitor(BASS_TOP, BASS_WIPER, spec.midCapacitance);
+    stampCapacitor(BASS_BOTTOM, BASS_WIPER, spec.bassCapacitance);
+  }
+  else
+  {
+    stampCapacitor(BASS_TOP, BASS_BOTTOM, spec.bassCapacitance);
+  }
+
+  stampResistor(TOP, TREBLE_TOP, r4);
+  stampResistor(FEEDBACK, TREBLE_BOTTOM, r5);
+  stampPot(TREBLE_TOP, TREBLE_BOTTOM, TREBLE_WIPER, spec.treblePotResistance, treble);
+  stampCapacitor(TREBLE_WIPER, SUM, spec.trebleCapacitance);
+  stampResistor(SUM_LEFT, SUM, kMinimumResistance);
+  stampResistor(OUT, FEEDBACK, 600.0);
+
+  return SolveInvertingOpAmpMna<kNodeCount>(y, current, SUM, OUT);
+}
+
+template <int NodeCount, int OpAmpCount>
+std::array<Complex, NodeCount + OpAmpCount> SolveIdealOpAmpMna(
+  std::array<std::array<Complex, NodeCount + OpAmpCount>, NodeCount + OpAmpCount> y,
+  std::array<Complex, NodeCount + OpAmpCount> current,
+  const std::array<std::array<int, 3>, OpAmpCount>& opAmps)
+{
+  for (int op = 0; op < OpAmpCount; ++op)
+  {
+    const int output = opAmps[op][0];
+    const int plus = opAmps[op][1];
+    const int minus = opAmps[op][2];
+    const int opCurrent = NodeCount + op;
+    y[output][opCurrent] += 1.0;
+    y[opCurrent][plus] += 1.0;
+    y[opCurrent][minus] -= 1.0;
+  }
+  return SolveComplexLinearSystem<NodeCount + OpAmpCount>(y, current);
+}
+
 Complex EvaluateDumbleMna(ToneStackType type, const CircuitSpec& spec, double bassValue, double midValue,
                           double trebleValue, Complex s)
 {
-  constexpr int kNodeCount = 9;
+  constexpr int kNodeCount = 12;
   enum Node
   {
     IN = 0,
@@ -813,7 +1979,10 @@ Complex EvaluateDumbleMna(ToneStackType type, const CircuitSpec& spec, double ba
     TREBLE_FEED,
     TREBLE_TOP,
     VOLUME_WIPER,
-    OUT
+    OUT,
+    BASS_WIPER_NODE,
+    TREBLE_BOTTOM,
+    VOLUME_TOP
   };
 
   std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
@@ -856,55 +2025,85 @@ Complex EvaluateDumbleMna(ToneStackType type, const CircuitSpec& spec, double ba
   const double c6 = 220e-12;
   const double c7 = jazz ? 1.0e-9 : 1.0e-15;
 
-  stampKnownVoltageThroughResistor(IN, 1.0, spec.inputResistance);
-  stampResistor(IN, R1_BOTTOM, spec.sourceResistance);
-  stampCapacitor(IN, TREBLE_FEED, spec.trebleCapacitance);
-  stampResistor(TREBLE_FEED, -1, r3);
-
-  stampCapacitor(R1_BOTTOM, BASS_TOP, spec.bassCapacitance);
-  stampCapacitor(R1_BOTTOM, MID_TOP, 10e-9);
-  stampCapacitor(BASS_TOP, BASS_WIPER, spec.midCapacitance);
-  stampResistor(BASS_WIPER, -1, spec.bassPotResistance * (0.25 + 0.75 * bass) + 1.0);
-  stampResistor(BASS_TOP, -1, r2);
-  stampCapacitor(BASS_WIPER, -1, c4);
-
-  stampResistor(MID_TOP, -1, spec.midPotResistance * mid + 1.0);
-  if (jazz)
+  if (!jazz)
   {
-    stampCapacitor(BASS_WIPER, MID_TOP, c7);
-    stampResistor(BASS_WIPER, TREBLE_TOP, r4);
+    stampKnownVoltageThroughResistor(IN, 1.0, spec.inputResistance);
+    stampResistor(IN, R1_BOTTOM, spec.sourceResistance);
+    stampCapacitor(IN, TREBLE_FEED, spec.trebleCapacitance);
+    stampResistor(TREBLE_FEED, -1, r3);
+
+    stampCapacitor(R1_BOTTOM, BASS_TOP, spec.bassCapacitance); // C2
+    stampCapacitor(R1_BOTTOM, MID_TOP, 10e-9); // C3
+    stampResistor(MID_TOP, -1, spec.midPotResistance * mid + 1.0); // RM
+
+    // Dumble Rock uses RB as a variable resistor between the C2/RT-bottom node
+    // and the R2 shunt node, with C4 in parallel across RB.
+    stampResistor(BASS_TOP, BASS_WIPER, spec.bassPotResistance * bass + 1.0);
+    stampCapacitor(BASS_TOP, BASS_WIPER, c4);
+    stampResistor(BASS_WIPER, -1, r2);
+
+    stampCapacitor(TREBLE_FEED, TREBLE_TOP, c5);
+    stampResistor(TREBLE_TOP, VOLUME_WIPER, spec.treblePotResistance * (1.0 - treble) + 1.0);
+    stampResistor(VOLUME_WIPER, BASS_TOP, spec.treblePotResistance * treble + 1.0);
+
+    // The Dumble schematics include a post-stack volume. Keep it fixed at 10 as requested.
+    stampResistor(VOLUME_WIPER, OUT, 1.0);
+    stampResistor(OUT, -1, volumePot + 1.0);
+    stampCapacitor(VOLUME_WIPER, OUT, c6);
+    stampResistor(OUT, -1, spec.loadResistance);
+
+    const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
+    return voltages[OUT] * spec.makeupGain;
   }
-  else
+
   {
-    stampResistor(BASS_WIPER, TREBLE_TOP, kMinimumResistance);
+    const double bassTopToWiper = spec.bassPotResistance * (1.0 - bass) + 1.0;
+    const double bassWiperToBottom = spec.bassPotResistance * bass + 1.0;
+
+    stampKnownVoltageThroughResistor(IN, 1.0, spec.inputResistance);
+    stampResistor(IN, R1_BOTTOM, spec.sourceResistance);
+    stampCapacitor(IN, TREBLE_FEED, spec.trebleCapacitance);
+    stampResistor(TREBLE_FEED, -1, r3);
+
+    stampCapacitor(R1_BOTTOM, BASS_TOP, spec.midCapacitance); // C2
+    stampCapacitor(R1_BOTTOM, MID_TOP, 10e-9); // C3
+    stampResistor(MID_TOP, -1, spec.midPotResistance * mid + 1.0); // RM
+
+    stampResistor(BASS_TOP, BASS_WIPER_NODE, bassTopToWiper);
+    stampResistor(BASS_WIPER_NODE, BASS_WIPER, bassWiperToBottom);
+    stampCapacitor(BASS_TOP, BASS_WIPER, c7);
+    stampResistor(BASS_WIPER, -1, r2);
+
+    stampCapacitor(TREBLE_FEED, TREBLE_TOP, c5);
+    stampResistor(TREBLE_TOP, VOLUME_TOP, spec.treblePotResistance * (1.0 - treble) + 1.0);
+    stampResistor(VOLUME_TOP, TREBLE_BOTTOM, spec.treblePotResistance * treble + 1.0);
+    stampCapacitor(TREBLE_BOTTOM, -1, c4);
+    stampResistor(BASS_WIPER_NODE, VOLUME_TOP, r4);
+
+    // The Dumble schematics include a post-stack volume. Keep it fixed at 10 as requested.
+    stampResistor(VOLUME_TOP, OUT, 1.0);
+    stampResistor(OUT, -1, volumePot + 1.0);
+    stampCapacitor(VOLUME_TOP, OUT, c6);
+    stampResistor(OUT, -1, spec.loadResistance);
+
+    const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
+    return voltages[OUT] * spec.makeupGain;
   }
-
-  stampCapacitor(TREBLE_FEED, TREBLE_TOP, c5);
-  stampResistor(TREBLE_TOP, VOLUME_WIPER, spec.treblePotResistance * (1.0 - treble) + 1.0);
-  stampResistor(VOLUME_WIPER, BASS_WIPER, spec.treblePotResistance * treble + 1.0);
-
-  // The Dumble schematics include a post-stack volume. Keep it fixed at 10 as requested.
-  stampResistor(VOLUME_WIPER, OUT, 1.0);
-  stampResistor(OUT, -1, volumePot + 1.0);
-  stampCapacitor(OUT, -1, c6);
-  stampResistor(OUT, -1, spec.loadResistance);
-
-  const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
-  return voltages[OUT] * spec.makeupGain;
 }
 
 Complex EvaluateFenderBrownfaceMna(const CircuitSpec& spec, double bassValue, double trebleValue, Complex s)
 {
-  constexpr int kNodeCount = 7;
+  constexpr int kNodeCount = 8;
   enum Node
   {
     IN = 0,
     R1_BOTTOM,
     TREBLE_TOP,
-    TONE_NODE,
+    TREBLE_TAP,
     BASS_BOTTOM,
     TREBLE_BOTTOM,
-    OUT
+    OUT,
+    DUMMY
   };
 
   std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
@@ -938,19 +2137,103 @@ Complex EvaluateFenderBrownfaceMna(const CircuitSpec& spec, double bassValue, do
   const double r2 = 6800.0;
   const double rTap = 70000.0;
   const double c4 = spec.midCapacitance;
+  const double rTreble = spec.treblePotResistance;
+  const double rWiperFromBottom = std::clamp(treble * rTreble, 1.0, rTreble - 1.0);
+  const double rTapFromBottom = std::clamp(rTap, 1.0, rTreble - 1.0);
 
   stampKnownVoltageThroughResistor(IN, 1.0, spec.inputResistance);
   stampResistor(IN, R1_BOTTOM, spec.sourceResistance);
   stampCapacitor(IN, TREBLE_TOP, spec.trebleCapacitance);
-  stampCapacitor(R1_BOTTOM, TONE_NODE, spec.bassCapacitance);
+  stampCapacitor(R1_BOTTOM, TREBLE_TAP, spec.bassCapacitance);
   stampCapacitor(R1_BOTTOM, BASS_BOTTOM, 100e-9);
-  stampResistor(TONE_NODE, BASS_BOTTOM, spec.bassPotResistance * bass + 1.0);
+  stampResistor(TREBLE_TAP, BASS_BOTTOM, spec.bassPotResistance * bass + 1.0);
   stampResistor(BASS_BOTTOM, -1, r2);
-  stampResistor(TREBLE_TOP, OUT, spec.treblePotResistance * (1.0 - treble) + 1.0);
-  stampResistor(OUT, TREBLE_BOTTOM, spec.treblePotResistance * treble + 1.0);
-  stampResistor(TREBLE_BOTTOM, -1, rTap);
+
+  // Brownface uses a tapped treble pot: the tone network is connected to a
+  // fixed tap on the pot track, while the output follows the wiper. Modelling
+  // it as a normal pot plus a fixed shunt makes the upper treble range fold
+  // over abruptly. Split the track at the fixed tap and at the current wiper.
+  if (rWiperFromBottom >= rTapFromBottom)
+  {
+    stampResistor(TREBLE_TOP, OUT, rTreble - rWiperFromBottom + 1.0);
+    stampResistor(OUT, TREBLE_TAP, rWiperFromBottom - rTapFromBottom + 1.0);
+    stampResistor(TREBLE_TAP, TREBLE_BOTTOM, rTapFromBottom + 1.0);
+  }
+  else
+  {
+    stampResistor(TREBLE_TOP, TREBLE_TAP, rTreble - rTapFromBottom + 1.0);
+    stampResistor(TREBLE_TAP, OUT, rTapFromBottom - rWiperFromBottom + 1.0);
+    stampResistor(OUT, TREBLE_BOTTOM, rWiperFromBottom + 1.0);
+  }
+
   stampCapacitor(TREBLE_BOTTOM, -1, c4);
   stampResistor(OUT, -1, spec.loadResistance);
+  stampResistor(DUMMY, -1, 1.0e12);
+
+  const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
+  return voltages[OUT] * spec.makeupGain;
+}
+
+Complex EvaluateFenderDeluxe5E3Mna(const CircuitSpec& spec, bool brightChannel, double trebleValue, Complex s)
+{
+  constexpr int kNodeCount = 5;
+  enum Node
+  {
+    IN = 0,
+    OUT,
+    TONE_NODE,
+    BRIGHT_NODE,
+    DUMMY
+  };
+
+  std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
+  std::array<Complex, kNodeCount> current{};
+
+  auto stampAdmittance = [&](int a, int b, Complex admittance) {
+    if (a >= 0)
+      y[a][a] += admittance;
+    if (b >= 0)
+      y[b][b] += admittance;
+    if (a >= 0 && b >= 0)
+    {
+      y[a][b] -= admittance;
+      y[b][a] -= admittance;
+    }
+  };
+  auto stampResistor = [&](int a, int b, double resistance) {
+    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
+  };
+  auto stampCapacitor = [&](int a, int b, double capacitance) {
+    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
+  };
+  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
+    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
+    y[a][a] += conductance;
+    current[a] += conductance * voltage;
+  };
+
+  const double tone = LocalPotPosition(trebleValue, spec.trebleTaper);
+  const double couplingCap = spec.trebleCapacitance;
+  const double toneShuntCap = spec.bassCapacitance;
+  const double brightCap = spec.midCapacitance;
+
+  stampKnownVoltageThroughResistor(IN, 1.0, spec.inputResistance);
+  stampCapacitor(IN, OUT, couplingCap);
+
+  // 5E3 normal channel: the tone control is effectively a variable treble
+  // bleed. At low settings it shunts highs to ground; at high settings it
+  // gets out of the way. Keep the unused bright-volume interaction as a mild
+  // fixed high-frequency branch instead of letting it dominate the whole
+  // response and turn the stack into a steep high-pass.
+  stampResistor(OUT, TONE_NODE, spec.treblePotResistance * tone + 1.0);
+  stampCapacitor(TONE_NODE, -1, toneShuntCap);
+  stampCapacitor(OUT, BRIGHT_NODE, brightCap);
+  stampResistor(BRIGHT_NODE, -1, spec.midPotResistance);
+
+  stampResistor(OUT, -1, spec.loadResistance);
+  // Keep the matrix strictly non-singular on all compilers even when controls
+  // hit ideal endpoints.
+  stampResistor(DUMMY, -1, 1.0e12);
 
   const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
   return voltages[OUT] * spec.makeupGain;
@@ -961,6 +2244,8 @@ Complex EvaluateFenderNoMidMna(ToneStackType type, const CircuitSpec& spec, doub
 {
   if (type == ToneStackType::FndrBrownface)
     return EvaluateFenderBrownfaceMna(spec, bassValue, trebleValue, s);
+  if (type == ToneStackType::FndrDeluxe5E3)
+    return EvaluateFenderDeluxe5E3Mna(spec, false, trebleValue, s);
 
   constexpr int kNodeCount = 7;
   enum Node
@@ -1116,23 +2401,46 @@ Complex EvaluateToneStackMna(ToneStackType type, const CircuitSpec& spec, double
 {
   switch (type)
   {
+    case ToneStackType::Aria: return EvaluateAriaMna(spec, bassValue, midValue, trebleValue, s);
+    case ToneStackType::Bandmaster6G7: return EvaluateBandmaster6G7Mna(spec, bassValue, trebleValue, s);
+    case ToneStackType::BaxandallActiveDualBassCap:
+    case ToneStackType::BaxandallActiveSingleBassCap: return EvaluateBaxandallActiveMna(type, spec, bassValue, trebleValue, s);
+    case ToneStackType::BaxandallPassiveDualBassCap:
+    case ToneStackType::BaxandallPassiveSingleBassCap: return EvaluateBaxandallPassiveMna(type, spec, bassValue, trebleValue, s);
     case ToneStackType::Bench: return EvaluateBenchMna(spec, bassValue, midValue, trebleValue, s);
     case ToneStackType::BigMuff: return EvaluateBigMuffMna(spec, midValue, s);
+    case ToneStackType::BigMuffHoof:
+    case ToneStackType::BigMuffMusket:
+    case ToneStackType::BigMuffPickle: return EvaluateBigMuffVariantMna(type, spec, midValue, trebleValue, s);
+    case ToneStackType::BlackstarHT5: return EvaluateBlackstarHt5Mna(spec, bassValue, midValue, trebleValue, s);
+    case ToneStackType::BoneRay: return EvaluateBoneRayMna(spec, midValue, trebleValue, s);
     case ToneStackType::Crate: return EvaluateCrateMna(spec, bassValue, midValue, trebleValue, s);
     case ToneStackType::DmblJazz:
     case ToneStackType::DmblRock: return EvaluateDumbleMna(type, spec, bassValue, midValue, trebleValue, s);
+    case ToneStackType::DrZ: return EvaluateDrZMna(spec, trebleValue, s);
     case ToneStackType::FndrBassman5F6A:
+    case ToneStackType::FndrTrebleBass:
     case ToneStackType::FndrTMB:
-    case ToneStackType::Marshall: return EvaluateClassicTmbMna(spec, bassValue, midValue, trebleValue, s);
+    case ToneStackType::Marshall:
+      return EvaluateClassicTmbMna(spec, bassValue,
+                                   type == ToneStackType::FndrTrebleBass ? 10.0 : midValue, trebleValue, s);
     case ToneStackType::FndrBrownface:
     case ToneStackType::FndrESeries:
     case ToneStackType::FndrPrinceton5E2:
     case ToneStackType::FndrPrinceton5F2A:
     case ToneStackType::FndrProJr: return EvaluateFenderNoMidMna(type, spec, bassValue, trebleValue, s);
-    case ToneStackType::FndrDeluxe5E3: return EvaluateFenderNoMidMna(type, spec, trebleValue, bassValue, s);
+    case ToneStackType::FndrDeluxe5E3: return EvaluateFenderNoMidMna(type, spec, bassValue, trebleValue, s);
     case ToneStackType::Hiwatt: return EvaluateHiwattMna(spec, bassValue, midValue, trebleValue, s);
+    case ToneStackType::HiwattCP: return EvaluateHiwattCpMna(spec, bassValue, trebleValue, s);
+    case ToneStackType::JamesActiveDualBassCap:
+    case ToneStackType::JamesActiveSingleBassCap: return EvaluateJamesActiveMna(type, spec, bassValue, trebleValue, s);
+    case ToneStackType::JamesPassiveDualBassCap:
+    case ToneStackType::JamesPassiveSingleBassCap: return EvaluateJamesPassiveMna(type, spec, bassValue, trebleValue, s);
     case ToneStackType::Vox: return EvaluateVoxMna(spec, bassValue, trebleValue, s);
     case ToneStackType::Neve: return EvaluateNeveMna(spec, bassValue, trebleValue, s);
+    case ToneStackType::SovtekMIG100H:
+    case ToneStackType::SovtekMIG60: return EvaluateSovtekMna(type, spec, bassValue, midValue, trebleValue, s);
+    case ToneStackType::Twin5D8: return EvaluateTwin5D8Mna(spec, bassValue, trebleValue, s);
     case ToneStackType::Default:
     case ToneStackType::Count:
     default: return Complex(1.0, 0.0);
@@ -1304,23 +2612,44 @@ const char* dsp::tone_stack::GetToneStackTypeName(ToneStackType type)
   switch (type)
   {
     case ToneStackType::Default: return "Default";
+    case ToneStackType::Aria: return "Air";
+    case ToneStackType::Bandmaster6G7: return "Fndr BMaster 6G7";
+    case ToneStackType::BaxandallActiveDualBassCap: return "Bax Active Dual";
+    case ToneStackType::BaxandallActiveSingleBassCap: return "Bax Active Single";
+    case ToneStackType::BaxandallPassiveDualBassCap: return "Bax Passive Dual";
+    case ToneStackType::BaxandallPassiveSingleBassCap: return "Bax Passive Single";
     case ToneStackType::Bench: return "Bench";
-    case ToneStackType::BigMuff: return "Big Muff";
-    case ToneStackType::Crate: return "Crate";
+    case ToneStackType::BigMuff: return "Big Milf";
+    case ToneStackType::BigMuffHoof: return "Big Milf Hoof";
+    case ToneStackType::BigMuffMusket: return "Big Milf Musket";
+    case ToneStackType::BigMuffPickle: return "Big Milf Pickle";
+    case ToneStackType::BlackstarHT5: return "BlackHole HT5";
+    case ToneStackType::BoneRay: return "Bone Ray";
+    case ToneStackType::Crate: return "Crater";
     case ToneStackType::DmblJazz: return "Dmbl Jazz";
     case ToneStackType::DmblRock: return "Dmbl Rock";
-    case ToneStackType::FndrBassman5F6A: return "Fndr Bassman 5F6-A";
-    case ToneStackType::FndrBrownface: return "Fndr Brownface";
-    case ToneStackType::FndrDeluxe5E3: return "Fndr Deluxe 5E3";
+    case ToneStackType::DrZ: return "Mr. Z";
+    case ToneStackType::FndrBassman5F6A: return "Fndr BMan 5F6-A";
+    case ToneStackType::FndrBrownface: return "Fndr BrownF";
+    case ToneStackType::FndrDeluxe5E3: return "Fndr Dlx 5E3";
     case ToneStackType::FndrESeries: return "Fndr E-series";
-    case ToneStackType::FndrPrinceton5E2: return "Fndr Princeton 5E2";
-    case ToneStackType::FndrPrinceton5F2A: return "Fndr Princeton 5F2A";
+    case ToneStackType::FndrPrinceton5E2: return "Fndr PrinceT 5E2";
+    case ToneStackType::FndrPrinceton5F2A: return "Fndr PrinceT 5F2A";
     case ToneStackType::FndrProJr: return "Fndr Pro Jr";
     case ToneStackType::FndrTMB: return "Fndr TMB";
-    case ToneStackType::Hiwatt: return "Hiwatt";
-    case ToneStackType::Marshall: return "Marshall";
-    case ToneStackType::Neve: return "Neve";
-    case ToneStackType::Vox: return "Vox";
+    case ToneStackType::FndrTrebleBass: return "Fndr TB";
+    case ToneStackType::Twin5D8: return "Fndr Twin 5D8";
+    case ToneStackType::Hiwatt: return "Hwtt DR";
+    case ToneStackType::HiwattCP: return "Hwtt CP";
+    case ToneStackType::JamesActiveDualBassCap: return "James Active Dual";
+    case ToneStackType::JamesActiveSingleBassCap: return "James Active Single";
+    case ToneStackType::JamesPassiveDualBassCap: return "James Passive Dual";
+    case ToneStackType::JamesPassiveSingleBassCap: return "James Passive Single";
+    case ToneStackType::Marshall: return "Mrshll";
+    case ToneStackType::Neve: return "Snow";
+    case ToneStackType::SovtekMIG100H: return "Svtk MIG-100H";
+    case ToneStackType::SovtekMIG60: return "Svtk MIG-60";
+    case ToneStackType::Vox: return "Vx";
     case ToneStackType::Count:
     default: return "Default";
   }
@@ -1337,22 +2666,31 @@ bool dsp::tone_stack::ToneStackTypeHasBassControl(ToneStackType type)
   switch (type)
   {
     case ToneStackType::BigMuff:
+    case ToneStackType::BigMuffHoof:
+    case ToneStackType::BigMuffMusket:
+    case ToneStackType::BigMuffPickle:
+    case ToneStackType::BoneRay:
+    case ToneStackType::FndrDeluxe5E3:
+    case ToneStackType::DrZ:
     case ToneStackType::FndrPrinceton5E2:
     case ToneStackType::FndrPrinceton5F2A:
     case ToneStackType::FndrProJr: return false;
     case ToneStackType::Bench:
+    case ToneStackType::BlackstarHT5:
     case ToneStackType::Default:
     case ToneStackType::Crate:
     case ToneStackType::DmblJazz:
     case ToneStackType::DmblRock:
     case ToneStackType::FndrBassman5F6A:
     case ToneStackType::FndrBrownface:
-    case ToneStackType::FndrDeluxe5E3:
     case ToneStackType::FndrESeries:
     case ToneStackType::FndrTMB:
     case ToneStackType::Hiwatt:
     case ToneStackType::Marshall:
     case ToneStackType::Neve:
+    case ToneStackType::SovtekMIG100H:
+    case ToneStackType::SovtekMIG60:
+    case ToneStackType::Twin5D8:
     case ToneStackType::Vox:
     case ToneStackType::Count:
     default: return true;
@@ -1363,22 +2701,35 @@ bool dsp::tone_stack::ToneStackTypeHasMiddleControl(ToneStackType type)
 {
   switch (type)
   {
+    case ToneStackType::Aria:
     case ToneStackType::Crate:
     case ToneStackType::Bench:
+    case ToneStackType::BlackstarHT5:
+    case ToneStackType::BoneRay:
     case ToneStackType::BigMuff:
+    case ToneStackType::BigMuffHoof:
+    case ToneStackType::BigMuffMusket:
+    case ToneStackType::BigMuffPickle:
     case ToneStackType::DmblJazz:
     case ToneStackType::DmblRock:
     case ToneStackType::FndrBassman5F6A:
     case ToneStackType::FndrTMB:
     case ToneStackType::Hiwatt:
-    case ToneStackType::Marshall: return true;
+    case ToneStackType::Marshall:
+    case ToneStackType::SovtekMIG100H:
+    case ToneStackType::SovtekMIG60: return true;
     case ToneStackType::Default: return true;
+    case ToneStackType::Bandmaster6G7:
+    case ToneStackType::DrZ:
     case ToneStackType::FndrBrownface:
     case ToneStackType::FndrDeluxe5E3:
     case ToneStackType::FndrESeries:
     case ToneStackType::FndrPrinceton5E2:
     case ToneStackType::FndrPrinceton5F2A:
     case ToneStackType::FndrProJr:
+    case ToneStackType::FndrTrebleBass:
+    case ToneStackType::HiwattCP:
+    case ToneStackType::Twin5D8:
     case ToneStackType::Vox:
     case ToneStackType::Neve:
     case ToneStackType::Count:
@@ -1392,7 +2743,13 @@ bool dsp::tone_stack::ToneStackTypeHasTrebleControl(ToneStackType type)
   {
     case ToneStackType::BigMuff: return false;
     case ToneStackType::Default:
+    case ToneStackType::Bandmaster6G7:
     case ToneStackType::Bench:
+    case ToneStackType::BlackstarHT5:
+    case ToneStackType::BigMuffHoof:
+    case ToneStackType::BigMuffMusket:
+    case ToneStackType::BigMuffPickle:
+    case ToneStackType::BoneRay:
     case ToneStackType::Crate:
     case ToneStackType::DmblJazz:
     case ToneStackType::DmblRock:
@@ -1404,9 +2761,14 @@ bool dsp::tone_stack::ToneStackTypeHasTrebleControl(ToneStackType type)
     case ToneStackType::FndrPrinceton5F2A:
     case ToneStackType::FndrProJr:
     case ToneStackType::FndrTMB:
+    case ToneStackType::FndrTrebleBass:
     case ToneStackType::Hiwatt:
+    case ToneStackType::HiwattCP:
     case ToneStackType::Marshall:
     case ToneStackType::Neve:
+    case ToneStackType::SovtekMIG100H:
+    case ToneStackType::SovtekMIG60:
+    case ToneStackType::Twin5D8:
     case ToneStackType::Vox:
     case ToneStackType::Count:
     default: return true;

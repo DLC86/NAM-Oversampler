@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <unordered_map>
 #include <utility>
 
 #if defined(_WIN32)
@@ -98,6 +99,103 @@ const bool kDefaultCalibrateInput = false;
 const std::string kInputCalibrationLevelParamName = "InputCalibrationLevel";
 const double kDefaultInputCalibrationLevel = 12.0;
 
+void InitToneStackTypeParam(IParam* pParam)
+{
+  pParam->InitEnum("ToneStack Type", 0, dsp::tone_stack::kNumToneStackTypes);
+  for (int i = 0; i < dsp::tone_stack::kNumToneStackTypes; ++i)
+    pParam->SetDisplayText(i, dsp::tone_stack::GetToneStackTypeName(dsp::tone_stack::ToneStackTypeFromInt(i)));
+}
+
+int ToneStackTypeIndexFromName(const std::string& name)
+{
+  for (int i = 0; i < dsp::tone_stack::kNumToneStackTypes; ++i)
+  {
+    const auto type = dsp::tone_stack::ToneStackTypeFromInt(i);
+    if (name == dsp::tone_stack::GetToneStackTypeName(type))
+      return i;
+  }
+
+  static const std::unordered_map<std::string, dsp::tone_stack::ToneStackType> kLegacyToneStackNames{
+    {"Aria", dsp::tone_stack::ToneStackType::Aria},
+    {"Baxandall Ative Dual", dsp::tone_stack::ToneStackType::BaxandallActiveDualBassCap},
+    {"Baxandall Active Single", dsp::tone_stack::ToneStackType::BaxandallActiveSingleBassCap},
+    {"Bandmaster 6G7", dsp::tone_stack::ToneStackType::Bandmaster6G7},
+    {"Baxandall Active Dual Bass Cap", dsp::tone_stack::ToneStackType::BaxandallActiveDualBassCap},
+    {"Baxandall Active Single Bass Cap", dsp::tone_stack::ToneStackType::BaxandallActiveSingleBassCap},
+    {"Baxandall Dual Cap", dsp::tone_stack::ToneStackType::BaxandallPassiveDualBassCap},
+    {"Baxandall Single Cap", dsp::tone_stack::ToneStackType::BaxandallPassiveSingleBassCap},
+    {"Baxandall Passive Dual", dsp::tone_stack::ToneStackType::BaxandallPassiveDualBassCap},
+    {"Baxandall Passive Dual Bass Cap", dsp::tone_stack::ToneStackType::BaxandallPassiveDualBassCap},
+    {"Baxandall Passive Single", dsp::tone_stack::ToneStackType::BaxandallPassiveSingleBassCap},
+    {"Baxandall Passive Single Bass Cap", dsp::tone_stack::ToneStackType::BaxandallPassiveSingleBassCap},
+    {"Big Muff", dsp::tone_stack::ToneStackType::BigMuff},
+    {"Big Muff Hoof", dsp::tone_stack::ToneStackType::BigMuffHoof},
+    {"Big Muff Musket", dsp::tone_stack::ToneStackType::BigMuffMusket},
+    {"Big Muff Pickle", dsp::tone_stack::ToneStackType::BigMuffPickle},
+    {"Blackstar HT5", dsp::tone_stack::ToneStackType::BlackstarHT5},
+    {"Boss FZ-2 EQ", dsp::tone_stack::ToneStackType::Default},
+    {"Crate", dsp::tone_stack::ToneStackType::Crate},
+    {"Dr. Z", dsp::tone_stack::ToneStackType::DrZ},
+    {"Fndr Bandmaster 6G7", dsp::tone_stack::ToneStackType::Bandmaster6G7},
+    {"Fndr Bassman 5F6-A", dsp::tone_stack::ToneStackType::FndrBassman5F6A},
+    {"Fndr Brownface", dsp::tone_stack::ToneStackType::FndrBrownface},
+    {"Fndr Deluxe 5E3", dsp::tone_stack::ToneStackType::FndrDeluxe5E3},
+    {"Fndr Deluxe 5E3 Bright", dsp::tone_stack::ToneStackType::FndrDeluxe5E3},
+    {"Fndr Princeton 5E2", dsp::tone_stack::ToneStackType::FndrPrinceton5E2},
+    {"Fndr Princeton 5F2A", dsp::tone_stack::ToneStackType::FndrPrinceton5F2A},
+    {"Fndr Treble-Bass", dsp::tone_stack::ToneStackType::FndrTrebleBass},
+    {"Hiwatt", dsp::tone_stack::ToneStackType::Hiwatt},
+    {"Hiwatt CP", dsp::tone_stack::ToneStackType::HiwattCP},
+    {"James Ative Dual", dsp::tone_stack::ToneStackType::JamesActiveDualBassCap},
+    {"James Active Dual Bass Cap", dsp::tone_stack::ToneStackType::JamesActiveDualBassCap},
+    {"James Active Single Bass Cap", dsp::tone_stack::ToneStackType::JamesActiveSingleBassCap},
+    {"James Dual Cap", dsp::tone_stack::ToneStackType::JamesPassiveDualBassCap},
+    {"James Single Cap", dsp::tone_stack::ToneStackType::JamesPassiveSingleBassCap},
+    {"James Passive Dual Bass Cap", dsp::tone_stack::ToneStackType::JamesPassiveDualBassCap},
+    {"James Passive Single Bass Cap", dsp::tone_stack::ToneStackType::JamesPassiveSingleBassCap},
+    {"Marshall", dsp::tone_stack::ToneStackType::Marshall},
+    {"Neve", dsp::tone_stack::ToneStackType::Neve},
+    {"Sovtek MIG-100H", dsp::tone_stack::ToneStackType::SovtekMIG100H},
+    {"Sovtek MIG-60", dsp::tone_stack::ToneStackType::SovtekMIG60},
+    {"Twin 5D8", dsp::tone_stack::ToneStackType::Twin5D8},
+    {"Vox", dsp::tone_stack::ToneStackType::Vox},
+  };
+
+  const auto found = kLegacyToneStackNames.find(name);
+  if (found != kLegacyToneStackNames.end())
+    return static_cast<int>(found->second);
+
+  return 0;
+}
+
+int RemapLegacyToneStackTypeIndex(int oldIndex)
+{
+  using Type = dsp::tone_stack::ToneStackType;
+  static constexpr std::array<Type, 18> kLegacyToneStackTypeOrder{{
+    Type::Default,
+    Type::Bench,
+    Type::BigMuff,
+    Type::Crate,
+    Type::DmblJazz,
+    Type::DmblRock,
+    Type::FndrBassman5F6A,
+    Type::FndrBrownface,
+    Type::FndrDeluxe5E3,
+    Type::FndrESeries,
+    Type::FndrPrinceton5E2,
+    Type::FndrPrinceton5F2A,
+    Type::FndrProJr,
+    Type::FndrTMB,
+    Type::Hiwatt,
+    Type::Marshall,
+    Type::Neve,
+    Type::Vox,
+  }};
+
+  if (oldIndex < 0 || oldIndex >= static_cast<int>(kLegacyToneStackTypeOrder.size()))
+    return 0;
+  return static_cast<int>(kLegacyToneStackTypeOrder[oldIndex]);
+}
 
 NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 : Plugin(info, MakeConfig(kNumParams, kNumPresets))
@@ -129,11 +227,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPhaseMulticoreThreadCount)
     ->InitEnum("OS Threads", 0, {"Auto", "2", "4", "8", "12", "16", "20", "24", "32"});
   GetParam(kTunerMute)->InitBool("Tuner Mute", true);
-  GetParam(kToneStackType)
-    ->InitEnum("ToneStack Type", 0,
-               {"Default", "Bench", "Big Muff", "Crate", "Dmbl Jazz", "Dmbl Rock", "Fndr Bassman 5F6-A", "Fndr Brownface",
-                "Fndr Deluxe 5E3", "Fndr E-series", "Fndr Princeton 5E2", "Fndr Princeton 5F2A",
-                "Fndr Pro Jr", "Fndr TMB", "Hiwatt", "Marshall", "Neve", "Vox"});
+  InitToneStackTypeParam(GetParam(kToneStackType));
   GetParam(kLowCutFrequency)
     ->InitDouble("Low Cut", 20.0, 20.0, 1000.0, 1.0, "Hz", 0, "", iplug::IParam::ShapeExp(),
                  iplug::IParam::kUnitFrequency);
@@ -205,7 +299,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto titleHeight = 50.0f;
     const auto titleArea = contentArea.GetFromTop(titleHeight);
     const auto internalPresetArea =
-      IRECT(contentArea.MW() - 170.0f, b.T + 6.0f, contentArea.MW() + 170.0f, b.T + 28.0f);
+      IRECT(contentArea.MW() - 170.0f, b.T + 7.0f, contentArea.MW() + 170.0f, b.T + 29.0f);
 
     // Areas for knobs
     const auto knobsPad = 20.0f;
@@ -231,8 +325,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto toneStackSelectorBaseArea =
       midKnobArea.GetVShifted(midKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
     const auto toneStackSelectorArea =
-      IRECT(toneStackSelectorBaseArea.L - 14.0f, toneStackSelectorBaseArea.T, toneStackSelectorBaseArea.R + 14.0f,
-            toneStackSelectorBaseArea.B);
+      IRECT(toneStackSelectorBaseArea.L - 14.0f, toneStackSelectorBaseArea.T + 1.0f,
+            toneStackSelectorBaseArea.R + 14.0f, toneStackSelectorBaseArea.B + 1.0f);
     const auto eqPositionArea =
       trebleKnobArea.GetVShifted(trebleKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
     const auto channelModeArea =
@@ -481,6 +575,7 @@ void NeuralAmpModeler::_InitInternalPresets()
     preset.paramValues.fill(0.0);
     preset.namPath.clear();
     preset.irPath.clear();
+    preset.toneStackTypeName.clear();
     preset.toneStackComponentState.clear();
   }
   mMidiCCToParam.fill(kNoMidiCCAssignment);
@@ -779,6 +874,8 @@ void NeuralAmpModeler::_StoreInternalPreset(int index)
 
   preset.namPath = mNAMPath.Get();
   preset.irPath = mIRPath.Get();
+  preset.toneStackTypeName = dsp::tone_stack::GetToneStackTypeName(
+    dsp::tone_stack::ToneStackTypeFromInt(GetParam(kToneStackType)->Int()));
   preset.toneStackComponentState = _SerializeToneStackComponentState();
 }
 
@@ -948,7 +1045,7 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
       SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, 0, "");
 #endif
     }
-    else if (preset.namPath != mNAMPath.Get())
+    else if (_NeedsStereoModelRestageForPath(preset.namPath))
     {
       WDL_String path(preset.namPath.c_str());
       _StageModel(path);
@@ -961,7 +1058,7 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
       SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, 0, "");
 #endif
     }
-    else if (preset.irPath != mIRPath.Get())
+    else if (_NeedsStereoIRRestageForPath(preset.irPath))
     {
       WDL_String path(preset.irPath.c_str());
       _StageIR(path);
@@ -1009,6 +1106,7 @@ std::string NeuralAmpModeler::_SerializeInternalPresetState() const
 {
   nlohmann::json state = nlohmann::json::object();
   state["current"] = mCurrentInternalPreset.load(std::memory_order_acquire);
+  state["toneStackTypeSchema"] = 2;
   state["midiCC"] = nlohmann::json::array();
   for (int cc = 0; cc < 128; ++cc)
     state["midiCC"].push_back(mMidiCCToParam[cc]);
@@ -1022,6 +1120,7 @@ std::string NeuralAmpModeler::_SerializeInternalPresetState() const
     p["saved"] = preset.saved;
     p["namPath"] = preset.namPath;
     p["irPath"] = preset.irPath;
+    p["toneStackTypeName"] = preset.toneStackTypeName;
     p["toneStackComponents"] = preset.toneStackComponentState;
     p["params"] = nlohmann::json::array();
     for (int i = 0; i < kNumParams; ++i)
@@ -1039,6 +1138,7 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
     return;
 
   const auto& state = config[kInternalPresetStateKey];
+  const bool hasStableToneStackNames = state.value("toneStackTypeSchema", 0) >= 2;
   if (state.contains("midiCC") && state["midiCC"].is_array())
   {
     for (int cc = 0; cc < 128 && cc < (int)state["midiCC"].size(); ++cc)
@@ -1073,6 +1173,7 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
       preset.saved = p.value("saved", false);
       preset.namPath = p.value("namPath", "");
       preset.irPath = p.value("irPath", "");
+      preset.toneStackTypeName = p.value("toneStackTypeName", "");
       preset.toneStackComponentState = p.value("toneStackComponents", "");
 
       if (p.contains("params") && p["params"].is_array())
@@ -1082,6 +1183,31 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
           preset.paramValues[paramIdx] = p["params"][paramIdx].get<double>();
       }
 
+      if (!preset.toneStackTypeName.empty())
+      {
+        const int toneStackIndex = ToneStackTypeIndexFromName(preset.toneStackTypeName);
+        preset.paramValues[kToneStackType] = toneStackIndex;
+        preset.toneStackTypeName =
+          dsp::tone_stack::GetToneStackTypeName(dsp::tone_stack::ToneStackTypeFromInt(toneStackIndex));
+      }
+      else if (!hasStableToneStackNames)
+      {
+        const int toneStackIndex =
+          RemapLegacyToneStackTypeIndex(static_cast<int>(std::lround(preset.paramValues[kToneStackType])));
+        preset.paramValues[kToneStackType] = toneStackIndex;
+        preset.toneStackTypeName =
+          dsp::tone_stack::GetToneStackTypeName(dsp::tone_stack::ToneStackTypeFromInt(toneStackIndex));
+      }
+      else
+      {
+        const int toneStackIndex =
+          std::clamp(static_cast<int>(std::lround(preset.paramValues[kToneStackType])), 0,
+                     dsp::tone_stack::kNumToneStackTypes - 1);
+        preset.paramValues[kToneStackType] = toneStackIndex;
+        preset.toneStackTypeName =
+          dsp::tone_stack::GetToneStackTypeName(dsp::tone_stack::ToneStackTypeFromInt(toneStackIndex));
+      }
+
       if (!preset.saved)
       {
         preset.name = "empty";
@@ -1089,6 +1215,7 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
         preset.hasEditedName = false;
         preset.namPath.clear();
         preset.irPath.clear();
+        preset.toneStackTypeName.clear();
         preset.toneStackComponentState.clear();
         for (int paramIdx = 0; paramIdx < kNumParams; ++paramIdx)
           preset.paramValues[paramIdx] = GetParam(paramIdx)->GetDefault();
@@ -1279,10 +1406,24 @@ void NeuralAmpModeler::_UnserializeApplyToneStackComponentState(const nlohmann::
   {
     const auto toneStackType = ToneStackTypeFromInt(type);
     const char* typeName = GetToneStackTypeName(toneStackType);
-    if (!state.contains(typeName) || !state[typeName].is_object())
+    const nlohmann::json* typeState = nullptr;
+    if (state.contains(typeName) && state[typeName].is_object())
+      typeState = &state[typeName];
+    else if (toneStackType != ToneStackType::Default)
+    {
+      for (auto it = state.begin(); it != state.end(); ++it)
+      {
+        if (it.value().is_object() && ToneStackTypeIndexFromName(it.key()) == type)
+        {
+          typeState = &it.value();
+          break;
+        }
+      }
+    }
+
+    if (typeState == nullptr)
       continue;
 
-    const auto& typeState = state[typeName];
     for (int component = 0; component < kNumToneStackComponents; ++component)
     {
       const auto toneStackComponent = ToneStackComponentFromInt(component);
@@ -1290,10 +1431,10 @@ void NeuralAmpModeler::_UnserializeApplyToneStackComponentState(const nlohmann::
         continue;
 
       const char* componentName = GetToneStackComponentName(toneStackComponent);
-      if (!typeState.contains(componentName) || !typeState[componentName].is_number())
+      if (!typeState->contains(componentName) || !(*typeState)[componentName].is_number())
         continue;
 
-      SetToneStackComponentValue(type, component, typeState[componentName].get<double>());
+      SetToneStackComponentValue(type, component, (*typeState)[componentName].get<double>());
     }
   }
 }
@@ -1695,7 +1836,7 @@ void NeuralAmpModeler::OnIdle()
         OnMessage(kMsgTagClearModel, kCtrlTagModelFileBrowser, 0, nullptr);
         SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, 0, "");
       }
-      else if (preset.namPath != mNAMPath.Get())
+      else if (_NeedsStereoModelRestageForPath(preset.namPath))
       {
         WDL_String path(preset.namPath.c_str());
         _StageModel(path);
@@ -1706,7 +1847,7 @@ void NeuralAmpModeler::OnIdle()
         OnMessage(kMsgTagClearIR, kCtrlTagIRFileBrowser, 0, nullptr);
         SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, 0, "");
       }
-      else if (preset.irPath != mIRPath.Get())
+      else if (_NeedsStereoIRRestageForPath(preset.irPath))
       {
         WDL_String path(preset.irPath.c_str());
         _StageIR(path);
@@ -1936,8 +2077,10 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
 
     case kEQPostNAM: mEQPostNAM = GetParam(kEQPostNAM)->Bool(); break;
     case kChannelMode:
-      _EnsureRightModelForStereo();
-      _SetStereoProcessingFromParam();
+      if (_IsStereoRequested())
+        _RestageCurrentModelAndIRForStereo();
+      else
+        _SetStereoProcessingFromParam();
       break;
     default: break;
   }
@@ -2075,6 +2218,8 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   {
     mModel = nullptr;
     mModelRight = nullptr;
+    mLiveModelPath.clear();
+    mLiveModelRightPath.clear();
     mNAMPath.Set("");
     mShouldRemoveModel = false;
     mModelCleared = true;
@@ -2091,6 +2236,8 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   {
     mIR = nullptr;
     mIRRight = nullptr;
+    mLiveIRPath.clear();
+    mLiveIRRightPath.clear();
     mIRPath.Set("");
     mShouldRemoveIR = false;
   }
@@ -2103,8 +2250,12 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   {
     mModel = std::move(mStagedModel);
     mModelRight = std::move(mStagedModelRight);
+    mLiveModelPath = mStagedModelPath;
+    mLiveModelRightPath = mStagedModelRightPath;
     mStagedModel = nullptr;
     mStagedModelRight = nullptr;
+    mStagedModelPath.clear();
+    mStagedModelRightPath.clear();
     mAppliedOversamplingFactor = 0;
     mAppliedAntiAliasFilterPhase = -1;
     _ApplyActiveDSPSettings(false);
@@ -2117,8 +2268,12 @@ void NeuralAmpModeler::_ApplyDSPStaging()
   {
     mIR = std::move(mStagedIR);
     mIRRight = std::move(mStagedIRRight);
+    mLiveIRPath = mStagedIRPath;
+    mLiveIRRightPath = mStagedIRRightPath;
     mStagedIR = nullptr;
     mStagedIRRight = nullptr;
+    mStagedIRPath.clear();
+    mStagedIRRightPath.clear();
   }
 
   const bool stereoReady = _IsStereoRequested() && (mModel == nullptr || mModelRight != nullptr)
@@ -2189,8 +2344,16 @@ void NeuralAmpModeler::_ResetModelAndIR(const double sampleRate, const int maxBl
     {
       const auto irData = mIR->GetData();
       mStagedIR = std::make_unique<dsp::ImpulseResponse>(irData, sampleRate);
+      mStagedIRPath = mLiveIRPath.empty() ? mIRPath.Get() : mLiveIRPath;
       if (mIRRight != nullptr)
+      {
         mStagedIRRight = std::make_unique<dsp::ImpulseResponse>(irData, sampleRate);
+        mStagedIRRightPath = mLiveIRRightPath.empty() ? mIRPath.Get() : mLiveIRRightPath;
+      }
+      else
+      {
+        mStagedIRRightPath.clear();
+      }
     }
   }
 }
@@ -2569,15 +2732,118 @@ void NeuralAmpModeler::_EnsureRightModelForStereo()
     auto rightModel = _CreateModel(mNAMPath);
     std::lock_guard<std::mutex> lock(mDSPStagingMutex);
     if (needStagedRight && mStagedModel != nullptr && mStagedModelRight == nullptr)
+    {
       mStagedModelRight = std::move(rightModel);
+      mStagedModelRightPath = mNAMPath.Get();
+    }
     else if (needLiveRight && mModel != nullptr && mModelRight == nullptr)
+    {
       mModelRight = std::move(rightModel);
+      mLiveModelRightPath = mNAMPath.Get();
+    }
   }
   catch (std::exception& e)
   {
     std::cerr << "Failed to create right-channel DSP module" << std::endl;
     std::cerr << e.what() << std::endl;
   }
+}
+
+void NeuralAmpModeler::_RestageCurrentModelAndIRForStereo()
+{
+  if (!_IsStereoRequested())
+  {
+    _SetStereoProcessingFromParam();
+    return;
+  }
+
+  WDL_String modelPath;
+  WDL_String irPath;
+  {
+    std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+    modelPath = mNAMPath;
+    irPath = mIRPath;
+  }
+
+  // Avoid a needless audio gap when the stereo side is already present and
+  // consistent. Only restage when the selected file changed or the right-side
+  // instance is missing/known to belong to another file.
+  if (CStringHasContents(modelPath.Get()) && _NeedsStereoModelRestageForPath(modelPath.Get()))
+    _StageModel(modelPath);
+
+  if (CStringHasContents(irPath.Get()) && _NeedsStereoIRRestageForPath(irPath.Get()))
+    _StageIR(irPath);
+
+  _SetStereoProcessingFromParam();
+}
+
+bool NeuralAmpModeler::_NeedsStereoModelRestageForPath(const std::string& modelPath)
+{
+  if (modelPath.empty())
+    return false;
+
+  const bool stereoRequested = _IsStereoRequested();
+  std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+
+  if (modelPath != mNAMPath.Get())
+    return true;
+
+  if (!stereoRequested)
+    return false;
+
+  if (mStagedModel != nullptr)
+  {
+    if (mStagedModelRight == nullptr)
+      return true;
+    if (!mStagedModelPath.empty() && mStagedModelPath != modelPath)
+      return true;
+    if (!mStagedModelRightPath.empty() && mStagedModelRightPath != modelPath)
+      return true;
+    return false;
+  }
+
+  if (mModel == nullptr || mModelRight == nullptr)
+    return true;
+  if (!mLiveModelPath.empty() && mLiveModelPath != modelPath)
+    return true;
+  if (!mLiveModelRightPath.empty() && mLiveModelRightPath != modelPath)
+    return true;
+  return false;
+}
+
+bool NeuralAmpModeler::_NeedsStereoIRRestageForPath(const std::string& irPath)
+{
+  if (irPath.empty())
+    return false;
+
+  const bool stereoRequested = _IsStereoRequested();
+  const bool irEnabled = GetParam(kIRToggle)->Value();
+  std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+
+  if (irPath != mIRPath.Get())
+    return true;
+
+  if (!stereoRequested || !irEnabled)
+    return false;
+
+  if (mStagedIR != nullptr)
+  {
+    if (mStagedIRRight == nullptr)
+      return true;
+    if (!mStagedIRPath.empty() && mStagedIRPath != irPath)
+      return true;
+    if (!mStagedIRRightPath.empty() && mStagedIRRightPath != irPath)
+      return true;
+    return false;
+  }
+
+  if (mIR == nullptr || mIRRight == nullptr)
+    return true;
+  if (!mLiveIRPath.empty() && mLiveIRPath != irPath)
+    return true;
+  if (!mLiveIRRightPath.empty() && mLiveIRRightPath != irPath)
+    return true;
+  return false;
 }
 
 std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
@@ -2595,6 +2861,8 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     std::lock_guard<std::mutex> lock(mDSPStagingMutex);
     mStagedModel = std::move(stagedModel);
     mStagedModelRight = std::move(stagedModelRight);
+    mStagedModelPath = modelPath.Get();
+    mStagedModelRightPath = mStagedModelRight != nullptr ? modelPath.Get() : "";
     mNAMPath = modelPath;
     mShouldRemoveModel = false;
     mModelCleared = false;
@@ -2612,6 +2880,8 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       std::lock_guard<std::mutex> lock(mDSPStagingMutex);
       mStagedModel = nullptr;
       mStagedModelRight = nullptr;
+      mStagedModelPath.clear();
+      mStagedModelRightPath.clear();
       mNAMPath = previousNAMPath;
     }
     std::cerr << "Failed to read DSP module" << std::endl;
@@ -2652,6 +2922,8 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
     std::lock_guard<std::mutex> lock(mDSPStagingMutex);
     mStagedIR = std::move(stagedIR);
     mStagedIRRight = std::move(stagedIRRight);
+    mStagedIRPath = irPath.Get();
+    mStagedIRRightPath = mStagedIRRight != nullptr ? irPath.Get() : "";
     mIRPath = irPath;
     mShouldRemoveIR = false;
     loadedIRPath = mIRPath;
@@ -2665,6 +2937,8 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
       std::lock_guard<std::mutex> lock(mDSPStagingMutex);
       mStagedIR = nullptr;
       mStagedIRRight = nullptr;
+      mStagedIRPath.clear();
+      mStagedIRRightPath.clear();
       mIRPath = previousIRPath;
     }
     SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadFailed);

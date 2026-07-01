@@ -20,6 +20,14 @@
 
 // Boilerplate
 
+void _RemapLegacyToneStackTypeConfig(nlohmann::json& config)
+{
+  if (!config.contains("ToneStack Type") || !config["ToneStack Type"].is_number())
+    return;
+
+  config["ToneStack Type"] = RemapLegacyToneStackTypeIndex(static_cast<int>(std::lround(config["ToneStack Type"].get<double>())));
+}
+
 void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
 {
   mApplyingInternalPreset.store(true, std::memory_order_release);
@@ -716,6 +724,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     // You shouldn't be here...
     assert(false);
   }
+  if (!(version >= _Version(2, 2, 0)))
+    _RemapLegacyToneStackTypeConfig(config);
   _UnserializeApplyConfig(config);
   return pos;
 }
@@ -724,6 +734,7 @@ int NeuralAmpModeler::_UnserializeStateWithUnknownVersion(const iplug::IByteChun
 {
   nlohmann::json config;
   int pos = _GetConfigFrom_Earlier(chunk, startPos, config);
+  _RemapLegacyToneStackTypeConfig(config);
   _UnserializeApplyConfig(config);
   return pos;
 }

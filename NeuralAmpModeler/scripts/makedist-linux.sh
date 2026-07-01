@@ -6,8 +6,8 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$PROJECT_DIR/build-linux"
 OUT_DIR="$BUILD_DIR/out"
 
-PLUGIN_NAME="$(sed -n 's/^#define BUNDLE_NAME "\(.*\)"/\1/p' "$PROJECT_DIR/config.h")"
-VERSION="$(sed -n 's/^#define PLUG_VERSION_STR "\(.*\)"/\1/p' "$PROJECT_DIR/config.h")"
+PLUGIN_NAME="$(sed -n 's/^#define BUNDLE_NAME "\(.*\)".*$/\1/p' "$PROJECT_DIR/config.h" | tr -d '\r' | head -n 1)"
+VERSION="$(sed -n 's/^#define PLUG_VERSION_STR "\(.*\)".*$/\1/p' "$PROJECT_DIR/config.h" | tr -d '\r' | head -n 1)"
 
 if [[ -z "$PLUGIN_NAME" || -z "$VERSION" ]]; then
   echo "Could not read plugin name/version from config.h" >&2
