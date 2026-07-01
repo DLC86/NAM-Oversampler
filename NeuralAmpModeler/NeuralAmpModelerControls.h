@@ -58,7 +58,7 @@ public:
 
     if (mUseThemeStroke)
     {
-      IColor strokeColor = PluginColors::GetThemeColor();
+      IColor strokeColor = PLUG()->GetThemeColor();
       g.DrawSVG(GetValue() > 0.5 ? mOnSVG : mOffSVG, mRECT, &mBlend, &strokeColor, nullptr);
     }
     else
@@ -146,7 +146,7 @@ public:
     if (mMouseIsOver)
       g.FillEllipse(PluginColors::MOUSEOVER, mRECT.GetCentredInside(26.0f, 26.0f));
 
-    const IColor color = PluginColors::GetThemeColor();
+    const IColor color = PLUG()->GetThemeColor();
     const float radius = 6.0f;
     const float stroke = 1.8f;
     const float cx = mRECT.MW();
@@ -313,8 +313,8 @@ protected:
 
     const IRECT badge = GetMidiLearnBadgeRect(r);
     g.FillRoundRect(COLOR_BLACK.WithOpacity(0.85f), badge, 3.0f);
-    g.DrawRoundRect(PluginColors::GetThemeColor(), badge, 3.0f, nullptr, 1.0f);
-    g.DrawText(IText(9.0f, PluginColors::GetThemeColor(), "Roboto-Regular", EAlign::Center, EVAlign::Middle),
+    g.DrawRoundRect(plug->GetThemeColor(), badge, 3.0f, nullptr, 1.0f);
+    g.DrawText(IText(9.0f, plug->GetThemeColor(), "Roboto-Regular", EAlign::Center, EVAlign::Middle),
                "LEARN", badge);
   }
 
@@ -413,7 +413,7 @@ public:
   void Draw(IGraphics& g) override
   {
     const auto areas = GetAreas();
-    const IColor frame = PluginColors::GetThemeColor().WithOpacity(mMouseIsOver ? 0.9f : 0.55f);
+    const IColor frame = PLUG()->GetThemeColor().WithOpacity(mMouseIsOver ? 0.9f : 0.55f);
     const IColor fill = COLOR_BLACK.WithOpacity(0.82f);
     const IText text(13.0f, COLOR_WHITE, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
 
@@ -868,7 +868,7 @@ public:
     if (mMouseIsOver)
       g.FillRoundRect(PluginColors::MOUSEOVER, mRECT.GetPadded(-2.0f), 2.0f);
 
-    const IColor color = PluginColors::GetThemeColor();
+    const IColor color = PLUG()->GetThemeColor();
     const float stroke = 1.8f;
     const auto left = mRECT.GetFromLeft(mRECT.W() * 0.5f).GetPadded(-4.0f);
     const auto right = mRECT.GetFromRight(mRECT.W() * 0.5f).GetPadded(-4.0f);
@@ -1398,7 +1398,7 @@ private:
                          std::string(title) + "Frequency");
     const auto slopeStyle = mRadioButtonStyle.WithColor(kBG, COLOR_BLACK)
                             .WithColor(kFG, COLOR_BLACK)
-                            .WithColor(kFR, PluginColors::GetThemeColor().WithOpacity(0.40f));
+                              .WithColor(kFR, PLUG()->GetThemeColor().WithOpacity(0.40f));
     AddNamedChildControl(new IVMenuButtonControl(slopeArea, slopeParam, "", slopeStyle, EVShape::Rectangle),
                          std::string(title) + "Slope");
     auto* posSwitch =
@@ -1540,7 +1540,7 @@ public:
         r = r.GetFromRight(r.W() - mButtonAreaWidth);
         const bool unavailable = IsDisabled() || GetStateDisabled(i);
         const IColor textColor = unavailable ? PluginColors::HELP_TEXT.WithOpacity(0.35f)
-                               : i == hit      ? PluginColors::GetThemeColor()
+                               : i == hit      ? PLUG()->GetThemeColor()
                                                : COLOR_WHITE;
         g.DrawText(mStyle.valueText.WithFGColor(textColor), mTabLabels.Get(i)->Get(), r, &mBlend);
       }
@@ -1572,7 +1572,7 @@ public:
         r = r.GetFromRight(r.W() - mButtonAreaWidth);
         const bool unavailable = IsDisabled() || GetStateDisabled(i);
         const IColor textColor = unavailable ? PluginColors::HELP_TEXT.WithOpacity(0.35f)
-                               : i == hit      ? PluginColors::GetThemeColor()
+                               : i == hit      ? PLUG()->GetThemeColor()
                                                : PluginColors::HELP_TEXT;
         g.DrawText(mStyle.valueText.WithFGColor(textColor), mTabLabels.Get(i)->Get(), r, &mBlend);
       }
@@ -1651,8 +1651,8 @@ public:
     IRECT valueArea;
     CalculateAreas(g, buttonArea, labelArea, leftArrowArea, rightArrowArea, valueArea);
 
-    const IColor frame = IsDisabled() ? PluginColors::GetThemeColor().WithOpacity(0.15f)
-                                     : PluginColors::GetThemeColor().WithOpacity(0.40f);
+    const IColor frame = IsDisabled() ? PLUG()->GetThemeColor().WithOpacity(0.15f)
+                                     : PLUG()->GetThemeColor().WithOpacity(0.40f);
     const IColor valueColor = IsDisabled() ? PluginColors::HELP_TEXT.WithOpacity(0.45f)
                                           : PluginColors::NAM_THEMEFONTCOLOR;
     const IColor labelColor = IsDisabled() ? PluginColors::HELP_TEXT.WithOpacity(0.40f) : PluginColors::HELP_TEXT;
@@ -1747,7 +1747,7 @@ public:
                           "Roboto-Regular", EAlign::Center, EVAlign::Middle);
     g.DrawText(labelText, dsp::tone_stack::GetToneStackComponentName(component), labelArea);
     g.FillRoundRect(COLOR_BLACK, valueArea, 3.0f);
-    g.DrawRoundRect(PluginColors::GetThemeColor().WithOpacity(editable && mMouseIsOver ? 0.65f : 0.35f), valueArea,
+    g.DrawRoundRect(PLUG()->GetThemeColor().WithOpacity(editable && mMouseIsOver ? 0.65f : 0.35f), valueArea,
                     3.0f);
 
     if (editable)
@@ -1857,7 +1857,7 @@ public:
     const auto selectorStyle = radioButtonStyle.WithDrawFrame(true)
                                .WithColor(kBG, COLOR_BLACK)
                                .WithColor(kFG, COLOR_BLACK)
-                               .WithColor(kFR, PluginColors::GetThemeColor().WithOpacity(0.40f));
+                               .WithColor(kFR, PLUG()->GetThemeColor().WithOpacity(0.40f));
     auto* stackControl =
       AddNamedChildControl(new IVMenuButtonControl(selectorArea, kToneStackType, "", 
                                                    selectorStyle, EVShape::Rectangle),
@@ -2425,7 +2425,7 @@ public:
                            "MidiChannelLabel");
       const auto midiChannelStyle = mRadioButtonStyle.WithColor(kBG, COLOR_BLACK)
                                       .WithColor(kFG, COLOR_BLACK)
-                                      .WithColor(kFR, PluginColors::GetThemeColor().WithOpacity(0.40f));
+                                      .WithColor(kFR, PLUG()->GetThemeColor().WithOpacity(0.40f));
       auto* midiChannelControl =
         AddNamedChildControl(new IVMenuButtonControl(midiChannelArea, kMidiChannel, "", midiChannelStyle,
                                                      EVShape::Rectangle),

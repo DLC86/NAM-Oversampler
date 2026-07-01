@@ -1543,6 +1543,8 @@ public:
   void AssignMidiCCToParam(int paramIdx, int cc);
   int GetMidiCCForParam(int paramIdx) const;
   bool IsMidiLearnArmedForParam(int paramIdx) const;
+  iplug::igraphics::IColor GetThemeColor() const;
+  void SetThemeColor(const iplug::igraphics::IColor& color);
 
 private:
   static constexpr int kNumInternalPresets = 128;
@@ -1750,6 +1752,7 @@ private:
   WDL_String mIRPath;
 
   WDL_String mHighLightColor;
+  iplug::igraphics::IColor mThemeColor;
 
   std::unordered_map<std::string, double> mNAMParams = {{"Input", 0.0}, {"Output", 0.0}};
 

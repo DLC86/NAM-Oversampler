@@ -44,17 +44,18 @@ using namespace igraphics;
 const double kDCBlockerFrequency = 5.0;
 
 #if PLUG_HAS_UI
-// Styles
+iplug::igraphics::IColor mThemeColor = PluginColors::NAM_THEMECOLOR;
+  // Styles
 const IVColorSpec colorSpec{
   DEFAULT_BGCOLOR, // Background
-  PluginColors::GetThemeColor(), // Foreground
-  PluginColors::GetThemeColor().WithOpacity(0.3f), // Pressed
-  PluginColors::GetThemeColor().WithOpacity(0.4f), // Frame
+  mThemeColor, // Foreground
+  mThemeColor.WithOpacity(0.3f), // Pressed
+  mThemeColor.WithOpacity(0.4f), // Frame
   PluginColors::MOUSEOVER, // Highlight
   DEFAULT_SHCOLOR, // Shadow
-  PluginColors::GetThemeColor(), // Extra 1
+  mThemeColor, // Extra 1
   COLOR_RED, // Extra 2 --> color for clipping in meters
-  PluginColors::GetThemeColor().WithContrast(0.1f), // Extra 3
+  mThemeColor.WithContrast(0.1f), // Extra 3
 };
 
 const IVStyle style =
@@ -76,9 +77,9 @@ const IVStyle titleStyle =
   DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular")).WithDrawFrame(false).WithShadowOffset(2.f);
 const IVStyle radioButtonStyle =
   style
-    .WithColor(EVColor::kON, PluginColors::GetThemeColor()) // Pressed buttons and their labels
-    .WithColor(EVColor::kOFF, PluginColors::GetThemeColor().WithOpacity(0.1f)) // Unpressed buttons
-    .WithColor(EVColor::kX1, PluginColors::GetThemeColor().WithOpacity(0.6f)); // Unpressed buttons' labels
+    .WithColor(EVColor::kON, PluginColors::NAM_THEMECOLOR) // Pressed buttons and their labels
+    .WithColor(EVColor::kOFF, PluginColors::NAM_THEMECOLOR.WithOpacity(0.1f)) // Unpressed buttons
+    .WithColor(EVColor::kX1, PluginColors::NAM_THEMECOLOR.WithOpacity(0.6f)); // Unpressed buttons' labels
 
 EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char* str, const char* caption,
                               EMsgBoxType type)
@@ -1742,7 +1743,7 @@ void NeuralAmpModeler::OnIdle()
   }
 #endif
 
-  // PluginColors::SetThemeColor(PluginColors::NAM_THEMECOLOR);
+  // SetThemeColor(PluginColors::NAM_THEMECOLOR);
   GetUI()->ForStandardControlsFunc([&](IControl* pControl) {
     if (auto* pVectorBase = pControl->As<IVectorBase>())
     {
@@ -1751,18 +1752,18 @@ void NeuralAmpModeler::OnIdle()
         int r, g, b;
         GetTrackColor(r, g, b);
         if (r + g + b > 0) // is default color set in DAW ?
-          PluginColors::SetThemeColor(IColor(255, r, g, b));
+          SetThemeColor(IColor(255, r, g, b));
       }
       else
       {
         if (mHighLightColor.GetLength())
-          PluginColors::SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
+          SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
       }
-      pVectorBase->SetColor(kX1, PluginColors::GetThemeColor());
-      pVectorBase->SetColor(kPR, PluginColors::GetThemeColor().WithOpacity(0.6f));
-      pVectorBase->SetColor(kFR, PluginColors::GetThemeColor().WithOpacity(0.1f));
-      pVectorBase->SetColor(kX3, PluginColors::GetThemeColor().WithContrast(0.1f));
-      pVectorBase->SetColor(kOFF, PluginColors::GetThemeColor().WithOpacity(0.1f));
+      pVectorBase->SetColor(kX1, GetThemeColor());
+      pVectorBase->SetColor(kPR, GetThemeColor().WithOpacity(0.6f));
+      pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.1f));
+      pVectorBase->SetColor(kX3, GetThemeColor().WithContrast(0.1f));
+      pVectorBase->SetColor(kOFF, GetThemeColor().WithOpacity(0.1f));
       pControl->GetUI()->SetAllControlsDirty();
     }
   });
@@ -1838,6 +1839,14 @@ void NeuralAmpModeler::OnUIOpen()
   }
 #endif
 }
+
+iplug::igraphics::IColor NeuralAmpModeler::GetThemeColor() const
+{
+  return mThemeColor;
+}
+
+void NeuralAmpModeler::SetThemeColor(const iplug::igraphics::IColor& color)
+  { mThemeColor = color; }
 
 void NeuralAmpModeler::OnUIClose()
 {
@@ -1967,21 +1976,21 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
               int r, g, b;
               GetTrackColor(r, g, b);
               if (r + g + b > 0) // is default color set in DAW ?
-                PluginColors::SetThemeColor(IColor(255, r, g, b));
+                SetThemeColor(IColor(255, r, g, b));
             }
             else
             {
               if (mHighLightColor.GetLength())
-                PluginColors::SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
+                SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
               else
-                PluginColors::SetThemeColor(PluginColors::NAM_THEMECOLOR);
+                SetThemeColor(PluginColors::NAM_THEMECOLOR);
             }
 
-            pVectorBase->SetColor(kX1, PluginColors::GetThemeColor());
-            pVectorBase->SetColor(kPR, PluginColors::GetThemeColor().WithOpacity(0.6f));
-            pVectorBase->SetColor(kFR, PluginColors::GetThemeColor().WithOpacity(0.1f));
-            pVectorBase->SetColor(kX3, PluginColors::GetThemeColor().WithContrast(0.1f));
-            pVectorBase->SetColor(kOFF, PluginColors::GetThemeColor().WithOpacity(0.1f));
+            pVectorBase->SetColor(kX1, GetThemeColor());
+            pVectorBase->SetColor(kPR, GetThemeColor().WithOpacity(0.6f));
+            pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.1f));
+            pVectorBase->SetColor(kX3, GetThemeColor().WithContrast(0.1f));
+            pVectorBase->SetColor(kOFF, GetThemeColor().WithOpacity(0.1f));
             pControl->GetUI()->SetAllControlsDirty();
           }
         });
@@ -2024,12 +2033,12 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
     GetUI()->ForStandardControlsFunc([&](IControl* pControl) {
         if (auto* pVectorBase = pControl->As<IVectorBase>())
         {
-        PluginColors::SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
+        //PluginColors::SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
 
-        pVectorBase->SetColor(kX1, PluginColors::GetThemeColor());
-        pVectorBase->SetColor(kPR, PluginColors::GetThemeColor().WithOpacity(0.3f));
-        pVectorBase->SetColor(kFR, PluginColors::GetThemeColor().WithOpacity(0.4f));
-        pVectorBase->SetColor(kX3, PluginColors::GetThemeColor().WithContrast(0.1f));
+        pVectorBase->SetColor(kX1, GetThemeColor());
+        pVectorBase->SetColor(kPR, GetThemeColor().WithOpacity(0.3f));
+        pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.4f));
+        pVectorBase->SetColor(kX3, GetThemeColor().WithContrast(0.1f));
         }
         pControl->GetUI()->SetAllControlsDirty();
     });
