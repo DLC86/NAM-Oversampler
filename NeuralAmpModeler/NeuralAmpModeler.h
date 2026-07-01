@@ -492,6 +492,13 @@ public:
 
   int ThreadCount() const { return static_cast<int>(mWorkers.size()) + 1; }
 
+  void SetActive(bool active)
+  {
+    const bool previous = mActive.exchange(active, std::memory_order_acq_rel);
+    if (previous != active)
+      mCV.notify_all();
+  }
+
   void SetAudioWorkgroup(void* workgroup)
   {
 #if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
@@ -541,6 +548,11 @@ public:
         fn(j);
       return;
     }
+
+    // A pool can be parked while oversampling or phase multicore is disabled.
+    // Reactivate it immediately before publishing the next generation.
+    if (!mActive.load(std::memory_order_acquire))
+      SetActive(true);
 
     // This pool is intentionally not a general task queue. It is a fixed
     // phase-processing barrier: one coarse job per worker. This avoids the
@@ -604,6 +616,12 @@ private:
     // first job if the audio thread publishes immediately after construction.
     unsigned seenGeneration = 0;
     int idleSpins = 0;
+#if defined(__APPLE__) && (defined(__arm64__) || defined(__aarch64__))
+    const int idleSpinLimit =
+      NAMPhaseMulticoreEnvInt("NAM_PHASE_MULTICORE_APPLE_SILICON_SPIN_LIMIT", 8192, 0, 262144);
+#elif defined(__APPLE__)
+    constexpr int idleSpinLimit = 32768;
+#endif
     for (;;)
     {
       void* jobContext = nullptr;
@@ -613,20 +631,48 @@ private:
       os_workgroup_t audioWorkgroup = nullptr;
 #endif
 
+      // When phase multicore is inactive, park indefinitely. Keeping the pool
+      // object avoids joining realtime workers on the audio thread, while the
+      // condition variable prevents periodic wakeups and background CPU use.
+      if (!mActive.load(std::memory_order_acquire))
+      {
+        std::unique_lock<std::mutex> lock(mMutex);
+        mCV.wait(lock, [this] {
+          return mStop.load(std::memory_order_acquire) || mActive.load(std::memory_order_acquire);
+        });
+        idleSpins = 0;
+        if (mStop.load(std::memory_order_acquire))
+          return;
+        continue;
+      }
+
       unsigned generation = mGeneration.load(std::memory_order_acquire);
       if (generation == seenGeneration)
       {
         if (mStop.load(std::memory_order_acquire))
           return;
 
-#if defined(__APPLE__)
-        // Avoid a kernel wake-up on every tiny audio block. The timed sleep is
-        // only a fallback for stopped or inactive playback. Apple Silicon can
-        // spin longer because the AudioWorkgroup/P-core path is very effective;
-        // Intel Macs get a shorter spin to reduce condition_variable wake
-        // latency without burning an entire hyper-thread while transport is idle.
-        const int spinLimit = NAMPhaseMulticoreIsAppleSilicon() ? 262144 : 32768;
-        if (idleSpins++ < spinLimit)
+#if defined(__APPLE__) && (defined(__arm64__) || defined(__aarch64__))
+        // A short spin still catches workers that finish close to the next
+        // generation, but does not burn a P-core between audio callbacks. Once
+        // the spin budget expires, park until an actual job or state change.
+        if (idleSpins++ < idleSpinLimit)
+        {
+          NAMPhaseMulticoreRealtimePause();
+          continue;
+        }
+
+        std::unique_lock<std::mutex> lock(mMutex);
+        mCV.wait(lock, [this, seenGeneration] {
+          return mStop.load(std::memory_order_acquire)
+                 || !mActive.load(std::memory_order_acquire)
+                 || mGeneration.load(std::memory_order_acquire) != seenGeneration;
+        });
+        idleSpins = 0;
+#elif defined(__APPLE__)
+        // Preserve the existing Intel Mac tuning. Unlike Apple Silicon, older
+        // Intel hosts can benefit from the bounded wake fallback.
+        if (idleSpins++ < idleSpinLimit)
         {
           NAMPhaseMulticoreRealtimePause();
           continue;
@@ -635,13 +681,15 @@ private:
         std::unique_lock<std::mutex> lock(mMutex);
         mCV.wait_for(lock, std::chrono::microseconds(500), [this, seenGeneration] {
           return mStop.load(std::memory_order_acquire)
+                 || !mActive.load(std::memory_order_acquire)
                  || mGeneration.load(std::memory_order_acquire) != seenGeneration;
         });
         idleSpins = 0;
 #else
         std::unique_lock<std::mutex> lock(mMutex);
-        mCV.wait(lock, [this, &seenGeneration] {
+        mCV.wait(lock, [this, seenGeneration] {
           return mStop.load(std::memory_order_acquire)
+                 || !mActive.load(std::memory_order_acquire)
                  || mGeneration.load(std::memory_order_acquire) != seenGeneration;
         });
 #endif
@@ -701,6 +749,7 @@ private:
   int mJobCount = 0;
   std::atomic<int> mCompletedWorkers {0};
   std::atomic<unsigned> mGeneration {0};
+  std::atomic<bool> mActive {true};
   std::atomic<bool> mStop {false};
 #if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
   os_workgroup_t mAudioWorkgroup = nullptr;
@@ -1114,8 +1163,19 @@ private:
     }
   }
 
+  void ParkPhasePoolUnlocked()
+  {
+    if (mPhasePool)
+      mPhasePool->SetActive(false);
+  }
+
   void ClearPhaseModelsUnlocked()
   {
+    // Oversampling OFF, multicore OFF, or an incompatible model must not leave
+    // high-priority workers spinning in the background. Park rather than
+    // destroy here, because destruction joins threads and may run on the audio
+    // thread during a realtime DSP transition.
+    ParkPhasePoolUnlocked();
     mPhaseMulticoreActive = false;
     mPhaseCount = 1;
     mPhaseModels.clear();
