@@ -27,7 +27,6 @@ enum class ToneStackType
   BigMuffPickle,
   BlackstarHT5,
   BoneRay,
-  BossFZ2EQ,
   Crate,
   DmblJazz,
   DmblRock,

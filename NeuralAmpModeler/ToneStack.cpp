@@ -145,13 +145,6 @@ CircuitSpec GetDefaultCircuitSpec(ToneStackType type)
       spec.inputResistance = 38000.0;
       return spec;
     }
-    case ToneStackType::BossFZ2EQ:
-    {
-      CircuitSpec spec{100000.0, 15e-9, 150e-9, 47e-9, 50000.0, 50000.0, 1000000.0,
-                       50000.0, 0.50, 0.50, 0.50, 1.0};
-      spec.inputResistance = 1000.0;
-      return spec;
-    }
     case ToneStackType::Crate:
     {
       CircuitSpec spec{68000.0, 220e-12, 47e-9, 220e-9, 250000.0, 250000.0, 50000.0,
@@ -1972,94 +1965,6 @@ std::array<Complex, NodeCount + OpAmpCount> SolveIdealOpAmpMna(
   return SolveComplexLinearSystem<NodeCount + OpAmpCount>(y, current);
 }
 
-Complex EvaluateBossFz2EqMna(const CircuitSpec& spec, double bassValue, double trebleValue, Complex s)
-{
-  enum Node
-  {
-    RINR = 0,
-    OA1_PLUS,
-    OA1_MINUS,
-    OA1_OUT,
-    OUT,
-    TREBLE_WIPER,
-    TREBLE_SHUNT,
-    BASS_WIPER,
-    C4_BOTTOM,
-    OA2_PLUS,
-    OA2_OUT,
-    kNodeCount
-  };
-  constexpr int kOpAmpCount = 2;
-  std::array<std::array<Complex, kNodeCount + kOpAmpCount>, kNodeCount + kOpAmpCount> y{};
-  std::array<Complex, kNodeCount + kOpAmpCount> current{};
-
-  auto stampAdmittance = [&](int a, int b, Complex admittance) {
-    if (a >= 0)
-      y[a][a] += admittance;
-    if (b >= 0)
-      y[b][b] += admittance;
-    if (a >= 0 && b >= 0)
-    {
-      y[a][b] -= admittance;
-      y[b][a] -= admittance;
-    }
-  };
-  auto stampResistor = [&](int a, int b, double resistance) {
-    stampAdmittance(a, b, 1.0 / std::max(kMinimumResistance, resistance));
-  };
-  auto stampCapacitor = [&](int a, int b, double capacitance) {
-    stampAdmittance(a, b, s * std::max(1.0e-15, capacitance));
-  };
-  auto stampKnownVoltageThroughResistor = [&](int a, double voltage, double resistance) {
-    const double conductance = 1.0 / std::max(kMinimumResistance, resistance);
-    y[a][a] += conductance;
-    current[a] += conductance * voltage;
-  };
-  auto stampPot = [&](int top, int bottom, int wiper, double resistance, double position) {
-    stampResistor(top, wiper, resistance * (1.0 - position) + 1.0);
-    stampResistor(wiper, bottom, resistance * position + 1.0);
-  };
-
-  const double r1 = 100000.0;
-  const double r2 = 10000.0;
-  const double r3 = 10000.0;
-  const double r4 = 3300.0;
-  const double r5 = 4700.0;
-  const double r6 = 100000.0;
-  const double c1 = 47e-12;
-  const double c2 = 10e-6;
-  const double c3 = spec.trebleCapacitance;
-  const double c4 = spec.midCapacitance;
-  const double c5 = spec.bassCapacitance;
-  const double bass = std::clamp(bassValue / 10.0, 1.0e-6, 0.999999);
-  const double treble = std::clamp(trebleValue / 10.0, 1.0e-6, 0.999999);
-
-  stampKnownVoltageThroughResistor(RINR, 1.0, spec.inputResistance);
-  stampResistor(RINR, -1, r1);
-  stampResistor(RINR, OA1_PLUS, r2);
-
-  stampCapacitor(OA1_MINUS, OA1_OUT, c1);
-  stampResistor(OA1_MINUS, OA1_OUT, r3);
-  stampCapacitor(OA1_OUT, OUT, c2);
-  stampResistor(OUT, -1, spec.loadResistance);
-
-  stampPot(OA1_MINUS, OA1_PLUS, TREBLE_WIPER, spec.treblePotResistance, treble);
-  stampCapacitor(TREBLE_WIPER, TREBLE_SHUNT, c3);
-  stampResistor(TREBLE_SHUNT, -1, r4);
-
-  stampPot(OA1_MINUS, OA1_PLUS, BASS_WIPER, spec.bassPotResistance, bass);
-  stampCapacitor(BASS_WIPER, C4_BOTTOM, c4);
-  stampCapacitor(C4_BOTTOM, OA2_PLUS, c5);
-  stampResistor(OA2_PLUS, -1, r6);
-  stampResistor(C4_BOTTOM, -1, r5);
-
-  const std::array<std::array<int, 3>, kOpAmpCount> opAmps{{
-    {{OA1_OUT, OA1_PLUS, OA1_MINUS}},
-    {{OA2_OUT, OA2_PLUS, OA2_OUT}},
-  }};
-  return SolveIdealOpAmpMna<kNodeCount, kOpAmpCount>(y, current, opAmps)[OUT];
-}
-
 Complex EvaluateDumbleMna(ToneStackType type, const CircuitSpec& spec, double bassValue, double midValue,
                           double trebleValue, Complex s)
 {
@@ -2188,16 +2093,17 @@ Complex EvaluateDumbleMna(ToneStackType type, const CircuitSpec& spec, double ba
 
 Complex EvaluateFenderBrownfaceMna(const CircuitSpec& spec, double bassValue, double trebleValue, Complex s)
 {
-  constexpr int kNodeCount = 7;
+  constexpr int kNodeCount = 8;
   enum Node
   {
     IN = 0,
     R1_BOTTOM,
     TREBLE_TOP,
-    TONE_NODE,
+    TREBLE_TAP,
     BASS_BOTTOM,
     TREBLE_BOTTOM,
-    OUT
+    OUT,
+    DUMMY
   };
 
   std::array<std::array<Complex, kNodeCount>, kNodeCount> y{};
@@ -2231,19 +2137,38 @@ Complex EvaluateFenderBrownfaceMna(const CircuitSpec& spec, double bassValue, do
   const double r2 = 6800.0;
   const double rTap = 70000.0;
   const double c4 = spec.midCapacitance;
+  const double rTreble = spec.treblePotResistance;
+  const double rWiperFromBottom = std::clamp(treble * rTreble, 1.0, rTreble - 1.0);
+  const double rTapFromBottom = std::clamp(rTap, 1.0, rTreble - 1.0);
 
   stampKnownVoltageThroughResistor(IN, 1.0, spec.inputResistance);
   stampResistor(IN, R1_BOTTOM, spec.sourceResistance);
   stampCapacitor(IN, TREBLE_TOP, spec.trebleCapacitance);
-  stampCapacitor(R1_BOTTOM, TONE_NODE, spec.bassCapacitance);
+  stampCapacitor(R1_BOTTOM, TREBLE_TAP, spec.bassCapacitance);
   stampCapacitor(R1_BOTTOM, BASS_BOTTOM, 100e-9);
-  stampResistor(TONE_NODE, BASS_BOTTOM, spec.bassPotResistance * bass + 1.0);
+  stampResistor(TREBLE_TAP, BASS_BOTTOM, spec.bassPotResistance * bass + 1.0);
   stampResistor(BASS_BOTTOM, -1, r2);
-  stampResistor(TREBLE_TOP, OUT, spec.treblePotResistance * (1.0 - treble) + 1.0);
-  stampResistor(OUT, TREBLE_BOTTOM, spec.treblePotResistance * treble + 1.0);
-  stampResistor(TREBLE_BOTTOM, -1, rTap);
+
+  // Brownface uses a tapped treble pot: the tone network is connected to a
+  // fixed tap on the pot track, while the output follows the wiper. Modelling
+  // it as a normal pot plus a fixed shunt makes the upper treble range fold
+  // over abruptly. Split the track at the fixed tap and at the current wiper.
+  if (rWiperFromBottom >= rTapFromBottom)
+  {
+    stampResistor(TREBLE_TOP, OUT, rTreble - rWiperFromBottom + 1.0);
+    stampResistor(OUT, TREBLE_TAP, rWiperFromBottom - rTapFromBottom + 1.0);
+    stampResistor(TREBLE_TAP, TREBLE_BOTTOM, rTapFromBottom + 1.0);
+  }
+  else
+  {
+    stampResistor(TREBLE_TOP, TREBLE_TAP, rTreble - rTapFromBottom + 1.0);
+    stampResistor(TREBLE_TAP, OUT, rTapFromBottom - rWiperFromBottom + 1.0);
+    stampResistor(OUT, TREBLE_BOTTOM, rWiperFromBottom + 1.0);
+  }
+
   stampCapacitor(TREBLE_BOTTOM, -1, c4);
   stampResistor(OUT, -1, spec.loadResistance);
+  stampResistor(DUMMY, -1, 1.0e12);
 
   const auto voltages = SolveComplexLinearSystem<kNodeCount>(y, current);
   return voltages[OUT] * spec.makeupGain;
@@ -2489,7 +2414,6 @@ Complex EvaluateToneStackMna(ToneStackType type, const CircuitSpec& spec, double
     case ToneStackType::BigMuffPickle: return EvaluateBigMuffVariantMna(type, spec, midValue, trebleValue, s);
     case ToneStackType::BlackstarHT5: return EvaluateBlackstarHt5Mna(spec, bassValue, midValue, trebleValue, s);
     case ToneStackType::BoneRay: return EvaluateBoneRayMna(spec, midValue, trebleValue, s);
-    case ToneStackType::BossFZ2EQ: return EvaluateBossFz2EqMna(spec, bassValue, trebleValue, s);
     case ToneStackType::Crate: return EvaluateCrateMna(spec, bassValue, midValue, trebleValue, s);
     case ToneStackType::DmblJazz:
     case ToneStackType::DmblRock: return EvaluateDumbleMna(type, spec, bassValue, midValue, trebleValue, s);
@@ -2658,10 +2582,6 @@ bool TryBuildDigitalToneStackFilter(ToneStackType type, const CircuitSpec& spec,
 bool BuildDigitalToneStackFilter(ToneStackType type, const CircuitSpec& spec, double bassValue, double midValue,
                                  double trebleValue, double sampleRate, double normalizationGain, Poly& b, Poly& a)
 {
-  if (type == ToneStackType::BossFZ2EQ)
-    return TryBuildDigitalToneStackFilter<3>(type, spec, bassValue, midValue, trebleValue, sampleRate,
-                                             normalizationGain, b, a);
-
   return TryBuildDigitalToneStackFilter<1>(type, spec, bassValue, midValue, trebleValue, sampleRate, normalizationGain,
                                            b, a) ||
          TryBuildDigitalToneStackFilter<2>(type, spec, bassValue, midValue, trebleValue, sampleRate, normalizationGain,
@@ -2705,7 +2625,6 @@ const char* dsp::tone_stack::GetToneStackTypeName(ToneStackType type)
     case ToneStackType::BigMuffPickle: return "Big Milf Pickle";
     case ToneStackType::BlackstarHT5: return "BlackHole HT5";
     case ToneStackType::BoneRay: return "Bone Ray";
-    case ToneStackType::BossFZ2EQ: return "Boss FZ-2 EQ";
     case ToneStackType::Crate: return "Crater";
     case ToneStackType::DmblJazz: return "Dmbl Jazz";
     case ToneStackType::DmblRock: return "Dmbl Rock";
@@ -2758,7 +2677,6 @@ bool dsp::tone_stack::ToneStackTypeHasBassControl(ToneStackType type)
     case ToneStackType::FndrProJr: return false;
     case ToneStackType::Bench:
     case ToneStackType::BlackstarHT5:
-    case ToneStackType::BossFZ2EQ:
     case ToneStackType::Default:
     case ToneStackType::Crate:
     case ToneStackType::DmblJazz:
@@ -2832,7 +2750,6 @@ bool dsp::tone_stack::ToneStackTypeHasTrebleControl(ToneStackType type)
     case ToneStackType::BigMuffMusket:
     case ToneStackType::BigMuffPickle:
     case ToneStackType::BoneRay:
-    case ToneStackType::BossFZ2EQ:
     case ToneStackType::Crate:
     case ToneStackType::DmblJazz:
     case ToneStackType::DmblRock:

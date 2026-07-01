@@ -132,6 +132,7 @@ int ToneStackTypeIndexFromName(const std::string& name)
     {"Big Muff Musket", dsp::tone_stack::ToneStackType::BigMuffMusket},
     {"Big Muff Pickle", dsp::tone_stack::ToneStackType::BigMuffPickle},
     {"Blackstar HT5", dsp::tone_stack::ToneStackType::BlackstarHT5},
+    {"Boss FZ-2 EQ", dsp::tone_stack::ToneStackType::Default},
     {"Crate", dsp::tone_stack::ToneStackType::Crate},
     {"Dr. Z", dsp::tone_stack::ToneStackType::DrZ},
     {"Fndr Bandmaster 6G7", dsp::tone_stack::ToneStackType::Bandmaster6G7},
@@ -297,7 +298,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto titleHeight = 50.0f;
     const auto titleArea = contentArea.GetFromTop(titleHeight);
     const auto internalPresetArea =
-      IRECT(contentArea.MW() - 170.0f, b.T + 6.0f, contentArea.MW() + 170.0f, b.T + 28.0f);
+      IRECT(contentArea.MW() - 170.0f, b.T + 7.0f, contentArea.MW() + 170.0f, b.T + 29.0f);
 
     // Areas for knobs
     const auto knobsPad = 20.0f;
@@ -323,8 +324,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto toneStackSelectorBaseArea =
       midKnobArea.GetVShifted(midKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
     const auto toneStackSelectorArea =
-      IRECT(toneStackSelectorBaseArea.L - 14.0f, toneStackSelectorBaseArea.T, toneStackSelectorBaseArea.R + 14.0f,
-            toneStackSelectorBaseArea.B);
+      IRECT(toneStackSelectorBaseArea.L - 14.0f, toneStackSelectorBaseArea.T + 1.0f,
+            toneStackSelectorBaseArea.R + 14.0f, toneStackSelectorBaseArea.B + 1.0f);
     const auto eqPositionArea =
       trebleKnobArea.GetVShifted(trebleKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
     const auto channelModeArea =

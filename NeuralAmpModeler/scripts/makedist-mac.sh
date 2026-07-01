@@ -41,9 +41,7 @@ if [ "$2" == "zip" ]; then
   BUILD_INSTALLER=0
 fi
 
-VERSION=`echo | grep PLUG_VERSION_HEX config.h`
-VERSION=${VERSION//\#define PLUG_VERSION_HEX }
-VERSION=${VERSION//\'}
+VERSION=$(sed -n 's/^#define PLUG_VERSION_HEX //p' config.h | tr -d '\r' | head -n 1)
 MAJOR_VERSION=$(($VERSION & 0xFFFF0000))
 MAJOR_VERSION=$(($MAJOR_VERSION >> 16))
 MINOR_VERSION=$(($VERSION & 0x0000FF00))
@@ -52,9 +50,7 @@ BUG_FIX=$(($VERSION & 0x000000FF))
 
 FULL_VERSION=$MAJOR_VERSION"."$MINOR_VERSION"."$BUG_FIX
 
-PLUGIN_NAME=`echo | grep BUNDLE_NAME config.h`
-PLUGIN_NAME=${PLUGIN_NAME//\#define BUNDLE_NAME }
-PLUGIN_NAME=${PLUGIN_NAME//\"}
+PLUGIN_NAME=$(sed -n 's/^#define BUNDLE_NAME "\(.*\)".*$/\1/p' config.h | tr -d '\r' | head -n 1)
 PLUGIN_ID_NAME=${PLUGIN_NAME// /}
 
 NOTARIZE_BUNDLE_ID=${NOTARIZE_BUNDLE_ID:-${INSTALLER_PKG_ID_PREFIX}.${PLUGIN_ID_NAME}}

@@ -407,7 +407,7 @@ public:
   , mLeftSVG(leftSVG)
   , mRightSVG(rightSVG)
   {
-    SetTooltip("Internal presets: arrows recall, save writes current slot or asks for a slot from Init");
+    SetTooltip("Internal preset controls");
   }
 
   void Draw(IGraphics& g) override
@@ -450,6 +450,7 @@ public:
     if (hoverPart != mHoverPart)
     {
       mHoverPart = hoverPart;
+      UpdateTooltipForHover();
       SetDirty(false);
     }
   }
@@ -459,6 +460,7 @@ public:
     if (mHoverPart != HoverPart::None)
     {
       mHoverPart = HoverPart::None;
+      UpdateTooltipForHover();
       SetDirty(false);
     }
   }
@@ -526,6 +528,8 @@ private:
   enum class HoverPart
   {
     None,
+    Previous,
+    Next,
     Slot,
     Revert,
     Save,
@@ -568,6 +572,10 @@ private:
   HoverPart HitTest(float x, float y)
   {
     const auto areas = GetAreas();
+    if (areas.left.Contains(x, y))
+      return HoverPart::Previous;
+    if (areas.right.Contains(x, y))
+      return HoverPart::Next;
     if (areas.revert.Contains(x, y))
       return PLUG()->IsCurrentInternalPresetDirty() ? HoverPart::Revert : HoverPart::None;
     if (areas.save.Contains(x, y))
@@ -584,6 +592,22 @@ private:
   IColor GetFrameColor(HoverPart part) const
   {
     return PluginColors::GetThemeColor().WithOpacity(mHoverPart == part ? 0.9f : 0.55f);
+  }
+
+  void UpdateTooltipForHover()
+  {
+    switch (mHoverPart)
+    {
+      case HoverPart::Previous: SetTooltip("Recall the previous internal preset"); break;
+      case HoverPart::Next: SetTooltip("Recall the next internal preset"); break;
+      case HoverPart::Slot: SetTooltip("Current internal preset. Click the name to rename it."); break;
+      case HoverPart::Revert: SetTooltip("Reset the current preset to its last saved state"); break;
+      case HoverPart::Save: SetTooltip("Save the current settings into the selected internal preset"); break;
+      case HoverPart::SaveAs: SetTooltip("Save the current settings into another internal preset slot"); break;
+      case HoverPart::List: SetTooltip("Open the full internal preset list"); break;
+      case HoverPart::None:
+      default: SetTooltip("Internal preset controls"); break;
+    }
   }
 
   static void DrawIconButton(IGraphics& g, const IRECT& r, const IColor& frame, const IColor& fill)
@@ -1676,7 +1700,7 @@ public:
   : IVRadioButtonControl(bounds, paramIdx,
                          {"Default", "Air", "Bax Active Dual", "Bax Active Single", "Bax Passive Dual",
                           "Bax Passive Single", "Bench", "Big Milf", "Big Milf Hoof", "Big Milf Musket",
-                          "Big Milf Pickle", "BlackHole HT5", "Bone Ray", "Boss FZ-2 EQ", "Crater",
+                          "Big Milf Pickle", "BlackHole HT5", "Bone Ray", "Crater",
                           "Dmbl Jazz", "Dmbl Rock", "Fndr BMan 5F6-A", "Fndr BMaster 6G7", "Fndr BrownF",
                           "Fndr Dlx 5E3", "Fndr E-series", "Fndr PrinceT 5E2", "Fndr PrinceT 5F2A",
                           "Fndr Pro Jr", "Fndr TB", "Fndr TMB", "Fndr Twin 5D8", "Hwtt CP", "Hwtt DR",
@@ -1731,6 +1755,7 @@ public:
   , mOpenAction(openAction)
   {
     SetParamIdx(paramIdx);
+    SetTooltip("Tone stack selector");
   }
 
   void Draw(IGraphics& g) override
@@ -1751,8 +1776,8 @@ public:
 
     g.FillRoundRect(COLOR_BLACK, buttonArea, 4.0f);
     g.DrawRoundRect(frame, buttonArea, 4.0f, nullptr, 1.0f);
-    g.DrawSVG(mLeftSVG, leftArrowArea, &mBlend);
-    g.DrawSVG(mRightSVG, rightArrowArea, &mBlend);
+    g.DrawSVG(mLeftSVG, leftArrowArea.GetCentredInside(10.0f, 10.0f), &mBlend);
+    g.DrawSVG(mRightSVG, rightArrowArea.GetCentredInside(10.0f, 10.0f), &mBlend);
 
     const IText labelText(DEFAULT_TEXT_SIZE + 3.0f, labelColor, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
     const IText valueText(12.0f, valueColor, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
@@ -1774,10 +1799,17 @@ public:
 
     const bool buttonHover = buttonArea.Contains(x, y);
     const bool labelHover = labelArea.Contains(x, y);
-    if (buttonHover != mButtonHover || labelHover != mLabelHover)
+    const HoverPart hoverPart = leftArrowArea.Contains(x, y)   ? HoverPart::Previous
+                                : rightArrowArea.Contains(x, y) ? HoverPart::Next
+                                : labelHover                    ? HoverPart::Label
+                                : buttonHover                   ? HoverPart::Button
+                                                                : HoverPart::None;
+    if (buttonHover != mButtonHover || labelHover != mLabelHover || hoverPart != mHoverPart)
     {
       mButtonHover = buttonHover;
       mLabelHover = labelHover;
+      mHoverPart = hoverPart;
+      UpdateTooltipForHover();
       SetDirty(false);
     }
   }
@@ -1788,6 +1820,8 @@ public:
     {
       mButtonHover = false;
       mLabelHover = false;
+      mHoverPart = HoverPart::None;
+      UpdateTooltipForHover();
       SetDirty(false);
     }
   }
@@ -1832,6 +1866,15 @@ public:
   }
 
 private:
+  enum class HoverPart
+  {
+    None,
+    Button,
+    Label,
+    Previous,
+    Next
+  };
+
   void CalculateAreas(IGraphics& g, IRECT& buttonArea, IRECT& labelArea, IRECT& leftArrowArea,
                       IRECT& rightArrowArea, IRECT& valueArea) const
   {
@@ -1848,10 +1891,24 @@ private:
     valueArea = IRECT(leftArrowArea.R + 2.0f, buttonArea.T, rightArrowArea.L - 2.0f, buttonArea.B);
   }
 
+  void UpdateTooltipForHover()
+  {
+    switch (mHoverPart)
+    {
+      case HoverPart::Previous: SetTooltip("Select the previous tone stack type"); break;
+      case HoverPart::Next: SetTooltip("Select the next tone stack type"); break;
+      case HoverPart::Label: SetTooltip("Open the tone stack component editor"); break;
+      case HoverPart::Button: SetTooltip("Open the tone stack type list"); break;
+      case HoverPart::None:
+      default: SetTooltip("Tone stack selector"); break;
+    }
+  }
+
   ISVG mLeftSVG;
   ISVG mRightSVG;
   IActionFunction mOpenAction;
   IPopupMenu mToneStackMenu {"Tone Stack"};
+  HoverPart mHoverPart = HoverPart::None;
   bool mButtonHover = false;
   bool mLabelHover = false;
 };
