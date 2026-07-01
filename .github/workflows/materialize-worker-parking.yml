@@ -39,3 +39,5 @@ jobs:
           git add -u .github/scripts/materialize_worker_parking.py .github/workflows/materialize-worker-parking.yml
           git commit -m "Park inactive phase workers and restore ARM64 SIMD"
           git push origin HEAD:main
+
+# One-shot workflow: removed by its own successful run.
