@@ -78,9 +78,9 @@ const IVStyle titleStyle =
   DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular")).WithDrawFrame(false).WithShadowOffset(2.f);
 const IVStyle radioButtonStyle =
   style
-    .WithColor(EVColor::kON, PluginColors::NAM_THEMECOLOR) // Pressed buttons and their labels
-    .WithColor(EVColor::kOFF, PluginColors::NAM_THEMECOLOR.WithOpacity(0.1f)) // Unpressed buttons
-    .WithColor(EVColor::kX1, PluginColors::NAM_THEMECOLOR.WithOpacity(0.6f)); // Unpressed buttons' labels
+    .WithColor(EVColor::kON, mThemeColor) // Pressed buttons and their labels
+    .WithColor(EVColor::kOFF, mThemeColor.WithOpacity(0.1f)) // Unpressed buttons
+    .WithColor(EVColor::kX1, mThemeColor.WithOpacity(0.6f)); // Unpressed buttons' labels
 
 EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char* str, const char* caption,
                               EMsgBoxType type)
@@ -2134,6 +2134,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
             pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.1f));
             pVectorBase->SetColor(kX3, GetThemeColor().WithContrast(0.1f));
             pVectorBase->SetColor(kOFF, GetThemeColor().WithOpacity(0.1f));
+           
             pControl->GetUI()->SetAllControlsDirty();
           }
         });
@@ -2179,9 +2180,10 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
         //PluginColors::SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
 
         pVectorBase->SetColor(kX1, GetThemeColor());
-        pVectorBase->SetColor(kPR, GetThemeColor().WithOpacity(0.3f));
-        pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.4f));
+        pVectorBase->SetColor(kPR, GetThemeColor().WithOpacity(0.6f));
+        pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.1f));
         pVectorBase->SetColor(kX3, GetThemeColor().WithContrast(0.1f));
+        pVectorBase->SetColor(kOFF, GetThemeColor().WithOpacity(0.1f));
         }
         pControl->GetUI()->SetAllControlsDirty();
     });
