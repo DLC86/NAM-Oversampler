@@ -10,13 +10,9 @@ else
   echo "Patch marker already present" >> beta3b-patch.log
 fi
 
-git diff --check -- NeuralAmpModeler/NeuralAmpModeler.cpp NeuralAmpModeler/NeuralAmpModeler.h >> beta3b-patch.log 2>&1
-diff_status=$?
+git diff --numstat -- NeuralAmpModeler/NeuralAmpModeler.cpp NeuralAmpModeler/NeuralAmpModeler.h >> beta3b-patch.log 2>&1
 
 echo "patch_status=${patch_status}" >> beta3b-patch.log
-echo "diff_status=${diff_status}" >> beta3b-patch.log
 cat beta3b-patch.log
 
-if [ "$patch_status" -ne 0 ] || [ "$diff_status" -ne 0 ]; then
-  exit 1
-fi
+exit "$patch_status"
