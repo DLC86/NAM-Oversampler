@@ -50,10 +50,11 @@ jobs:
           cd ..
           ./download-prebuilt-libs.sh
 
-      - name: Build AU effect
+      - name: Build AU effect and retain diagnostics
         shell: bash
         run: |
-          set -euo pipefail
+          set +e
+          set -o pipefail
           cd NeuralAmpModeler
           xcodebuild \
             -project ./projects/NeuralAmpModeler-macOS.xcodeproj \
@@ -61,7 +62,24 @@ jobs:
             DEMO_VERSION=0 \
             -target AU \
             -UseModernBuildSystem=NO \
-            -configuration Release
+            -configuration Release 2>&1 | tee ../xcodebuild-au.log
+          echo "${PIPESTATUS[0]}" > ../xcodebuild-au-status.txt
+          exit 0
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: xcodebuild-au-log
+          path: |
+            xcodebuild-au.log
+            xcodebuild-au-status.txt
+
+      - name: Require successful build
+        shell: bash
+        run: |
+          cat xcodebuild-au.log
+          test "$(cat xcodebuild-au-status.txt)" = "0"
 
       - name: Run auval
         shell: bash
