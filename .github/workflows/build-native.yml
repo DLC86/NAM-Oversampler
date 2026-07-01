@@ -38,10 +38,6 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Stop obsolete intermediate build
-      run: exit 1
-      shell: bash
-
     - name: Get VST3 SDK
       run: |
         cd iPlug2/Dependencies/IPlug
