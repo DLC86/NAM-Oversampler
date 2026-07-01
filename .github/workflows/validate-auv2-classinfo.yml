@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git submodule update --init iPlug2
+          git submodule update --init --recursive
           git -C iPlug2 fetch origin cd098b622b5ae7251ce37024409997b3e38f3b4c
           git -C iPlug2 checkout cd098b622b5ae7251ce37024409997b3e38f3b4c
           git -C iPlug2 submodule update --init --recursive
