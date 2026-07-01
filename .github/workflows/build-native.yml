@@ -38,6 +38,14 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Apply Beta 3B source patch
+      shell: bash
+      run: |
+        if ! grep -q 'kPresetParamEpsilon' NeuralAmpModeler/NeuralAmpModeler.cpp; then
+          python .github/scripts/apply_beta3b.py
+        fi
+        git diff --check -- NeuralAmpModeler/NeuralAmpModeler.cpp NeuralAmpModeler/NeuralAmpModeler.h
+
     - name: Get VST3 SDK
       run: |
         cd iPlug2/Dependencies/IPlug
