@@ -1,0 +1,42 @@
+name: Materialize worker parking cleanup
+
+on:
+  push:
+    branches:
+      - worker-parking-cleanup
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: worker-parking-cleanup
+          fetch-depth: 0
+
+      - name: Apply promoted source changes
+        shell: bash
+        run: |
+          python3 .github/scripts/materialize_worker_parking.py
+          git diff --check -- NeuralAmpModeler/NeuralAmpModeler.h NeuralAmpModeler/config/NeuralAmpModeler-mac.xcconfig
+
+      - name: Remove one-shot materializer
+        shell: bash
+        run: |
+          rm .github/scripts/materialize_worker_parking.py
+          rm .github/workflows/materialize-worker-parking.yml
+
+      - name: Commit clean source patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add NeuralAmpModeler/NeuralAmpModeler.h NeuralAmpModeler/config/NeuralAmpModeler-mac.xcconfig
+          git add -u .github/scripts/materialize_worker_parking.py .github/workflows/materialize-worker-parking.yml
+          git commit -m "Park inactive phase workers and restore ARM64 SIMD"
+          git push origin HEAD:worker-parking-cleanup
