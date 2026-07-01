@@ -1,8 +1,8 @@
 name: Materialize worker parking cleanup
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
