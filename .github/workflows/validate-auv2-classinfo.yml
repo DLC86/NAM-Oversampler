@@ -1,0 +1,111 @@
+name: Validate AUv2 ClassInfo preset name
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    if: github.head_ref == 'fix-standalone-audio-routing' && github.actor != 'github-actions[bot]'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix-standalone-audio-routing
+          fetch-depth: 0
+          submodules: false
+
+      - name: Select exact iPlug2 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git submodule update --init iPlug2
+          git -C iPlug2 fetch origin cd098b622b5ae7251ce37024409997b3e38f3b4c
+          git -C iPlug2 checkout cd098b622b5ae7251ce37024409997b3e38f3b4c
+          git -C iPlug2 submodule update --init --recursive
+          test "$(git -C iPlug2 rev-parse HEAD)" = "cd098b622b5ae7251ce37024409997b3e38f3b4c"
+          git add iPlug2
+
+      - name: Match the reported AU effect configuration
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('NeuralAmpModeler/config.h')
+          text = path.read_text(encoding='utf-8')
+          old = '#define PLUG_DOES_MIDI_IN 1'
+          if text.count(old) != 1:
+              raise SystemExit('Expected PLUG_DOES_MIDI_IN setting not found exactly once')
+          path.write_text(text.replace(old, '#define PLUG_DOES_MIDI_IN 0', 1), encoding='utf-8')
+          PY
+
+      - name: Download build dependencies
+        shell: bash
+        run: |
+          cd iPlug2/Dependencies/IPlug
+          ./download-iplug-sdks.sh
+          cd ..
+          ./download-prebuilt-libs.sh
+
+      - name: Build AU effect
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd NeuralAmpModeler
+          xcodebuild \
+            -project ./projects/NeuralAmpModeler-macOS.xcodeproj \
+            -xcconfig ./config/NeuralAmpModeler-mac.xcconfig \
+            DEMO_VERSION=0 \
+            -target AU \
+            -UseModernBuildSystem=NO \
+            -configuration Release
+
+      - name: Run auval
+        shell: bash
+        run: |
+          set +e
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          sleep 2
+          auval -a > auval-list.log 2>&1 || true
+          set -o pipefail
+          auval -v aufx 1YEo TTSc 2>&1 | tee auval.log
+          echo "${PIPESTATUS[0]}" > auval-status.txt
+          exit 0
+
+      - name: Upload validation log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: auval-classinfo-log
+          path: |
+            auval.log
+            auval-status.txt
+            auval-list.log
+
+      - name: Require a clean validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat auval-list.log
+          cat auval.log
+          test "$(cat auval-status.txt)" = "0"
+          ! grep -Fq 'Preset name is not retained in retrieved class data' auval.log
+          ! grep -Fq 'AU VALIDATION FAILED' auval.log
+          grep -Fq 'AU VALIDATION SUCCEEDED' auval.log
+
+      - name: Commit only the iPlug2 update
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout -- NeuralAmpModeler/config.h
+          rm -f .github/auval-classinfo-trigger
+          test "$(git -C iPlug2 rev-parse HEAD)" = "cd098b622b5ae7251ce37024409997b3e38f3b4c"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add iPlug2
+          git add -u .github/auval-classinfo-trigger || true
+          git commit -m "Fix AUv2 preset-name state round trip"
+          git push origin HEAD:fix-standalone-audio-routing
