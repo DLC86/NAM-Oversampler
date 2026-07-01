@@ -493,6 +493,13 @@ public:
 
   int ThreadCount() const { return static_cast<int>(mWorkers.size()) + 1; }
 
+  void SetActive(bool active)
+  {
+    const bool previous = mActive.exchange(active, std::memory_order_acq_rel);
+    if (previous != active)
+      mCV.notify_all();
+  }
+
   void SetAudioWorkgroup(void* workgroup)
   {
 #if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
@@ -542,6 +549,9 @@ public:
         fn(j);
       return;
     }
+
+    if (!mActive.load(std::memory_order_acquire))
+      SetActive(true);
 
     // This pool is intentionally not a general task queue. It is a fixed
     // phase-processing barrier: one coarse job per worker. This avoids the
@@ -614,6 +624,18 @@ private:
       os_workgroup_t audioWorkgroup = nullptr;
 #endif
 
+      if (!mActive.load(std::memory_order_acquire))
+      {
+        std::unique_lock<std::mutex> lock(mMutex);
+        mCV.wait(lock, [this] {
+          return mStop.load(std::memory_order_acquire) || mActive.load(std::memory_order_acquire);
+        });
+        idleSpins = 0;
+        if (mStop.load(std::memory_order_acquire))
+          return;
+        continue;
+      }
+
       unsigned generation = mGeneration.load(std::memory_order_acquire);
       if (generation == seenGeneration)
       {
@@ -636,13 +658,15 @@ private:
         std::unique_lock<std::mutex> lock(mMutex);
         mCV.wait_for(lock, std::chrono::microseconds(500), [this, seenGeneration] {
           return mStop.load(std::memory_order_acquire)
+                 || !mActive.load(std::memory_order_acquire)
                  || mGeneration.load(std::memory_order_acquire) != seenGeneration;
         });
         idleSpins = 0;
 #else
         std::unique_lock<std::mutex> lock(mMutex);
-        mCV.wait(lock, [this, &seenGeneration] {
+        mCV.wait(lock, [this, seenGeneration] {
           return mStop.load(std::memory_order_acquire)
+                 || !mActive.load(std::memory_order_acquire)
                  || mGeneration.load(std::memory_order_acquire) != seenGeneration;
         });
 #endif
@@ -702,6 +726,7 @@ private:
   int mJobCount = 0;
   std::atomic<int> mCompletedWorkers {0};
   std::atomic<unsigned> mGeneration {0};
+  std::atomic<bool> mActive {true};
   std::atomic<bool> mStop {false};
 #if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
   os_workgroup_t mAudioWorkgroup = nullptr;
@@ -1115,8 +1140,17 @@ private:
     }
   }
 
+  void ParkPhasePoolUnlocked()
+  {
+    if (mPhasePool)
+      mPhasePool->SetActive(false);
+  }
+
   void ClearPhaseModelsUnlocked()
   {
+    // Keep the pool object so no realtime thread performs joins, but block all
+    // workers indefinitely while oversampling or phase multicore is inactive.
+    ParkPhasePoolUnlocked();
     mPhaseMulticoreActive = false;
     mPhaseCount = 1;
     mPhaseModels.clear();

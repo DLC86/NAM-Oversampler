@@ -940,35 +940,29 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
 
   if (allowFileStaging)
   {
-    const bool clearedAllFiles = preset.namPath.empty() && preset.irPath.empty();
-    if (clearedAllFiles)
-    {
-      _ClearModelAndIRForInternalPreset();
-    }
-    else if (preset.namPath.empty())
+    if (preset.namPath.empty())
     {
       OnMessage(kMsgTagClearModel, kCtrlTagModelFileBrowser, 0, nullptr);
 #if PLUG_HAS_UI
       SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, 0, "");
 #endif
     }
-    else
+    else if (preset.namPath != mNAMPath.Get())
     {
       WDL_String path(preset.namPath.c_str());
       _StageModel(path);
     }
 
-    if (!clearedAllFiles && preset.irPath.empty())
+    if (preset.irPath.empty())
     {
       OnMessage(kMsgTagClearIR, kCtrlTagIRFileBrowser, 0, nullptr);
 #if PLUG_HAS_UI
       SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, 0, "");
 #endif
     }
-    else
+    else if (preset.irPath != mIRPath.Get())
     {
       WDL_String path(preset.irPath.c_str());
-      mIRPath.Set(path.Get());
       _StageIR(path);
     }
   }
@@ -1695,31 +1689,25 @@ void NeuralAmpModeler::OnIdle()
     if (preset.saved)
     {
       mApplyingInternalPreset.store(true, std::memory_order_release);
-      const bool clearedAllFiles = preset.namPath.empty() && preset.irPath.empty();
-      if (clearedAllFiles)
-      {
-        _ClearModelAndIRForInternalPreset();
-      }
-      else if (preset.namPath.empty())
+      if (preset.namPath.empty())
       {
         OnMessage(kMsgTagClearModel, kCtrlTagModelFileBrowser, 0, nullptr);
         SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, 0, "");
       }
-      else
+      else if (preset.namPath != mNAMPath.Get())
       {
         WDL_String path(preset.namPath.c_str());
         _StageModel(path);
       }
 
-      if (!clearedAllFiles && preset.irPath.empty())
+      if (preset.irPath.empty())
       {
         OnMessage(kMsgTagClearIR, kCtrlTagIRFileBrowser, 0, nullptr);
         SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, 0, "");
       }
-      else
+      else if (preset.irPath != mIRPath.Get())
       {
         WDL_String path(preset.irPath.c_str());
-        mIRPath.Set(path.Get());
         _StageIR(path);
       }
       mApplyingInternalPreset.store(false, std::memory_order_release);
