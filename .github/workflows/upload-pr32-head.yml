@@ -1,0 +1,22 @@
+name: Upload original PR 32 head sources
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  upload:
+    if: github.head_ref == 'pr32-state-linux-fixes'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: c33674e4e3e3573500ac3a91fcfe6d65495a36e1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pr32-head-sources
+          path: |
+            NeuralAmpModeler/NeuralAmpModeler.cpp
+            NeuralAmpModeler/NeuralAmpModeler.h
+            NeuralAmpModeler/Unserialization.cpp
