@@ -1,0 +1,55 @@
+name: Fix theme header initialization
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.head_ref == 'theme-state-fixes-clean' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: theme-state-fixes-clean
+      - name: Patch header without changing line endings
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('NeuralAmpModeler/NeuralAmpModeler.h')
+          with path.open('r', encoding='utf-8', newline='') as f:
+              text = f.read()
+          old = '  iplug::igraphics::IColor mThemeColor = PluginColors::NAM_THEMECOLOR;'
+          new = '  iplug::igraphics::IColor mThemeColor {255, 191, 0, 0};'
+          if text.count(old) != 1:
+              raise SystemExit('theme member initializer not found exactly once')
+          with path.open('w', encoding='utf-8', newline='') as f:
+              f.write(text.replace(old, new, 1))
+          PY
+      - name: Commit header through GitHub API
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const branch = 'theme-state-fixes-clean';
+            const path = 'NeuralAmpModeler/NeuralAmpModeler.h';
+            const current = await github.rest.repos.getContent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              ref: branch
+            });
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              branch,
+              sha: current.data.sha,
+              message: 'Initialize per-instance theme color safely',
+              content: fs.readFileSync(path).toString('base64')
+            });
