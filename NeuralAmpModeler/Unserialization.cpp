@@ -31,6 +31,8 @@ void _RemapLegacyToneStackTypeConfig(nlohmann::json& config)
 void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
 {
   mApplyingInternalPreset.store(true, std::memory_order_release);
+  if (!config.contains("followTrackColor"))
+    config["followTrackColor"] = 0.0;
   auto getParamByName = [&](std::string& name) {
     // Could use a map but eh
     for (int i = 0; i < kNumParams; i++)
@@ -208,8 +210,6 @@ void _UpdateConfigFrom_1_6_0(nlohmann::json& config)
   _UpdateConfigFrom_1_5_2(config);
   if (!config.contains("Input Boost"))
     config["Input Boost"] = 0.0;
-  if (!config.contains("followTrackColor"))
-    config["followTrackColor"] = 0.0;
 }
 
 int _GetConfigFrom_1_6_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
@@ -513,7 +513,6 @@ int _GetConfigFrom_0_7_14(const iplug::IByteChunk& chunk, int startPos, nlohmann
                                       "CalibrateInput",
                                       "InputCalibrationLevel",
                                       "OutputMode",
-                                      "followTrackColor",
                                       "Slim"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
