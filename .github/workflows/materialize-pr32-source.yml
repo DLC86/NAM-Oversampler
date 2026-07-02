@@ -26,6 +26,7 @@ jobs:
           echo $? > header-fix.status
           python3 .github/scripts/fix_pr32_unserialization.py > state-fix.log 2>&1
           echo $? > state-fix.status
+          git config core.whitespace cr-at-eol
           git diff --check > diff-check.log 2>&1
           echo $? > diff-check.status
           exit 0
