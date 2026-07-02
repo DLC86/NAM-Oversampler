@@ -1,0 +1,28 @@
+name: Apply PR 32 fixes
+
+on:
+  push:
+    branches:
+      - pr32-state-linux-fixes
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: pr32-state-linux-fixes
+      - run: |
+          python3 .github/scripts/fix_pr32_cpp.py
+          python3 .github/scripts/fix_pr32_header.py
+          python3 .github/scripts/fix_pr32_unserialization.py
+          git diff --check
+      - uses: stefanzweifel/git-auto-commit-action@v6
+        with:
+          branch: pr32-state-linux-fixes
+          commit_message: Fix Linux build and state compatibility
+          file_pattern: NeuralAmpModeler/NeuralAmpModeler.cpp NeuralAmpModeler/NeuralAmpModeler.h NeuralAmpModeler/Unserialization.cpp
