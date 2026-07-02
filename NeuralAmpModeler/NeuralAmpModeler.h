@@ -1549,6 +1549,11 @@ public:
 #endif
 
 private:
+#if PLUG_HAS_UI
+  iplug::igraphics::IColor _ResolveThemeColorForUI();
+  void _ApplyThemeColorToUI(bool force = false);
+#endif
+
   static constexpr int kNumInternalPresets = 128;
   static constexpr int kNoMidiCCAssignment = -1;
 

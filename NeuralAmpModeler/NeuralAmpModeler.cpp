@@ -531,6 +531,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       pControl->SetMouseOverWhenDisabled(true);
     });
 
+    _ApplyThemeColorToUI(true);
+
     // pGraphics->GetControlWithTag(kCtrlTagOutNorm)->SetMouseEventsWhenDisabled(false);
     // pGraphics->GetControlWithTag(kCtrlTagCalibrateInput)->SetMouseEventsWhenDisabled(false);
   };
@@ -1905,36 +1907,8 @@ void NeuralAmpModeler::OnIdle()
       mModelCleared = false;
     }
   }
-  if (auto* pGraphics = GetUI())
-  {
-    if (GetParam(kFollowTrackColor)->Bool())
-    {
-      int r = 0, g = 0, b = 0;
-      GetTrackColor(r, g, b);
-      if (r + g + b > 0) // is default color set in DAW?
-        SetThemeColor(IColor(255, r, g, b));
-    }
-    else if (mHighLightColor.GetLength())
-    {
-      SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
-    }
-    else
-    {
-      SetThemeColor(PluginColors::NAM_THEMECOLOR);
-    }
-
-    pGraphics->ForStandardControlsFunc([&](IControl* pControl) {
-      if (auto* pVectorBase = pControl->As<IVectorBase>())
-      {
-        pVectorBase->SetColor(kX1, GetThemeColor());
-        pVectorBase->SetColor(kPR, GetThemeColor().WithOpacity(0.6f));
-        pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.1f));
-        pVectorBase->SetColor(kX3, GetThemeColor().WithContrast(0.1f));
-        pVectorBase->SetColor(kOFF, GetThemeColor().WithOpacity(0.1f));
-      }
-    });
-    pGraphics->SetAllControlsDirty();
-  }
+  if (GetParam(kFollowTrackColor)->Bool())
+    _ApplyThemeColorToUI(false);
 #endif
 }
 
@@ -2018,6 +1992,49 @@ iplug::igraphics::IColor NeuralAmpModeler::GetThemeColor() const
 void NeuralAmpModeler::SetThemeColor(const iplug::igraphics::IColor& color)
 {
   mThemeColor = color;
+}
+
+iplug::igraphics::IColor NeuralAmpModeler::_ResolveThemeColorForUI()
+{
+#if !defined(APP_API)
+  if (GetParam(kFollowTrackColor)->Bool())
+  {
+    int r = 0, g = 0, b = 0;
+    GetTrackColor(r, g, b);
+    if (r + g + b > 0) // is default color set in DAW?
+      return IColor(255, r, g, b);
+  }
+#endif
+
+  if (mHighLightColor.GetLength())
+    return IColor::FromColorCodeStr(mHighLightColor.Get());
+
+  return PluginColors::NAM_THEMECOLOR;
+}
+
+void NeuralAmpModeler::_ApplyThemeColorToUI(bool force)
+{
+  auto* pGraphics = GetUI();
+  if (pGraphics == nullptr)
+    return;
+
+  IColor desiredColor = _ResolveThemeColorForUI();
+  if (!force && desiredColor == mThemeColor)
+    return;
+
+  SetThemeColor(desiredColor);
+
+  pGraphics->ForStandardControlsFunc([&](IControl* pControl) {
+    if (auto* pVectorBase = pControl->As<IVectorBase>())
+    {
+      pVectorBase->SetColor(kX1, GetThemeColor());
+      pVectorBase->SetColor(kPR, GetThemeColor().WithOpacity(0.6f));
+      pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.1f));
+      pVectorBase->SetColor(kX3, GetThemeColor().WithContrast(0.1f));
+      pVectorBase->SetColor(kOFF, GetThemeColor().WithOpacity(0.1f));
+    }
+  });
+  pGraphics->SetAllControlsDirty();
 }
 #endif
 
@@ -2143,33 +2160,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
     switch (paramIdx)
     {
       case kFollowTrackColor:
-        GetUI()->ForStandardControlsFunc([&](IControl* pControl) {
-          if (auto* pVectorBase = pControl->As<IVectorBase>())
-          {
-            if (GetParam(kFollowTrackColor)->Value())
-            {
-              int r, g, b;
-              GetTrackColor(r, g, b);
-              if (r + g + b > 0) // is default color set in DAW ?
-                SetThemeColor(IColor(255, r, g, b));
-            }
-            else
-            {
-              if (mHighLightColor.GetLength())
-                SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
-              else
-                SetThemeColor(PluginColors::NAM_THEMECOLOR);
-            }
-
-            pVectorBase->SetColor(kX1, GetThemeColor());
-            pVectorBase->SetColor(kPR, GetThemeColor().WithOpacity(0.6f));
-            pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.1f));
-            pVectorBase->SetColor(kX3, GetThemeColor().WithContrast(0.1f));
-            pVectorBase->SetColor(kOFF, GetThemeColor().WithOpacity(0.1f));
-           
-            pControl->GetUI()->SetAllControlsDirty();
-          }
-        });
+        _ApplyThemeColorToUI(true);
         //updateToneStackControlAvailability(); // ??? needed ?
         break;
       case kNoiseGateActive: pGraphics->GetControlWithParamIdx(kNoiseGateThreshold)->SetDisabled(!active); break;
@@ -2206,19 +2197,7 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
       mHighLightColor.Set((const char*)pData);
 
 #if PLUG_HAS_UI
-    GetUI()->ForStandardControlsFunc([&](IControl* pControl) {
-        if (auto* pVectorBase = pControl->As<IVectorBase>())
-        {
-            SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
-
-            pVectorBase->SetColor(kX1, GetThemeColor());
-            pVectorBase->SetColor(kPR, GetThemeColor().WithOpacity(0.6f));
-            pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.1f));
-            pVectorBase->SetColor(kX3, GetThemeColor().WithContrast(0.1f));
-            pVectorBase->SetColor(kOFF, GetThemeColor().WithOpacity(0.1f));
-        }
-        pControl->GetUI()->SetAllControlsDirty();
-    });
+      _ApplyThemeColorToUI(true);
 #endif
 
       return true;
