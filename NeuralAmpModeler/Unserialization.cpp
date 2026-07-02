@@ -20,8 +20,17 @@
 
 // Boilerplate
 
+void _RemapLegacyToneStackTypeConfig(nlohmann::json& config)
+{
+  if (!config.contains("ToneStack Type") || !config["ToneStack Type"].is_number())
+    return;
+
+  config["ToneStack Type"] = RemapLegacyToneStackTypeIndex(static_cast<int>(std::lround(config["ToneStack Type"].get<double>())));
+}
+
 void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
 {
+  mApplyingInternalPreset.store(true, std::memory_order_release);
   auto getParamByName = [&](std::string& name) {
     // Could use a map but eh
     for (int i = 0; i < kNumParams; i++)
@@ -52,10 +61,13 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
     }
   }
   OnParamReset(iplug::EParamSource::kPresetRecall);
+  _UnserializeApplyToneStackComponentState(config);
+  _UnserializeApplyInternalPresetState(config, false);
   LEAVE_PARAMS_MUTEX
 
   mNAMPath.Set(static_cast<std::string>(config["NAMPath"]).c_str());
   mIRPath.Set(static_cast<std::string>(config["IRPath"]).c_str());
+  mHighLightColor.Set(static_cast<std::string>(config["HighLightColor"]).c_str());
 
   if (mNAMPath.GetLength())
   {
@@ -65,6 +77,10 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
   {
     _StageIR(mIRPath);
   }
+  mApplyingInternalPreset.store(false, std::memory_order_release);
+  mCurrentInternalPresetSnapshot = _CaptureCurrentInternalPresetSnapshot();
+  mCurrentInternalPresetDirty.store(_IsCurrentInternalPresetModified(), std::memory_order_release);
+  _MarkInternalPresetUIDirty();
 }
 
 // Unserialize NAM Path, IR path, then named keys
@@ -77,11 +93,16 @@ int _UnserializePathsAndExpectedKeys(const iplug::IByteChunk& chunk, int startPo
   config["NAMPath"] = std::string(path.Get());
   pos = chunk.GetStr(path, pos);
   config["IRPath"] = std::string(path.Get());
+  pos = chunk.GetStr(path, pos);
+  config["HighLightColor"] = std::string(path.Get());
 
   for (auto it = paramNames.begin(); it != paramNames.end(); ++it)
   {
     double v = 0.0;
-    pos = chunk.Get(&v, pos);
+    const int nextPos = chunk.Get(&v, pos);
+    if (nextPos < 0)
+      break;
+    pos = nextPos;
     config[*it] = v;
   }
   return pos;
@@ -97,11 +118,382 @@ void _RenameKeys(nlohmann::json& j, std::unordered_map<std::string, std::string>
   }
 }
 
+void _UpdateConfigFrom_1_5_2(nlohmann::json& config);
+void _UpdateConfigFrom_1_6_0(nlohmann::json& config);
+int _GetConfigFrom_1_6_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config);
+
+// v2.0.1
+
+int _GetConfigFrom_2_0_1(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  int pos = _GetConfigFrom_1_6_0(chunk, startPos, config);
+  _UpdateConfigFrom_1_6_0(config);
+
+  auto tryReadToneStackComponentState = [&](int readPos) {
+    WDL_String toneStackComponentState;
+    const int nextPos = chunk.GetStr(toneStackComponentState, readPos);
+    if (nextPos < 0)
+      return -1;
+
+    try
+    {
+      config["ToneStack Components"] = nlohmann::json::parse(toneStackComponentState.Get());
+      return nextPos;
+    }
+    catch (...)
+    {
+      return -1;
+    }
+  };
+
+  auto tryReadInternalPresetState = [&](int readPos) {
+    WDL_String internalPresetState;
+    const int nextPos = chunk.GetStr(internalPresetState, readPos);
+    if (nextPos < 0)
+      return -1;
+
+    try
+    {
+      config["Internal Presets"] = nlohmann::json::parse(internalPresetState.Get());
+      return nextPos;
+    }
+    catch (...)
+    {
+      return -1;
+    }
+  };
+
+  double inputBoost = 0.0;
+  const int posAfterBoost = chunk.Get(&inputBoost, pos);
+  if (posAfterBoost >= 0)
+  {
+    const int posAfterToneStack = tryReadToneStackComponentState(posAfterBoost);
+    if (posAfterToneStack >= 0)
+    {
+      config["Input Boost"] = inputBoost;
+      const int posAfterInternalPresets = tryReadInternalPresetState(posAfterToneStack);
+      return posAfterInternalPresets >= 0 ? posAfterInternalPresets : posAfterToneStack;
+    }
+
+    double midiChannel = 0.0;
+    const int posAfterMidiChannel = chunk.Get(&midiChannel, posAfterBoost);
+    if (posAfterMidiChannel >= 0)
+    {
+      const int posAfterToneStackWithMidi = tryReadToneStackComponentState(posAfterMidiChannel);
+      if (posAfterToneStackWithMidi >= 0)
+      {
+        config["Input Boost"] = inputBoost;
+        config["MIDI Channel"] = midiChannel;
+        const int posAfterInternalPresets = tryReadInternalPresetState(posAfterToneStackWithMidi);
+        return posAfterInternalPresets >= 0 ? posAfterInternalPresets : posAfterToneStackWithMidi;
+      }
+    }
+  }
+
+  const int posAfterLegacyToneStack = tryReadToneStackComponentState(pos);
+  if (posAfterLegacyToneStack >= 0)
+  {
+    const int posAfterInternalPresets = tryReadInternalPresetState(posAfterLegacyToneStack);
+    return posAfterInternalPresets >= 0 ? posAfterInternalPresets : posAfterLegacyToneStack;
+  }
+  return pos;
+}
+
+// v1.6.0
+
+void _UpdateConfigFrom_1_6_0(nlohmann::json& config)
+{
+  _UpdateConfigFrom_1_5_2(config);
+  if (!config.contains("Input Boost"))
+    config["Input Boost"] = 0.0;
+}
+
+int _GetConfigFrom_1_6_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Model Size",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling",
+                                      "EQ Post",
+                                      "Channel Mode",
+                                      "Offline Filter Phase",
+                                      "OS Multi-Core",
+                                      "OS Threads",
+                                      "Tuner Mute",
+                                      "ToneStack Type",
+                                      "Low Cut",
+                                      "Low Cut Slope",
+                                      "Low Cut Post",
+                                      "High Cut",
+                                      "High Cut Slope",
+                                      "High Cut Post",
+                                      "followTrackColor"};
+
+  const int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_6_0(config);
+  return pos;
+}
+
+// v1.5.3
+
+void _UpdateConfigFrom_1_5_2(nlohmann::json& config)
+{
+  if (config.contains("Slim") && !config.contains("Model Size"))
+  {
+    config["Model Size"] = config["Slim"];
+    config.erase("Slim");
+  }
+  if (!config.contains("Tuner Mute"))
+    config["Tuner Mute"] = 1.0;
+  if (!config.contains("ToneStack Type"))
+    config["ToneStack Type"] = 0.0;
+  if (!config.contains("Low Cut"))
+    config["Low Cut"] = 20.0;
+  if (!config.contains("Low Cut Slope"))
+    config["Low Cut Slope"] = 1.0;
+  if (!config.contains("Low Cut Post"))
+    config["Low Cut Post"] = 1.0;
+  if (!config.contains("High Cut"))
+    config["High Cut"] = 20000.0;
+  if (!config.contains("High Cut Slope"))
+    config["High Cut Slope"] = 1.0;
+  if (!config.contains("High Cut Post"))
+    config["High Cut Post"] = 1.0;
+}
+
+int _GetConfigFrom_1_5_2(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Slim",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling",
+                                      "EQ Post",
+                                      "Channel Mode",
+                                      "Offline Filter Phase",
+                                      "OS Multi-Core",
+                                      "OS Threads",
+                                      "Tuner Mute"};
+
+  const int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_5_2(config);
+  return pos;
+}
+
+// v1.5.0
+
+void _UpdateConfigFrom_1_5_0(nlohmann::json& config)
+{
+  if (!config.contains("OS Multi-Core"))
+    config["OS Multi-Core"] = 1.0;
+  if (!config.contains("OS Threads"))
+    config["OS Threads"] = 0.0;
+  _UpdateConfigFrom_1_5_2(config);
+}
+
+int _GetConfigFrom_1_5_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Slim",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling",
+                                      "EQ Post",
+                                      "Channel Mode",
+                                      "Offline Filter Phase",
+                                      "OS Multi-Core",
+                                      "OS Threads"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_5_0(config);
+  return pos;
+}
+
+// v1.2.1
+
+void _UpdateConfigFrom_1_2_1(nlohmann::json& config)
+{
+  // Current format.
+  if (!config.contains("Offline Filter Phase"))
+  {
+    if (config.contains("Filter Phase"))
+      config["Offline Filter Phase"] = config["Filter Phase"];
+    else
+      config["Offline Filter Phase"] = 0.0;
+  }
+}
+
+int _GetConfigFrom_1_2_1(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Slim",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling",
+                                      "EQ Post",
+                                      "Channel Mode",
+                                      "Offline Filter Phase"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_2_1(config);
+  return pos;
+}
+
+// v1.2.0
+
+void _UpdateConfigFrom_1_2_0(nlohmann::json& config)
+{
+  if (!config.contains("Channel Mode"))
+    config["Channel Mode"] = 0.0;
+  if (config.contains("Filter Phase") && static_cast<double>(config["Filter Phase"]) >= 1.0)
+    config["Filter Phase"] = 3.0;
+  config["Offline Filter Phase"] = config["Filter Phase"];
+  _UpdateConfigFrom_1_2_1(config);
+}
+
+int _GetConfigFrom_1_2_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Slim",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling",
+                                      "EQ Post",
+                                      "Channel Mode"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_2_0(config);
+  return pos;
+}
+
+// v1.1.1
+
+void _UpdateConfigFrom_1_1_1(nlohmann::json& config)
+{
+  config["EQ Post"] = 1.0;
+  _UpdateConfigFrom_1_2_0(config);
+}
+
+int _GetConfigFrom_1_1_1(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Slim",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_1_1(config);
+  return pos;
+}
+
+// v1.1.0
+
+void _UpdateConfigFrom_1_1_0(nlohmann::json& config)
+{
+  config["EQ Post"] = 1.0;
+  _UpdateConfigFrom_1_2_0(config);
+}
+
+int _GetConfigFrom_1_1_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Slim",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_1_0(config);
+  return pos;
+}
+
 // v0.7.14
 
 void _UpdateConfigFrom_0_7_14(nlohmann::json& config)
 {
-  // Fill me in once something changes!
+  config["Oversampling"] = 0.0;
+  config["Filter Phase"] = 0.0;
+  config["Offline Oversampling"] = 0.0;
+  _UpdateConfigFrom_1_1_0(config);
 }
 
 int _GetConfigFrom_0_7_14(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
@@ -118,6 +510,7 @@ int _GetConfigFrom_0_7_14(const iplug::IByteChunk& chunk, int startPos, nlohmann
                                       "CalibrateInput",
                                       "InputCalibrationLevel",
                                       "OutputMode",
+                                      "followTrackColor",
                                       "Slim"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
@@ -146,7 +539,8 @@ int _GetConfigFrom_0_7_12(const iplug::IByteChunk& chunk, int startPos, nlohmann
                                       "IRToggle",
                                       "CalibrateInput",
                                       "InputCalibrationLevel",
-                                      "OutputMode"};
+                                      "OutputMode",
+                                      "followTrackColor"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   // Then update:
@@ -170,8 +564,8 @@ void _UpdateConfigFrom_0_7_10(nlohmann::json& config)
 
 int _GetConfigFrom_0_7_10(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
-  std::vector<std::string> paramNames{
-    "Input", "Threshold", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "OutNorm", "IRToggle"};
+  std::vector<std::string> paramNames{"Input",           "Threshold",       "Bass",      "Middle",  "Treble",
+                                      "Output",          "NoiseGateActive", "ToneStack", "OutNorm", "IRToggle", "followTrackColor"};
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   // Then update:
   _UpdateConfigFrom_0_7_10(config);
@@ -190,7 +584,7 @@ void _UpdateConfigFrom_Earlier(nlohmann::json& config)
 int _GetConfigFrom_Earlier(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
   std::vector<std::string> paramNames{
-    "Input", "Gate", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "OutNorm", "IRToggle"};
+    "Input", "Gate", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "OutNorm", "IRToggle", "followTrackColor"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   // Then update:
@@ -277,7 +671,39 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   _Version version(versionStr);
   // Act accordingly
   nlohmann::json config;
-  if (version >= _Version(0, 7, 14))
+  if (version >= _Version(2, 0, 1))
+  {
+    pos = _GetConfigFrom_2_0_1(chunk, pos, config);
+  }
+  else if (version >= _Version(1, 6, 0))
+  {
+    pos = _GetConfigFrom_1_6_0(chunk, pos, config);
+  }
+  else if (version >= _Version(1, 5, 2))
+  {
+    pos = _GetConfigFrom_1_5_2(chunk, pos, config);
+  }
+  else if (version >= _Version(1, 5, 0))
+  {
+    pos = _GetConfigFrom_1_5_0(chunk, pos, config);
+  }
+  else if (version >= _Version(1, 2, 1))
+  {
+    pos = _GetConfigFrom_1_2_1(chunk, pos, config);
+  }
+  else if (version >= _Version(1, 2, 0))
+  {
+    pos = _GetConfigFrom_1_2_0(chunk, pos, config);
+  }
+  else if (version >= _Version(1, 1, 1))
+  {
+    pos = _GetConfigFrom_1_1_1(chunk, pos, config);
+  }
+  else if (version >= _Version(1, 1, 0))
+  {
+    pos = _GetConfigFrom_1_1_0(chunk, pos, config);
+  }
+  else if (version >= _Version(0, 7, 14))
   {
     pos = _GetConfigFrom_0_7_14(chunk, pos, config);
   }
@@ -298,6 +724,8 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
     // You shouldn't be here...
     assert(false);
   }
+  if (!(version >= _Version(2, 2, 0)))
+    _RemapLegacyToneStackTypeConfig(config);
   _UnserializeApplyConfig(config);
   return pos;
 }
@@ -306,6 +734,7 @@ int NeuralAmpModeler::_UnserializeStateWithUnknownVersion(const iplug::IByteChun
 {
   nlohmann::json config;
   int pos = _GetConfigFrom_Earlier(chunk, startPos, config);
+  _RemapLegacyToneStackTypeConfig(config);
   _UnserializeApplyConfig(config);
   return pos;
 }
