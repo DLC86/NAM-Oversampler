@@ -1767,7 +1767,7 @@ private:
 
   WDL_String mHighLightColor;
 #if PLUG_HAS_UI
-  iplug::igraphics::IColor mThemeColor = PluginColors::NAM_THEMECOLOR;
+  iplug::igraphics::IColor mThemeColor {255, 191, 0, 0};
 #endif
 
   std::unordered_map<std::string, double> mNAMParams = {{"Input", 0.0}, {"Output", 0.0}};
