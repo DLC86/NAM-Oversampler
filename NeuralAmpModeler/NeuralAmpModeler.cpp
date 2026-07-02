@@ -45,9 +45,6 @@ using namespace igraphics;
 
 const double kDCBlockerFrequency = 5.0;
 
-#if PLUG_HAS_UI
-iplug::igraphics::IColor mThemeColor = PluginColors::NAM_THEMECOLOR;
-
 static bool IsValidThemeColorCode(const char* colorCode)
 {
   if (colorCode == nullptr)
@@ -61,6 +58,9 @@ static bool IsValidThemeColorCode(const char* colorCode)
     return std::isxdigit(static_cast<unsigned char>(c)) != 0;
   });
 }
+
+#if PLUG_HAS_UI
+iplug::igraphics::IColor mThemeColor = PluginColors::NAM_THEMECOLOR;
 
 static iplug::igraphics::IColor ThemeColorFromStringOrDefault(const char* colorCode)
 {
