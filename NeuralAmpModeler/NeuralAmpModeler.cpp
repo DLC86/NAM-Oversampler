@@ -725,6 +725,7 @@ bool NeuralAmpModeler::_IsInternalPresetParam(int paramIdx) const
     case kPhaseMulticoreThreadCount:
     case kChannelMode:
     case kMidiChannel:
+    case kFollowTrackColor:
       return false;
     default:
       return paramIdx >= 0 && paramIdx < kNumParams;
@@ -1885,32 +1886,37 @@ void NeuralAmpModeler::OnIdle()
       mModelCleared = false;
     }
   }
-#endif
-
-  // SetThemeColor(PluginColors::NAM_THEMECOLOR);
-  GetUI()->ForStandardControlsFunc([&](IControl* pControl) {
-    if (auto* pVectorBase = pControl->As<IVectorBase>())
+  if (auto* pGraphics = GetUI())
+  {
+    if (GetParam(kFollowTrackColor)->Bool())
     {
-      if (GetParam(kFollowTrackColor)->Value())
-      {
-        int r, g, b;
-        GetTrackColor(r, g, b);
-        if (r + g + b > 0) // is default color set in DAW ?
-          SetThemeColor(IColor(255, r, g, b));
-      }
-      else
-      {
-        if (mHighLightColor.GetLength())
-          SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
-      }
-      pVectorBase->SetColor(kX1, GetThemeColor());
-      pVectorBase->SetColor(kPR, GetThemeColor().WithOpacity(0.6f));
-      pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.1f));
-      pVectorBase->SetColor(kX3, GetThemeColor().WithContrast(0.1f));
-      pVectorBase->SetColor(kOFF, GetThemeColor().WithOpacity(0.1f));
-      pControl->GetUI()->SetAllControlsDirty();
+      int r = 0, g = 0, b = 0;
+      GetTrackColor(r, g, b);
+      if (r + g + b > 0) // is default color set in DAW?
+        SetThemeColor(IColor(255, r, g, b));
     }
-  });
+    else if (mHighLightColor.GetLength())
+    {
+      SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
+    }
+    else
+    {
+      SetThemeColor(PluginColors::NAM_THEMECOLOR);
+    }
+
+    pGraphics->ForStandardControlsFunc([&](IControl* pControl) {
+      if (auto* pVectorBase = pControl->As<IVectorBase>())
+      {
+        pVectorBase->SetColor(kX1, GetThemeColor());
+        pVectorBase->SetColor(kPR, GetThemeColor().WithOpacity(0.6f));
+        pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.1f));
+        pVectorBase->SetColor(kX3, GetThemeColor().WithContrast(0.1f));
+        pVectorBase->SetColor(kOFF, GetThemeColor().WithOpacity(0.1f));
+      }
+    });
+    pGraphics->SetAllControlsDirty();
+  }
+#endif
 }
 
 bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
@@ -1925,8 +1931,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   // when we unserialize)
   chunk.PutStr(mNAMPath.Get());
   chunk.PutStr(mIRPath.Get());
-  chunk.PutStr(mHighLightColor.Get());
-  return SerializeParams(chunk);
+
   const bool paramsSerialized = SerializeParams(chunk);
   if (paramsSerialized)
   {
@@ -1934,6 +1939,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
     chunk.PutStr(toneStackComponentState.c_str());
     const std::string internalPresetState = _SerializeInternalPresetState();
     chunk.PutStr(internalPresetState.c_str());
+    chunk.PutStr(mHighLightColor.Get());
   }
   return paramsSerialized;
 }
@@ -1984,13 +1990,17 @@ void NeuralAmpModeler::OnUIOpen()
 #endif
 }
 
+#if PLUG_HAS_UI
 iplug::igraphics::IColor NeuralAmpModeler::GetThemeColor() const
 {
   return mThemeColor;
 }
 
 void NeuralAmpModeler::SetThemeColor(const iplug::igraphics::IColor& color)
-  { mThemeColor = color; }
+{
+  mThemeColor = color;
+}
+#endif
 
 void NeuralAmpModeler::OnUIClose()
 {

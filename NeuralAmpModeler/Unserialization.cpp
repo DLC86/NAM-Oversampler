@@ -31,6 +31,9 @@ void _RemapLegacyToneStackTypeConfig(nlohmann::json& config)
 void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
 {
   mApplyingInternalPreset.store(true, std::memory_order_release);
+  if (!config.contains("followTrackColor"))
+    config["followTrackColor"] = 0.0;
+
   auto getParamByName = [&](std::string& name) {
     // Could use a map but eh
     for (int i = 0; i < kNumParams; i++)
@@ -67,7 +70,10 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
 
   mNAMPath.Set(static_cast<std::string>(config["NAMPath"]).c_str());
   mIRPath.Set(static_cast<std::string>(config["IRPath"]).c_str());
-  mHighLightColor.Set(static_cast<std::string>(config["HighLightColor"]).c_str());
+  if (config.contains("HighLightColor") && config["HighLightColor"].is_string())
+    mHighLightColor.Set(config["HighLightColor"].get<std::string>().c_str());
+  else
+    mHighLightColor.Set("");
 
   if (mNAMPath.GetLength())
   {
@@ -93,8 +99,6 @@ int _UnserializePathsAndExpectedKeys(const iplug::IByteChunk& chunk, int startPo
   config["NAMPath"] = std::string(path.Get());
   pos = chunk.GetStr(path, pos);
   config["IRPath"] = std::string(path.Get());
-  pos = chunk.GetStr(path, pos);
-  config["HighLightColor"] = std::string(path.Get());
 
   for (auto it = paramNames.begin(); it != paramNames.end(); ++it)
   {
@@ -129,15 +133,15 @@ int _GetConfigFrom_2_0_1(const iplug::IByteChunk& chunk, int startPos, nlohmann:
   int pos = _GetConfigFrom_1_6_0(chunk, startPos, config);
   _UpdateConfigFrom_1_6_0(config);
 
-  auto tryReadToneStackComponentState = [&](int readPos) {
-    WDL_String toneStackComponentState;
-    const int nextPos = chunk.GetStr(toneStackComponentState, readPos);
+  auto tryReadJsonString = [&](int readPos, nlohmann::json& value) {
+    WDL_String serialized;
+    const int nextPos = chunk.GetStr(serialized, readPos);
     if (nextPos < 0)
       return -1;
 
     try
     {
-      config["ToneStack Components"] = nlohmann::json::parse(toneStackComponentState.Get());
+      value = nlohmann::json::parse(serialized.Get());
       return nextPos;
     }
     catch (...)
@@ -146,55 +150,55 @@ int _GetConfigFrom_2_0_1(const iplug::IByteChunk& chunk, int startPos, nlohmann:
     }
   };
 
-  auto tryReadInternalPresetState = [&](int readPos) {
-    WDL_String internalPresetState;
-    const int nextPos = chunk.GetStr(internalPresetState, readPos);
-    if (nextPos < 0)
-      return -1;
-
-    try
-    {
-      config["Internal Presets"] = nlohmann::json::parse(internalPresetState.Get());
-      return nextPos;
-    }
-    catch (...)
-    {
-      return -1;
-    }
-  };
-
-  double inputBoost = 0.0;
-  const int posAfterBoost = chunk.Get(&inputBoost, pos);
-  if (posAfterBoost >= 0)
+  for (int extraParamCount = 3; extraParamCount >= 0; --extraParamCount)
   {
-    const int posAfterToneStack = tryReadToneStackComponentState(posAfterBoost);
-    if (posAfterToneStack >= 0)
+    int readPos = pos;
+    double extraValues[3] = {0.0, 0.0, 0.0};
+    bool valid = true;
+    for (int i = 0; i < extraParamCount; ++i)
     {
-      config["Input Boost"] = inputBoost;
-      const int posAfterInternalPresets = tryReadInternalPresetState(posAfterToneStack);
-      return posAfterInternalPresets >= 0 ? posAfterInternalPresets : posAfterToneStack;
-    }
-
-    double midiChannel = 0.0;
-    const int posAfterMidiChannel = chunk.Get(&midiChannel, posAfterBoost);
-    if (posAfterMidiChannel >= 0)
-    {
-      const int posAfterToneStackWithMidi = tryReadToneStackComponentState(posAfterMidiChannel);
-      if (posAfterToneStackWithMidi >= 0)
+      const int nextPos = chunk.Get(&extraValues[i], readPos);
+      if (nextPos < 0)
       {
-        config["Input Boost"] = inputBoost;
-        config["MIDI Channel"] = midiChannel;
-        const int posAfterInternalPresets = tryReadInternalPresetState(posAfterToneStackWithMidi);
-        return posAfterInternalPresets >= 0 ? posAfterInternalPresets : posAfterToneStackWithMidi;
+        valid = false;
+        break;
       }
+      readPos = nextPos;
     }
-  }
+    if (!valid)
+      continue;
 
-  const int posAfterLegacyToneStack = tryReadToneStackComponentState(pos);
-  if (posAfterLegacyToneStack >= 0)
-  {
-    const int posAfterInternalPresets = tryReadInternalPresetState(posAfterLegacyToneStack);
-    return posAfterInternalPresets >= 0 ? posAfterInternalPresets : posAfterLegacyToneStack;
+    nlohmann::json toneStackState;
+    const int posAfterToneStack = tryReadJsonString(readPos, toneStackState);
+    if (posAfterToneStack < 0)
+      continue;
+
+    if (extraParamCount >= 1)
+      config["Input Boost"] = extraValues[0];
+    if (extraParamCount >= 2)
+      config["MIDI Channel"] = extraValues[1];
+    if (extraParamCount >= 3)
+      config["followTrackColor"] = extraValues[2];
+
+    config["ToneStack Components"] = toneStackState;
+    int finalPos = posAfterToneStack;
+
+    nlohmann::json internalPresetState;
+    const int posAfterInternalPresets = tryReadJsonString(finalPos, internalPresetState);
+    if (posAfterInternalPresets >= 0)
+    {
+      config["Internal Presets"] = internalPresetState;
+      finalPos = posAfterInternalPresets;
+    }
+
+    WDL_String highlightColor;
+    const int posAfterHighlight = chunk.GetStr(highlightColor, finalPos);
+    if (posAfterHighlight >= 0)
+    {
+      config["HighLightColor"] = std::string(highlightColor.Get());
+      finalPos = posAfterHighlight;
+    }
+    return finalPos;
   }
   return pos;
 }
@@ -238,8 +242,7 @@ int _GetConfigFrom_1_6_0(const iplug::IByteChunk& chunk, int startPos, nlohmann:
                                       "Low Cut Post",
                                       "High Cut",
                                       "High Cut Slope",
-                                      "High Cut Post",
-                                      "followTrackColor"};
+                                      "High Cut Post"};
 
   const int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   _UpdateConfigFrom_1_6_0(config);
@@ -510,7 +513,6 @@ int _GetConfigFrom_0_7_14(const iplug::IByteChunk& chunk, int startPos, nlohmann
                                       "CalibrateInput",
                                       "InputCalibrationLevel",
                                       "OutputMode",
-                                      "followTrackColor",
                                       "Slim"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
@@ -539,8 +541,7 @@ int _GetConfigFrom_0_7_12(const iplug::IByteChunk& chunk, int startPos, nlohmann
                                       "IRToggle",
                                       "CalibrateInput",
                                       "InputCalibrationLevel",
-                                      "OutputMode",
-                                      "followTrackColor"};
+                                      "OutputMode"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   // Then update:
@@ -565,7 +566,7 @@ void _UpdateConfigFrom_0_7_10(nlohmann::json& config)
 int _GetConfigFrom_0_7_10(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
   std::vector<std::string> paramNames{"Input",           "Threshold",       "Bass",      "Middle",  "Treble",
-                                      "Output",          "NoiseGateActive", "ToneStack", "OutNorm", "IRToggle", "followTrackColor"};
+                                      "Output",          "NoiseGateActive", "ToneStack", "OutNorm", "IRToggle"};
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   // Then update:
   _UpdateConfigFrom_0_7_10(config);
@@ -584,7 +585,7 @@ void _UpdateConfigFrom_Earlier(nlohmann::json& config)
 int _GetConfigFrom_Earlier(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
   std::vector<std::string> paramNames{
-    "Input", "Gate", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "OutNorm", "IRToggle", "followTrackColor"};
+    "Input", "Gate", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "OutNorm", "IRToggle"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   // Then update:
