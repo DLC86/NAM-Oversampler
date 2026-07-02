@@ -21,6 +21,12 @@ EXTRA_LNK_FLAGS = -framework Accelerate -framework Metal -framework MetalKit // 
 
 // EXTRA_APP_DEFS =
 // EXTRA_PLUGIN_DEFS =
+// The plug-in has its own internal preset bank. Publishing the single iPlug
+// "Default" preset as an AUv2 factory preset can make auval exercise an
+// unnecessary factory-preset path and fail validation even though render,
+// parameter and state tests pass. Limit this to AUv2; VST3/standalone/AUv3
+// preset behavior is unchanged.
+EXTRA_AU_DEFS = AU_NO_PRESETS
 
 //------------------------------
 // PREPROCESSOR MACROS
