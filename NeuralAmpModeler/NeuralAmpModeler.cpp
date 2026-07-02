@@ -1000,7 +1000,6 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
   if (!preset.saved)
   {
     _ApplyEmptyInternalPresetState();
-    mCurrentInternalPresetSnapshot = _CaptureCurrentInternalPresetSnapshot();
     mCurrentInternalPresetDirty.store(false, std::memory_order_release);
 #if PLUG_HAS_UI
     if (allowFileStaging)
@@ -1013,31 +1012,48 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
   }
 
   mApplyingInternalPreset.store(true, std::memory_order_release);
+  bool paramsChanged = false;
+  static constexpr double kParamRecallCompareEpsilon = 1.0e-6;
   for (int i = 0; i < kNumParams; ++i)
   {
     if (!_IsInternalPresetParam(i))
       continue;
+
+    if (std::abs(GetParam(i)->Value() - preset.paramValues[i]) <= kParamRecallCompareEpsilon)
+      continue;
+
     GetParam(i)->Set(preset.paramValues[i]);
     OnParamChange(i);
+    paramsChanged = true;
   }
 
+  bool toneStackComponentsChanged = false;
   if (!preset.toneStackComponentState.empty())
   {
-    try
+    if (preset.toneStackComponentState != _SerializeToneStackComponentState())
     {
-      nlohmann::json config = nlohmann::json::object();
-      config["ToneStack Components"] = nlohmann::json::parse(preset.toneStackComponentState);
-      _UnserializeApplyToneStackComponentState(config);
-      OnParamChange(kToneStackType);
-    }
-    catch (...)
-    {
+      try
+      {
+        nlohmann::json config = nlohmann::json::object();
+        config["ToneStack Components"] = nlohmann::json::parse(preset.toneStackComponentState);
+        _UnserializeApplyToneStackComponentState(config);
+        OnParamChange(kToneStackType);
+        toneStackComponentsChanged = true;
+      }
+      catch (...)
+      {
+      }
     }
   }
   else
   {
+    const std::string currentToneStackComponentState = _SerializeToneStackComponentState();
     _ResetToneStackToDefaults();
-    OnParamChange(kToneStackType);
+    if (currentToneStackComponentState != _SerializeToneStackComponentState())
+    {
+      OnParamChange(kToneStackType);
+      toneStackComponentsChanged = true;
+    }
   }
 
   if (allowFileStaging)
@@ -1069,15 +1085,14 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
     }
   }
 
-  if (allowFileStaging)
+  if (allowFileStaging && (paramsChanged || toneStackComponentsChanged))
     OnParamReset(iplug::EParamSource::kPresetRecall);
   mApplyingInternalPreset.store(false, std::memory_order_release);
-  mCurrentInternalPresetSnapshot = _CaptureCurrentInternalPresetSnapshot();
   mCurrentInternalPresetDirty.store(false, std::memory_order_release);
 #if PLUG_HAS_UI
-  if (allowFileStaging)
+  if (allowFileStaging && (paramsChanged || toneStackComponentsChanged))
     SendCurrentParamValuesFromDelegate();
-  else
+  else if (!allowFileStaging && (paramsChanged || toneStackComponentsChanged))
     mInternalPresetParamUIDirty.store(true, std::memory_order_release);
 #endif
   _MarkInternalPresetUIDirty();
@@ -1858,13 +1873,17 @@ void NeuralAmpModeler::OnIdle()
       }
       mApplyingInternalPreset.store(false, std::memory_order_release);
       mCurrentInternalPresetDirty.store(false, std::memory_order_release);
-      mInternalPresetParamUIDirty.store(true, std::memory_order_release);
     }
   }
   if (mInternalPresetUIDirty.exchange(false, std::memory_order_acq_rel))
   {
     if (auto* pGraphics = GetUI())
-      pGraphics->SetAllControlsDirty();
+    {
+      if (auto* presetSlot = pGraphics->GetControlWithTag(kCtrlTagInternalPresetSlot))
+        presetSlot->SetDirty(false);
+      else
+        pGraphics->SetAllControlsDirty();
+    }
   }
   if (mInternalPresetParamUIDirty.exchange(false, std::memory_order_acq_rel))
   {
