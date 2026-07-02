@@ -20,6 +20,16 @@
 
 // Boilerplate
 
+static bool IsValidThemeColorCode(const std::string& colorCode)
+{
+  if (!((colorCode.size() == 7 || colorCode.size() == 9) && colorCode[0] == '#'))
+    return false;
+
+  return std::all_of(colorCode.begin() + 1, colorCode.end(), [](char c) {
+    return std::isxdigit(static_cast<unsigned char>(c)) != 0;
+  });
+}
+
 void _RemapLegacyToneStackTypeConfig(nlohmann::json& config)
 {
   if (!config.contains("ToneStack Type") || !config["ToneStack Type"].is_number())
@@ -75,7 +85,8 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
 
   mNAMPath.Set(static_cast<std::string>(config["NAMPath"]).c_str());
   mIRPath.Set(static_cast<std::string>(config["IRPath"]).c_str());
-  if (config.contains("HighLightColor") && config["HighLightColor"].is_string())
+  if (config.contains("HighLightColor") && config["HighLightColor"].is_string() &&
+      IsValidThemeColorCode(config["HighLightColor"].get<std::string>()))
     mHighLightColor.Set(config["HighLightColor"].get<std::string>().c_str());
   else
     mHighLightColor.Set("");

@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 
@@ -46,6 +47,35 @@ const double kDCBlockerFrequency = 5.0;
 
 #if PLUG_HAS_UI
 iplug::igraphics::IColor mThemeColor = PluginColors::NAM_THEMECOLOR;
+
+static bool IsValidThemeColorCode(const char* colorCode)
+{
+  if (colorCode == nullptr)
+    return false;
+
+  const std::string_view s(colorCode);
+  if (!((s.size() == 7 || s.size() == 9) && s[0] == '#'))
+    return false;
+
+  return std::all_of(s.begin() + 1, s.end(), [](char c) {
+    return std::isxdigit(static_cast<unsigned char>(c)) != 0;
+  });
+}
+
+static iplug::igraphics::IColor ThemeColorFromStringOrDefault(const char* colorCode)
+{
+  if (!IsValidThemeColorCode(colorCode))
+    return PluginColors::NAM_THEMECOLOR;
+
+  try
+  {
+    return IColor::FromColorCodeStr(colorCode);
+  }
+  catch (...)
+  {
+    return PluginColors::NAM_THEMECOLOR;
+  }
+}
 
 // Styles
 const IVColorSpec colorSpec{
@@ -1907,8 +1937,6 @@ void NeuralAmpModeler::OnIdle()
       mModelCleared = false;
     }
   }
-  if (GetParam(kFollowTrackColor)->Bool())
-    _ApplyThemeColorToUI(false);
 #endif
 }
 
@@ -2007,7 +2035,7 @@ iplug::igraphics::IColor NeuralAmpModeler::_ResolveThemeColorForUI()
 #endif
 
   if (mHighLightColor.GetLength())
-    return IColor::FromColorCodeStr(mHighLightColor.Get());
+    return ThemeColorFromStringOrDefault(mHighLightColor.Get());
 
   return PluginColors::NAM_THEMECOLOR;
 }
@@ -2194,7 +2222,11 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
       return true;
     case kMsgTagHighlightColor:
     {
-      mHighLightColor.Set((const char*)pData);
+      const char* colorCode = static_cast<const char*>(pData);
+      if (dataSize > 0 && IsValidThemeColorCode(colorCode))
+        mHighLightColor.Set(colorCode);
+      else
+        mHighLightColor.Set("");
 
 #if PLUG_HAS_UI
       _ApplyThemeColorToUI(true);
