@@ -561,8 +561,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       pControl->SetMouseOverWhenDisabled(true);
     });
 
-    _ApplyThemeColorToUI(true);
-
     // pGraphics->GetControlWithTag(kCtrlTagOutNorm)->SetMouseEventsWhenDisabled(false);
     // pGraphics->GetControlWithTag(kCtrlTagCalibrateInput)->SetMouseEventsWhenDisabled(false);
   };
@@ -2188,7 +2186,8 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
     switch (paramIdx)
     {
       case kFollowTrackColor:
-        _ApplyThemeColorToUI(true);
+        if (source != EParamSource::kDelegate)
+          _ApplyThemeColorToUI(true);
         //updateToneStackControlAvailability(); // ??? needed ?
         break;
       case kNoiseGateActive: pGraphics->GetControlWithParamIdx(kNoiseGateThreshold)->SetDisabled(!active); break;
