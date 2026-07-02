@@ -45,17 +45,19 @@ using namespace igraphics;
 const double kDCBlockerFrequency = 5.0;
 
 #if PLUG_HAS_UI
+iplug::igraphics::IColor mThemeColor = PluginColors::NAM_THEMECOLOR;
+
 // Styles
 const IVColorSpec colorSpec{
   DEFAULT_BGCOLOR, // Background
-  PluginColors::GetThemeColor(), // Foreground
-  PluginColors::GetThemeColor().WithOpacity(0.3f), // Pressed
-  PluginColors::GetThemeColor().WithOpacity(0.4f), // Frame
+  mThemeColor, // Foreground
+  mThemeColor.WithOpacity(0.3f), // Pressed
+  mThemeColor.WithOpacity(0.4f), // Frame
   PluginColors::MOUSEOVER, // Highlight
   DEFAULT_SHCOLOR, // Shadow
-  PluginColors::GetThemeColor(), // Extra 1
+  mThemeColor, // Extra 1
   COLOR_RED, // Extra 2 --> color for clipping in meters
-  PluginColors::GetThemeColor().WithContrast(0.1f), // Extra 3
+  mThemeColor.WithContrast(0.1f), // Extra 3
 };
 
 const IVStyle style =
@@ -77,9 +79,9 @@ const IVStyle titleStyle =
   DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular")).WithDrawFrame(false).WithShadowOffset(2.f);
 const IVStyle radioButtonStyle =
   style
-    .WithColor(EVColor::kON, PluginColors::GetThemeColor()) // Pressed buttons and their labels
-    .WithColor(EVColor::kOFF, PluginColors::GetThemeColor().WithOpacity(0.1f)) // Unpressed buttons
-    .WithColor(EVColor::kX1, PluginColors::GetThemeColor().WithOpacity(0.6f)); // Unpressed buttons' labels
+    .WithColor(EVColor::kON, mThemeColor) // Pressed buttons and their labels
+    .WithColor(EVColor::kOFF, mThemeColor.WithOpacity(0.1f)) // Unpressed buttons
+    .WithColor(EVColor::kX1, mThemeColor.WithOpacity(0.6f)); // Unpressed buttons' labels
 
 EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char* str, const char* caption,
                               EMsgBoxType type)
@@ -243,7 +245,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kMidiChannel)->InitEnum("MIDI Channel", 0,
                                    {"Omni", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13",
                                     "14", "15", "16"});
-  NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
+  GetParam(kFollowTrackColor)->InitBool("followTrackColor", false);
+  NAMSetPhaseMulticoreRuntimeSettings(
+    mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
   MakeDefaultPreset("Default");
   _LoadGlobalInternalPresetBank();
 
@@ -338,7 +342,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto modelArea =
       contentArea.GetFromBottom((2.0f * fileHeight)).GetFromTop(fileHeight).GetMidHPadded(fileWidth).GetVShifted(-1);
     const auto slimIconArea =
-      IRECT(modelArea.R + 6.f, modelArea.MH() - 14.f, modelArea.R + 6.f + 2.f * 28.f, modelArea.MH() + 14.f);
+      IRECT(modelArea.R + 17.f, modelArea.MH() - 18.f, modelArea.R + 58.f, modelArea.MH() + 18.f);
     const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 10);
     const auto irArea = modelArea.GetVShifted(irYOffset);
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
@@ -412,27 +416,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                 fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl),
       kCtrlTagModelFileBrowser);
 
-    auto hideSlimOverlay = [](IControl* pCaller) {
-      IGraphics* ui = pCaller->GetUI();
-      if (auto* backdrop = ui->GetControlWithTag(kCtrlTagSlimOverlayBackdrop))
-        backdrop->Hide(true);
-      if (auto* knob = ui->GetControlWithTag(kCtrlTagSlimKnob))
-        knob->Hide(true);
-      ui->SetAllControlsDirty();
-    };
-    auto showSlimOverlay = [](IControl* pCaller) {
-      IGraphics* ui = pCaller->GetUI();
-      if (auto* backdrop = ui->GetControlWithTag(kCtrlTagSlimOverlayBackdrop))
-        backdrop->Hide(false);
-      if (auto* knob = ui->GetControlWithTag(kCtrlTagSlimKnob))
-        knob->Hide(false);
-      ui->SetAllControlsDirty();
-    };
-
     pGraphics
-      ->AttachControl(
-        new NAMSquareButtonControl(slimIconArea, DefaultClickActionFunc, slimIconSVG, true), kCtrlTagSlimmableIcon)
-      ->SetAnimationEndActionFunction(showSlimOverlay)
+      ->AttachControl(new IVSliderControl(slimIconArea, kSlim, "Slimable",
+                                          style.WithColor(kFG, PluginColors::OFF_WHITE)
+                                            .WithValueText(IText(DEFAULT_TEXT_SIZE - 1.f, EVAlign::Bottom,
+                                                                 PluginColors::NAM_THEMEFONTCOLOR))
+                                            .WithLabelText(IText(DEFAULT_TEXT_SIZE - 1.f, COLOR_WHITE)),
+                                          true, EDirection::Horizontal, DEFAULT_GEARING, 4.f),
+                      kCtrlTagSlimmableIcon)
       ->Hide(true);
 
     pGraphics->AttachControl(new ISVGSwitchControl(irSwitchArea, {irIconOffSVG, irIconOnSVG}, kIRToggle));
@@ -533,14 +524,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       ->AttachControl(new NAMCutFiltersPageControl(b, backgroundBitmap, knobBackgroundBitmap, switchHandleBitmap,
                                                    crossSVG, style, radioButtonStyle),
                       kCtrlTagCutFiltersBox)
-      ->Hide(true);
-
-    const auto slimKnobArea = b.GetCentredInside(100.f, NAM_KNOB_HEIGHT + 24.f);
-    pGraphics->AttachControl(new NAMSlimOverlayBackdropControl(b, hideSlimOverlay), kCtrlTagSlimOverlayBackdrop)
-      ->Hide(true);
-    pGraphics
-      ->AttachControl(new NAMKnobControl(slimKnobArea, kSlim, "Model Size", style, knobBackgroundBitmap),
-                      kCtrlTagSlimKnob)
       ->Hide(true);
 
     pGraphics->ForAllControlsFunc([](IControl* pControl) {
@@ -1897,15 +1880,37 @@ void NeuralAmpModeler::OnIdle()
       static_cast<NAMSettingsPageControl*>(pGraphics->GetControlWithTag(kCtrlTagSettingsBox))->ClearModelInfo();
       if (auto* p = pGraphics->GetControlWithTag(kCtrlTagSlimmableIcon))
         p->Hide(true);
-      if (auto* p = pGraphics->GetControlWithTag(kCtrlTagSlimOverlayBackdrop))
-        p->Hide(true);
-      if (auto* p = pGraphics->GetControlWithTag(kCtrlTagSlimKnob))
-        p->Hide(true);
+
       pGraphics->SetAllControlsDirty();
       mModelCleared = false;
     }
   }
 #endif
+
+  // SetThemeColor(PluginColors::NAM_THEMECOLOR);
+  GetUI()->ForStandardControlsFunc([&](IControl* pControl) {
+    if (auto* pVectorBase = pControl->As<IVectorBase>())
+    {
+      if (GetParam(kFollowTrackColor)->Value())
+      {
+        int r, g, b;
+        GetTrackColor(r, g, b);
+        if (r + g + b > 0) // is default color set in DAW ?
+          SetThemeColor(IColor(255, r, g, b));
+      }
+      else
+      {
+        if (mHighLightColor.GetLength())
+          SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
+      }
+      pVectorBase->SetColor(kX1, GetThemeColor());
+      pVectorBase->SetColor(kPR, GetThemeColor().WithOpacity(0.6f));
+      pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.1f));
+      pVectorBase->SetColor(kX3, GetThemeColor().WithContrast(0.1f));
+      pVectorBase->SetColor(kOFF, GetThemeColor().WithOpacity(0.1f));
+      pControl->GetUI()->SetAllControlsDirty();
+    }
+  });
 }
 
 bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
@@ -1920,6 +1925,8 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   // when we unserialize)
   chunk.PutStr(mNAMPath.Get());
   chunk.PutStr(mIRPath.Get());
+  chunk.PutStr(mHighLightColor.Get());
+  return SerializeParams(chunk);
   const bool paramsSerialized = SerializeParams(chunk);
   if (paramsSerialized)
   {
@@ -1976,6 +1983,14 @@ void NeuralAmpModeler::OnUIOpen()
   }
 #endif
 }
+
+iplug::igraphics::IColor NeuralAmpModeler::GetThemeColor() const
+{
+  return mThemeColor;
+}
+
+void NeuralAmpModeler::SetThemeColor(const iplug::igraphics::IColor& color)
+  { mThemeColor = color; }
 
 void NeuralAmpModeler::OnUIClose()
 {
@@ -2098,6 +2113,36 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
 
     switch (paramIdx)
     {
+      case kFollowTrackColor:
+        GetUI()->ForStandardControlsFunc([&](IControl* pControl) {
+          if (auto* pVectorBase = pControl->As<IVectorBase>())
+          {
+            if (GetParam(kFollowTrackColor)->Value())
+            {
+              int r, g, b;
+              GetTrackColor(r, g, b);
+              if (r + g + b > 0) // is default color set in DAW ?
+                SetThemeColor(IColor(255, r, g, b));
+            }
+            else
+            {
+              if (mHighLightColor.GetLength())
+                SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
+              else
+                SetThemeColor(PluginColors::NAM_THEMECOLOR);
+            }
+
+            pVectorBase->SetColor(kX1, GetThemeColor());
+            pVectorBase->SetColor(kPR, GetThemeColor().WithOpacity(0.6f));
+            pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.1f));
+            pVectorBase->SetColor(kX3, GetThemeColor().WithContrast(0.1f));
+            pVectorBase->SetColor(kOFF, GetThemeColor().WithOpacity(0.1f));
+           
+            pControl->GetUI()->SetAllControlsDirty();
+          }
+        });
+        //updateToneStackControlAvailability(); // ??? needed ?
+        break;
       case kNoiseGateActive: pGraphics->GetControlWithParamIdx(kNoiseGateThreshold)->SetDisabled(!active); break;
       case kEQActive:
         pGraphics->ForControlInGroup("EQ_KNOBS", [active](IControl* pControl) { pControl->SetDisabled(!active); });
@@ -2132,22 +2177,19 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
       mHighLightColor.Set((const char*)pData);
 
 #if PLUG_HAS_UI
-      IColor color = IColor::FromColorCodeStr(mHighLightColor.Get());
-      PluginColors::SetThemeColor(color);
+    GetUI()->ForStandardControlsFunc([&](IControl* pControl) {
+        if (auto* pVectorBase = pControl->As<IVectorBase>())
+        {
+            SetThemeColor(IColor::FromColorCodeStr(mHighLightColor.Get()));
 
-      if (GetUI())
-      {
-        GetUI()->ForStandardControlsFunc([&](IControl* pControl) {
-          if (auto* pVectorBase = pControl->As<IVectorBase>())
-          {
-            pVectorBase->SetColor(kX1, color);
-            pVectorBase->SetColor(kPR, color.WithOpacity(0.3f));
-            pVectorBase->SetColor(kFR, color.WithOpacity(0.4f));
-            pVectorBase->SetColor(kX3, color.WithContrast(0.1f));
-          }
-          pControl->GetUI()->SetAllControlsDirty();
-        });
-      }
+            pVectorBase->SetColor(kX1, GetThemeColor());
+            pVectorBase->SetColor(kPR, GetThemeColor().WithOpacity(0.6f));
+            pVectorBase->SetColor(kFR, GetThemeColor().WithOpacity(0.1f));
+            pVectorBase->SetColor(kX3, GetThemeColor().WithContrast(0.1f));
+            pVectorBase->SetColor(kOFF, GetThemeColor().WithOpacity(0.1f));
+        }
+        pControl->GetUI()->SetAllControlsDirty();
+    });
 #endif
 
       return true;
@@ -3088,6 +3130,7 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
     {
       const bool show = mModel->GetSlimmableModel() != nullptr;
       pSlimIcon->Hide(!show);
+      pSlimIcon->SetDisabled(!show);
     }
   }
 #endif

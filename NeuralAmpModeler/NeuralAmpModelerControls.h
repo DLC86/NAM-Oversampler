@@ -58,7 +58,7 @@ public:
 
     if (mUseThemeStroke)
     {
-      IColor strokeColor = PluginColors::GetThemeColor();
+      IColor strokeColor = PLUG()->GetThemeColor();
       g.DrawSVG(GetValue() > 0.5 ? mOnSVG : mOffSVG, mRECT, &mBlend, &strokeColor, nullptr);
     }
     else
@@ -146,7 +146,7 @@ public:
     if (mMouseIsOver)
       g.FillEllipse(PluginColors::MOUSEOVER, mRECT.GetCentredInside(26.0f, 26.0f));
 
-    const IColor color = PluginColors::GetThemeColor();
+    const IColor color = PLUG()->GetThemeColor();
     const float radius = 6.0f;
     const float stroke = 1.8f;
     const float cx = mRECT.MW();
@@ -313,8 +313,8 @@ protected:
 
     const IRECT badge = GetMidiLearnBadgeRect(r);
     g.FillRoundRect(COLOR_BLACK.WithOpacity(0.85f), badge, 3.0f);
-    g.DrawRoundRect(PluginColors::GetThemeColor(), badge, 3.0f, nullptr, 1.0f);
-    g.DrawText(IText(9.0f, PluginColors::GetThemeColor(), "Roboto-Regular", EAlign::Center, EVAlign::Middle),
+    g.DrawRoundRect(plug->GetThemeColor(), badge, 3.0f, nullptr, 1.0f);
+    g.DrawText(IText(9.0f, plug->GetThemeColor(), "Roboto-Regular", EAlign::Center, EVAlign::Middle),
                "LEARN", badge);
   }
 
@@ -413,7 +413,7 @@ public:
   void Draw(IGraphics& g) override
   {
     const auto areas = GetAreas();
-    const IColor slotFrame = GetFrameColor(HoverPart::Slot);
+    const IColor slotFrame = PLUG()->GetThemeColor().WithOpacity(mHoverPart == HoverPart::Slot ? 0.9f : 0.55f);
     const IColor fill = COLOR_BLACK.WithOpacity(0.82f);
     const IText text(13.0f, COLOR_WHITE, "Roboto-Regular", EAlign::Center, EVAlign::Middle);
 
@@ -422,10 +422,11 @@ public:
     const bool canRevert = PLUG()->IsCurrentInternalPresetDirty();
     const IColor disabledFrame = PluginColors::HELP_TEXT.WithOpacity(0.22f);
     const IColor disabledIcon = PluginColors::HELP_TEXT.WithOpacity(0.32f);
-    DrawIconButton(g, areas.revert, canRevert ? GetFrameColor(HoverPart::Revert) : disabledFrame, fill);
-    DrawIconButton(g, areas.save, GetFrameColor(HoverPart::Save), fill);
-    DrawIconButton(g, areas.saveAs, GetFrameColor(HoverPart::SaveAs), fill);
-    DrawIconButton(g, areas.list, GetFrameColor(HoverPart::List), fill);
+    DrawIconButton(
+      g, areas.revert, canRevert ? PLUG()->GetThemeColor().WithOpacity(mHoverPart == HoverPart::Revert ? 0.9f : 0.55f) : disabledFrame, fill);
+    DrawIconButton(g, areas.save, PLUG()->GetThemeColor().WithOpacity(mHoverPart == HoverPart::Save ? 0.9f : 0.55f), fill);
+    DrawIconButton(g, areas.saveAs, PLUG()->GetThemeColor().WithOpacity(mHoverPart == HoverPart::SaveAs ? 0.9f : 0.55f), fill);
+    DrawIconButton(g, areas.list, PLUG()->GetThemeColor().WithOpacity(mHoverPart == HoverPart::List ? 0.9f : 0.55f), fill);
     g.DrawSVG(mLeftSVG, areas.left.GetCentredInside(10.0f, 10.0f));
     g.DrawSVG(mRightSVG, areas.right.GetCentredInside(10.0f, 10.0f));
     WDL_String name;
@@ -587,11 +588,6 @@ private:
     if (areas.slot.Contains(x, y))
       return HoverPart::Slot;
     return HoverPart::None;
-  }
-
-  IColor GetFrameColor(HoverPart part) const
-  {
-    return PluginColors::GetThemeColor().WithOpacity(mHoverPart == part ? 0.9f : 0.55f);
   }
 
   void UpdateTooltipForHover()
@@ -943,7 +939,7 @@ public:
     if (mMouseIsOver)
       g.FillRoundRect(PluginColors::MOUSEOVER, mRECT.GetPadded(-2.0f), 2.0f);
 
-    const IColor color = PluginColors::GetThemeColor();
+    const IColor color = PLUG()->GetThemeColor();
     const float stroke = 1.8f;
     const auto left = mRECT.GetFromLeft(mRECT.W() * 0.5f).GetPadded(-4.0f);
     const auto right = mRECT.GetFromRight(mRECT.W() * 0.5f).GetPadded(-4.0f);
@@ -1473,7 +1469,7 @@ private:
                          std::string(title) + "Frequency");
     const auto slopeStyle = mRadioButtonStyle.WithColor(kBG, COLOR_BLACK)
                             .WithColor(kFG, COLOR_BLACK)
-                            .WithColor(kFR, PluginColors::GetThemeColor().WithOpacity(0.40f));
+                              .WithColor(kFR, PLUG()->GetThemeColor().WithOpacity(0.40f));
     AddNamedChildControl(new IVMenuButtonControl(slopeArea, slopeParam, "", slopeStyle, EVShape::Rectangle),
                          std::string(title) + "Slope");
     auto* posSwitch =
@@ -1615,7 +1611,7 @@ public:
         r = r.GetFromRight(r.W() - mButtonAreaWidth);
         const bool unavailable = IsDisabled() || GetStateDisabled(i);
         const IColor textColor = unavailable ? PluginColors::HELP_TEXT.WithOpacity(0.35f)
-                               : i == hit      ? PluginColors::GetThemeColor()
+                               : i == hit      ? PLUG()->GetThemeColor()
                                                : COLOR_WHITE;
         g.DrawText(mStyle.valueText.WithFGColor(textColor), mTabLabels.Get(i)->Get(), r, &mBlend);
       }
@@ -1647,7 +1643,7 @@ public:
         r = r.GetFromRight(r.W() - mButtonAreaWidth);
         const bool unavailable = IsDisabled() || GetStateDisabled(i);
         const IColor textColor = unavailable ? PluginColors::HELP_TEXT.WithOpacity(0.35f)
-                               : i == hit      ? PluginColors::GetThemeColor()
+                               : i == hit      ? PLUG()->GetThemeColor()
                                                : PluginColors::HELP_TEXT;
         g.DrawText(mStyle.valueText.WithFGColor(textColor), mTabLabels.Get(i)->Get(), r, &mBlend);
       }
@@ -1767,12 +1763,12 @@ public:
     IRECT valueArea;
     CalculateAreas(g, buttonArea, labelArea, leftArrowArea, rightArrowArea, valueArea);
 
-    const IColor frame = IsDisabled() ? PluginColors::GetThemeColor().WithOpacity(0.15f)
-                                     : PluginColors::GetThemeColor().WithOpacity(mButtonHover ? 0.85f : 0.40f);
+    const IColor frame = IsDisabled() ? PLUG()->GetThemeColor().WithOpacity(0.15f)
+                                     : PLUG()->GetThemeColor().WithOpacity(mButtonHover ? 0.85f : 0.40f);
     const IColor valueColor = IsDisabled() ? PluginColors::HELP_TEXT.WithOpacity(0.45f)
                                           : PluginColors::NAM_THEMEFONTCOLOR;
     const IColor labelColor = IsDisabled() ? PluginColors::HELP_TEXT.WithOpacity(0.40f)
-                                           : (mLabelHover ? PluginColors::GetThemeColor() : PluginColors::HELP_TEXT);
+                                           : (mLabelHover ? PLUG()->GetThemeColor() : PluginColors::HELP_TEXT);
 
     g.FillRoundRect(COLOR_BLACK, buttonArea, 4.0f);
     g.DrawRoundRect(frame, buttonArea, 4.0f, nullptr, 1.0f);
@@ -1925,8 +1921,8 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    const IColor frame = IsDisabled() ? PluginColors::GetThemeColor().WithOpacity(0.15f)
-                                     : PluginColors::GetThemeColor().WithOpacity(mMouseIsOver ? 0.65f : 0.40f);
+    const IColor frame = IsDisabled() ? PLUG()->GetThemeColor().WithOpacity(0.15f)
+                                      : PLUG()->GetThemeColor().WithOpacity(mMouseIsOver ? 0.65f : 0.40f);
     const IColor textColor = IsDisabled() ? PluginColors::HELP_TEXT.WithOpacity(0.45f)
                                          : PluginColors::NAM_THEMEFONTCOLOR;
     if (mMouseIsOver && !IsDisabled())
@@ -2001,7 +1997,7 @@ public:
                           "Roboto-Regular", EAlign::Center, EVAlign::Middle);
     g.DrawText(labelText, dsp::tone_stack::GetToneStackComponentName(component), labelArea);
     g.FillRoundRect(COLOR_BLACK, valueArea, 3.0f);
-    g.DrawRoundRect(PluginColors::GetThemeColor().WithOpacity(editable && mMouseIsOver ? 0.65f : 0.35f), valueArea,
+    g.DrawRoundRect(PLUG()->GetThemeColor().WithOpacity(editable && mMouseIsOver ? 0.65f : 0.35f), valueArea,
                     3.0f);
 
     if (editable)
@@ -2673,12 +2669,37 @@ public:
                            "MidiChannelLabel");
       const auto midiChannelStyle = mRadioButtonStyle.WithColor(kBG, COLOR_BLACK)
                                       .WithColor(kFG, COLOR_BLACK)
-                                      .WithColor(kFR, PluginColors::GetThemeColor().WithOpacity(0.40f));
+                                      .WithColor(kFR, PLUG()->GetThemeColor().WithOpacity(0.40f));
       auto* midiChannelControl =
         AddNamedChildControl(new IVMenuButtonControl(midiChannelArea, kMidiChannel, "", midiChannelStyle,
                                                      EVShape::Rectangle),
                              mControlNames.midiChannel);
       midiChannelControl->SetTooltip("MIDI channel used for internal preset Program Change and assigned CCs.");
+
+      // Attach highlight color controls
+      const auto colorArea =
+        titleArea.GetFromTop(0.5f * height).GetFromLeft(0.5f * width).GetTranslated(0.0f, 47.0f).GetHPadded(-12.0f);
+      const auto highlightArea = colorArea.GetFromLeft(0.225f * width).GetHPadded(-25.0f).GetVPadded(-15.0f);
+      const auto trackcolorArea = colorArea.GetFromRight(0.22f * width).GetHPadded(-16.0f).GetVPadded(-15.0f);
+      ;
+      AddNamedChildControl(
+        new IVColorSwatchControl(highlightArea, "Highlight Color",
+                                 [&](int idx, IColor color) {
+                                   WDL_String colorCodeStr;
+                                   color.ToColorCodeStr(colorCodeStr, false);
+                                   this->GetDelegate()->SendArbitraryMsgFromUI(
+                                     kMsgTagHighlightColor, kNoTag, colorCodeStr.GetLength(), colorCodeStr.Get());
+                                   //GetChild(7)->SetValueToDefault(kFollowTrackColor); // better set value to false ??
+                                 },
+                                 mStyle.WithLabelText(IText(DEFAULT_TEXT_SIZE, COLOR_WHITE)), 
+                                 IVColorSwatchControl::ECellLayout::kHorizontal, {kX1}, {""}),
+        mControlNames.highlightColor)
+        ->SetTooltip("choose your favorite color \nfor the plugin controls"); 
+
+      AddNamedChildControl(new IVToggleControl(trackcolorArea, kFollowTrackColor, "Follow Track Color",
+                                               style.WithLabelText(IText(DEFAULT_TEXT_SIZE, COLOR_WHITE))
+                                               .WithColor(kFG, PluginColors::NAM_0)),
+                           mControlNames.followTrackColor)->SetTooltip("use the color that you set for this track \nin your DAW for the plugin controls");  
     }
 
     const float halfWidth = PLUG_WIDTH / 2.0f - pad;
@@ -2728,6 +2749,8 @@ private:
     const std::string modelInfo = "ModelInfo";
     const std::string outputMode = "OutputMode";
     const std::string title = "Title";
+    const std::string highlightColor = "Highlight Color";
+    const std::string followTrackColor = "Follow Track Color";
   } mControlNames;
 
   class InputLevelControl : public IEditableTextControl
@@ -2792,7 +2815,7 @@ private:
       AddChildControl(new IURLControl(GetRECT().SubRectVertical(5, 0), "NEURAL AMP MODELER",
                                       "https://www.neuralampmodeler.com", mText, COLOR_TRANSPARENT,
                                       PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED));
-      AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 1), "By Steven Atkinson", mStyle));
+      AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 1), "By Steven Atkinson, theme colors by fichl", mStyle));
       AddChildControl(new IVLabelControl(GetRECT().SubRectVertical(5, 2), buildInfoStr.Get(), mStyle));
       AddChildControl(new IURLControl(GetRECT().SubRectVertical(5, 3),
                                       "Plug-in development: Steve Atkinson, Oli Larkin, ... ",

@@ -67,6 +67,7 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
 
   mNAMPath.Set(static_cast<std::string>(config["NAMPath"]).c_str());
   mIRPath.Set(static_cast<std::string>(config["IRPath"]).c_str());
+  mHighLightColor.Set(static_cast<std::string>(config["HighLightColor"]).c_str());
 
   if (mNAMPath.GetLength())
   {
@@ -92,6 +93,8 @@ int _UnserializePathsAndExpectedKeys(const iplug::IByteChunk& chunk, int startPo
   config["NAMPath"] = std::string(path.Get());
   pos = chunk.GetStr(path, pos);
   config["IRPath"] = std::string(path.Get());
+  pos = chunk.GetStr(path, pos);
+  config["HighLightColor"] = std::string(path.Get());
 
   for (auto it = paramNames.begin(); it != paramNames.end(); ++it)
   {
@@ -235,7 +238,8 @@ int _GetConfigFrom_1_6_0(const iplug::IByteChunk& chunk, int startPos, nlohmann:
                                       "Low Cut Post",
                                       "High Cut",
                                       "High Cut Slope",
-                                      "High Cut Post"};
+                                      "High Cut Post",
+                                      "followTrackColor"};
 
   const int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   _UpdateConfigFrom_1_6_0(config);
@@ -506,6 +510,7 @@ int _GetConfigFrom_0_7_14(const iplug::IByteChunk& chunk, int startPos, nlohmann
                                       "CalibrateInput",
                                       "InputCalibrationLevel",
                                       "OutputMode",
+                                      "followTrackColor",
                                       "Slim"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
@@ -534,7 +539,8 @@ int _GetConfigFrom_0_7_12(const iplug::IByteChunk& chunk, int startPos, nlohmann
                                       "IRToggle",
                                       "CalibrateInput",
                                       "InputCalibrationLevel",
-                                      "OutputMode"};
+                                      "OutputMode",
+                                      "followTrackColor"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   // Then update:
@@ -558,8 +564,8 @@ void _UpdateConfigFrom_0_7_10(nlohmann::json& config)
 
 int _GetConfigFrom_0_7_10(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
-  std::vector<std::string> paramNames{
-    "Input", "Threshold", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "OutNorm", "IRToggle"};
+  std::vector<std::string> paramNames{"Input",           "Threshold",       "Bass",      "Middle",  "Treble",
+                                      "Output",          "NoiseGateActive", "ToneStack", "OutNorm", "IRToggle", "followTrackColor"};
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   // Then update:
   _UpdateConfigFrom_0_7_10(config);
@@ -578,7 +584,7 @@ void _UpdateConfigFrom_Earlier(nlohmann::json& config)
 int _GetConfigFrom_Earlier(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
 {
   std::vector<std::string> paramNames{
-    "Input", "Gate", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "OutNorm", "IRToggle"};
+    "Input", "Gate", "Bass", "Middle", "Treble", "Output", "NoiseGateActive", "ToneStack", "OutNorm", "IRToggle", "followTrackColor"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   // Then update:

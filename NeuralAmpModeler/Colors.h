@@ -73,22 +73,6 @@ const iplug::igraphics::IColor NAM_THEMECOLOR(255, 191, 0, 0); // Red
 // const iplug::igraphics::IColor NAM_THEMECOLOR(255, 23, 190, 187); // Custom :)
 const iplug::igraphics::IColor NAM_THEMEFONTCOLOR(255, 242, 242, 242); // Dark White
 
-inline iplug::igraphics::IColor& ThemeColorStorage()
-{
-  static iplug::igraphics::IColor color = NAM_THEMECOLOR;
-  return color;
-}
-
-inline iplug::igraphics::IColor GetThemeColor()
-{
-  return ThemeColorStorage();
-}
-
-inline void SetThemeColor(const iplug::igraphics::IColor& color)
-{
-  ThemeColorStorage() = color;
-}
-
 // Misc
 // const iplug::igraphics::IColor MOUSEOVER = NAM_3.WithOpacity(0.3);
 const iplug::igraphics::IColor MOUSEOVER = NAM_THEMEFONTCOLOR.WithOpacity(0.1);
