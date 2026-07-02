@@ -113,7 +113,13 @@ def update_windows_resources(version: str, parts: tuple[int, int, int], dry_run:
 def update_plist(path: Path, version: str, version_hex: str, version_int: int, dry_run: bool) -> bool:
     text = path.read_text(encoding="utf-8")
 
-    for key in ("CFBundleGetInfoString", "CFBundleShortVersionString", "CFBundleVersion"):
+    text = re.sub(
+        r"(<key>CFBundleGetInfoString</key>\s*<string>[^<]*?v)\d+\.\d+\.\d+([^<]*</string>)",
+        rf"\g<1>{version}\g<2>",
+        text,
+    )
+
+    for key in ("CFBundleShortVersionString", "CFBundleVersion"):
         pattern = rf"(<key>{key}</key>\s*<string>)[^<]*(</string>)"
         text = re.sub(pattern, rf"\g<1>{version}\g<2>", text)
 
