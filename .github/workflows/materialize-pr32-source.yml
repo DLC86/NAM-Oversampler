@@ -1,16 +1,16 @@
 name: Materialize PR 32 source fixes
 
 on:
-  push:
+  pull_request:
     branches:
-      - pr32-state-linux-fixes
+      - main
 
 permissions:
   contents: write
 
 jobs:
   materialize:
-    if: github.actor != 'github-actions[bot]'
+    if: github.head_ref == 'pr32-state-linux-fixes' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
