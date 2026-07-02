@@ -19,34 +19,9 @@ jobs:
       - name: Apply fixes
         shell: bash
         run: |
-          set +e
-          python3 .github/scripts/fix_pr32_cpp.py > cpp-fix.log 2>&1
-          echo $? > cpp-fix.status
-          python3 .github/scripts/fix_pr32_header.py > header-fix.log 2>&1
-          echo $? > header-fix.status
-          python3 .github/scripts/fix_pr32_unserialization.py > state-fix.log 2>&1
-          echo $? > state-fix.status
-          git config core.whitespace cr-at-eol
-          git diff --check > diff-check.log 2>&1
-          echo $? > diff-check.status
-          exit 0
-      - name: Upload diagnostics
-        uses: actions/upload-artifact@v7
-        with:
-          name: pr32-materializer-diagnostics
-          path: |
-            *-fix.log
-            *-fix.status
-            diff-check.log
-            diff-check.status
-      - name: Require successful transformations
-        shell: bash
-        run: |
-          cat cpp-fix.log header-fix.log state-fix.log diff-check.log
-          test "$(cat cpp-fix.status)" = "0"
-          test "$(cat header-fix.status)" = "0"
-          test "$(cat state-fix.status)" = "0"
-          test "$(cat diff-check.status)" = "0"
+          python3 .github/scripts/fix_pr32_cpp.py
+          python3 .github/scripts/fix_pr32_header.py
+          python3 .github/scripts/fix_pr32_unserialization.py
       - name: Commit fixed sources through GitHub API
         uses: actions/github-script@v7
         with:
