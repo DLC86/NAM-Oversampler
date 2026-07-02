@@ -11,7 +11,7 @@
 	<key>CFBundleIconFile</key>
 	<string>NeuralAmpModeler.icns</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.TheToneScientist.app.NAM On Steroids</string>
+	<string>com.TheToneScientist.app.NAMOnSteroids</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>

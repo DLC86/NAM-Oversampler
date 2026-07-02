@@ -9,7 +9,7 @@
 	<key>CFBundleGetInfoString</key>
 	<string>NAM On Steroids v2.2.1 Copyright 2022 Steven Atkinson</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.TheToneScientist.aax.NAM On Steroids</string>
+	<string>com.TheToneScientist.aax.NAMOnSteroids</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>

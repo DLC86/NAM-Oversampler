@@ -22,6 +22,7 @@ def main():
     config = parse_config(projectpath)
     project_name = os.path.basename(projectpath)
     bundle_name = config["BUNDLE_NAME"]
+    bundle_id_name = "".join(c for c in bundle_name if c.isalnum() or c in ("-", "_"))
 
     def resource_path(suffix):
         bundle_path = os.path.join(projectpath, "resources", bundle_name + suffix)
@@ -59,7 +60,7 @@ def main():
             + "."
             + config["BUNDLE_MFR"]
             + ".vst3."
-            + config["BUNDLE_NAME"]
+            + bundle_id_name
             + ""
         )
         vst3["CFBundleName"] = config["BUNDLE_NAME"]
@@ -85,7 +86,7 @@ def main():
             + "."
             + config["BUNDLE_MFR"]
             + ".audiounit."
-            + config["BUNDLE_NAME"]
+            + bundle_id_name
             + ""
         )
         auv2["CFBundleName"] = config["BUNDLE_NAME"]
@@ -140,7 +141,7 @@ def main():
             + "."
             + config["BUNDLE_MFR"]
             + ".app."
-            + config["BUNDLE_NAME"]
+            + bundle_id_name
             + ".AUv3"
         )
         auv3["CFBundleName"] = config["BUNDLE_NAME"]
@@ -154,7 +155,7 @@ def main():
                 + "."
                 + config["BUNDLE_MFR"]
                 + ".app."
-                + config["BUNDLE_NAME"]
+                + bundle_id_name
                 + ".AUv3Framework",
                 AudioComponents=[{}],
             ),
@@ -212,7 +213,7 @@ def main():
             + "."
             + config["BUNDLE_MFR"]
             + ".aax."
-            + config["BUNDLE_NAME"]
+            + bundle_id_name
             + ""
         )
         aax["CFBundleName"] = config["BUNDLE_NAME"]
@@ -237,7 +238,7 @@ def main():
             + "."
             + config["BUNDLE_MFR"]
             + ".app."
-            + config["BUNDLE_NAME"]
+            + bundle_id_name
             + ""
         )
         macOSapp["CFBundleName"] = config["BUNDLE_NAME"]
