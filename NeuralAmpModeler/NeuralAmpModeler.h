@@ -117,7 +117,6 @@ enum EParams
   kHighCutPostNAM,
   kInputBoost,
   kMidiChannel,
-  kFollowTrackColor,
   kNumParams
 };
 
@@ -161,7 +160,6 @@ enum EMsgTags
   // These tags are used from UI -> DSP
   kMsgTagClearModel = 0,
   kMsgTagClearIR,
-  kMsgTagHighlightColor,
   // The following tags are from DSP -> UI
   kMsgTagLoadFailed,
   kMsgTagLoadedModel,
@@ -1543,17 +1541,8 @@ public:
   void AssignMidiCCToParam(int paramIdx, int cc);
   int GetMidiCCForParam(int paramIdx) const;
   bool IsMidiLearnArmedForParam(int paramIdx) const;
-#if PLUG_HAS_UI
-  iplug::igraphics::IColor GetThemeColor() const;
-  void SetThemeColor(const iplug::igraphics::IColor& color);
-#endif
 
 private:
-#if PLUG_HAS_UI
-  iplug::igraphics::IColor _ResolveThemeColorForUI();
-  void _ApplyThemeColorToUI(bool force = false);
-#endif
-
   static constexpr int kNumInternalPresets = 128;
   static constexpr int kNoMidiCCAssignment = -1;
 
@@ -1769,11 +1758,6 @@ private:
   WDL_String mNAMPath;
   // Path to IR (.wav file)
   WDL_String mIRPath;
-
-  WDL_String mHighLightColor;
-#if PLUG_HAS_UI
-  iplug::igraphics::IColor mThemeColor {255, 191, 0, 0};
-#endif
 
   std::unordered_map<std::string, double> mNAMParams = {{"Input", 0.0}, {"Output", 0.0}};
 
