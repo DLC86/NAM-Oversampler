@@ -62,12 +62,7 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
   }
   OnParamReset(iplug::EParamSource::kPresetRecall);
   _UnserializeApplyToneStackComponentState(config);
-  // The internal preset bank is global and can be updated without saving the
-  // host project. Host state may therefore contain an older embedded copy of
-  // the bank. Merge instead of replacing, so the latest saved global presets
-  // loaded at construction time win, while older projects can still provide
-  // slots that do not exist in the global bank.
-  _UnserializeApplyInternalPresetState(config, true);
+  _UnserializeApplyInternalPresetState(config, false);
   LEAVE_PARAMS_MUTEX
 
   mNAMPath.Set(static_cast<std::string>(config["NAMPath"]).c_str());
