@@ -243,6 +243,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kMidiChannel)->InitEnum("MIDI Channel", 0,
                                    {"Omni", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13",
                                     "14", "15", "16"});
+  GetParam(kFollowTrackColor)->InitBool("followTrackColor", false);
   NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
   MakeDefaultPreset("Default");
   _LoadGlobalInternalPresetBank();
@@ -742,6 +743,7 @@ bool NeuralAmpModeler::_IsInternalPresetParam(int paramIdx) const
     case kPhaseMulticoreThreadCount:
     case kChannelMode:
     case kMidiChannel:
+    case kFollowTrackColor:
       return false;
     default:
       return paramIdx >= 0 && paramIdx < kNumParams;
@@ -1813,9 +1815,87 @@ void NeuralAmpModeler::_HandleUpdateCheckResult()
 #endif
 }
 
+#if PLUG_HAS_UI
+namespace
+{
+bool NAMColorsEqual(const IColor& lhs, const IColor& rhs)
+{
+  return lhs.A == rhs.A && lhs.R == rhs.R && lhs.G == rhs.G && lhs.B == rhs.B;
+}
+} // namespace
+
+IColor NeuralAmpModeler::GetThemeColor() const
+{
+  return PluginColors::GetThemeColor();
+}
+
+void NeuralAmpModeler::SetThemeColor(const IColor& color)
+{
+  PluginColors::SetThemeColor(color);
+}
+
+IColor NeuralAmpModeler::_ResolveDesiredThemeColor() const
+{
+  if (GetParam(kFollowTrackColor)->Bool())
+  {
+    int r = 0;
+    int g = 0;
+    int b = 0;
+    const_cast<NeuralAmpModeler*>(this)->GetTrackColor(r, g, b);
+
+    if (r != 0 || g != 0 || b != 0)
+      return IColor(255, r, g, b);
+  }
+
+  if (mHighLightColor.GetLength() > 0)
+  {
+    try
+    {
+      return IColor::FromColorCodeStr(mHighLightColor.Get());
+    }
+    catch (...)
+    {
+      return PluginColors::NAM_THEMECOLOR;
+    }
+  }
+
+  return PluginColors::NAM_THEMECOLOR;
+}
+
+void NeuralAmpModeler::_ApplyThemeColorToUI(bool force)
+{
+  auto* ui = GetUI();
+  if (ui == nullptr)
+    return;
+
+  const IColor desiredColor = _ResolveDesiredThemeColor();
+  if (!force && NAMColorsEqual(desiredColor, mAppliedThemeColor))
+    return;
+
+  mAppliedThemeColor = desiredColor;
+  SetThemeColor(desiredColor);
+
+  ui->ForStandardControlsFunc([&](IControl* pControl) {
+    if (auto* pVectorBase = pControl->As<IVectorBase>())
+    {
+      pVectorBase->SetColor(kX1, desiredColor);
+      pVectorBase->SetColor(kPR, desiredColor.WithOpacity(0.6f));
+      pVectorBase->SetColor(kFR, desiredColor.WithOpacity(0.1f));
+      pVectorBase->SetColor(kX3, desiredColor.WithContrast(0.1f));
+      pVectorBase->SetColor(kOFF, desiredColor.WithOpacity(0.1f));
+    }
+  });
+
+  ui->SetAllControlsDirty();
+}
+#endif
+
 void NeuralAmpModeler::OnIdle()
 {
 #if PLUG_HAS_UI
+  if (GetParam(kFollowTrackColor)->Bool())
+    _ApplyThemeColorToUI(false);
+
   _MaybeStartUpdateCheck();
   _HandleUpdateCheckResult();
 
@@ -1927,6 +2007,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
     chunk.PutStr(toneStackComponentState.c_str());
     const std::string internalPresetState = _SerializeInternalPresetState();
     chunk.PutStr(internalPresetState.c_str());
+    chunk.PutStr(mHighLightColor.Get());
   }
   return paramsSerialized;
 }
@@ -1953,6 +2034,7 @@ void NeuralAmpModeler::OnUIOpen()
 {
 #if PLUG_HAS_UI
   Plugin::OnUIOpen();
+  _ApplyThemeColorToUI(true);
 
   if (mNAMPath.GetLength())
   {
@@ -2109,6 +2191,9 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
         pGraphics->SetAllControlsDirty();
         break;
       case kIRToggle: pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->SetDisabled(!active); break;
+      case kFollowTrackColor:
+        _ApplyThemeColorToUI(true);
+        break;
       default: break;
     }
   }
@@ -2127,6 +2212,19 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
       mShouldRemoveIR = true;
       _MarkCurrentInternalPresetDirty();
       return true;
+#if PLUG_HAS_UI
+    case kMsgTagHighlightColor:
+      if (pData != nullptr && dataSize > 0)
+      {
+        WDL_String highlightColor(static_cast<const char*>(pData), dataSize);
+        mHighLightColor.Set(&highlightColor);
+        GetParam(kFollowTrackColor)->Set(false);
+        SendParameterValueFromDelegate(kFollowTrackColor, 0.0, true);
+        _ApplyThemeColorToUI(true);
+        return true;
+      }
+      return false;
+#endif
     default: return false;
   }
 }

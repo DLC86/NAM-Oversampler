@@ -2679,6 +2679,31 @@ public:
                                                      EVShape::Rectangle),
                              mControlNames.midiChannel);
       midiChannelControl->SetTooltip("MIDI channel used for internal preset Program Change and assigned CCs.");
+
+      const auto highlightColorArea =
+        IRECT(inputArea.MW() - 75.0f, inputArea.T + 42.0f, inputArea.MW() + 75.0f, inputArea.T + 72.0f);
+      auto highlightColorStyle = mRadioButtonStyle.WithColor(kX1, PluginColors::GetThemeColor());
+      auto* highlightColorControl = AddNamedChildControl(
+        new IVColorSwatchControl(
+          highlightColorArea, "Highlight Color",
+          [this](int, IColor color) {
+            WDL_String colorCodeStr;
+            colorCodeStr.SetFormatted(16, "#%06x", color.ToColorCode());
+            GetDelegate()->SendArbitraryMsgFromUI(kMsgTagHighlightColor, kNoTag, colorCodeStr.GetLength(),
+                                                  colorCodeStr.Get());
+          },
+          highlightColorStyle, IVColorSwatchControl::ECellLayout::kHorizontal, {kX1}, {""}),
+        mControlNames.highlightColor);
+      highlightColorControl->SetTooltip("Choose the global highlight color used by red-accent controls.");
+
+      const auto followTrackColorArea =
+        IRECT(inputArea.MW() - 55.0f, inputArea.T + 78.0f, inputArea.MW() + 55.0f, inputArea.T + 78.0f + NAM_SWTICH_HEIGHT);
+      auto* followTrackColorControl =
+        AddNamedChildControl(new NAMSwitchControl(followTrackColorArea, kFollowTrackColor, "Follow Track Color",
+                                                 mStyle, mSwitchBitmap),
+                             mControlNames.followTrackColor);
+      followTrackColorControl->SetTooltip(
+        "Use the DAW track color as the plugin highlight color when the host provides it.");
     }
 
     const float halfWidth = PLUG_WIDTH / 2.0f - pad;
@@ -2723,6 +2748,8 @@ private:
     const std::string bitmap = "Bitmap";
     const std::string calibrateInput = "CalibrateInput";
     const std::string close = "Close";
+    const std::string followTrackColor = "FollowTrackColor";
+    const std::string highlightColor = "HighlightColor";
     const std::string inputCalibrationLevel = "InputCalibrationLevel";
     const std::string midiChannel = "MidiChannel";
     const std::string modelInfo = "ModelInfo";

@@ -26,6 +26,7 @@
 
 #include "ToneStack.h"
 #include "Tuner.h"
+#include "Colors.h"
 
 #include "IPlug_include_in_plug_hdr.h"
 #include "ISender.h"
@@ -117,6 +118,7 @@ enum EParams
   kHighCutPostNAM,
   kInputBoost,
   kMidiChannel,
+  kFollowTrackColor,
   kNumParams
 };
 
@@ -160,6 +162,7 @@ enum EMsgTags
   // These tags are used from UI -> DSP
   kMsgTagClearModel = 0,
   kMsgTagClearIR,
+  kMsgTagHighlightColor,
   // The following tags are from DSP -> UI
   kMsgTagLoadFailed,
   kMsgTagLoadedModel,
@@ -1541,6 +1544,10 @@ public:
   void AssignMidiCCToParam(int paramIdx, int cc);
   int GetMidiCCForParam(int paramIdx) const;
   bool IsMidiLearnArmedForParam(int paramIdx) const;
+#if PLUG_HAS_UI
+  iplug::igraphics::IColor GetThemeColor() const;
+  void SetThemeColor(const iplug::igraphics::IColor& color);
+#endif
 
 private:
   static constexpr int kNumInternalPresets = 128;
@@ -1650,6 +1657,10 @@ private:
   void _HandleUpdateCheckResult();
   static std::string _FetchLatestStableReleaseTag();
   static bool _IsReleaseVersionNewer(const std::string& latestTag, const std::string& currentVersion);
+#if PLUG_HAS_UI
+  iplug::igraphics::IColor _ResolveDesiredThemeColor() const;
+  void _ApplyThemeColorToUI(bool force);
+#endif
 
   // See: Unserialization.cpp
   void _UnserializeApplyConfig(nlohmann::json& config);
@@ -1758,6 +1769,11 @@ private:
   WDL_String mNAMPath;
   // Path to IR (.wav file)
   WDL_String mIRPath;
+
+  WDL_String mHighLightColor;
+#if PLUG_HAS_UI
+  iplug::igraphics::IColor mAppliedThemeColor = PluginColors::NAM_THEMECOLOR;
+#endif
 
   std::unordered_map<std::string, double> mNAMParams = {{"Input", 0.0}, {"Output", 0.0}};
 
