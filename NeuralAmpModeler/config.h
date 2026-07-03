@@ -9,6 +9,7 @@
 #define PLUG_COPYRIGHT_STR "Copyright 2022 Steven Atkinson"
 #define PLUG_CLASS_NAME NeuralAmpModeler
 #define BUNDLE_NAME "NAM On Steroids"
+#define BUNDLE_ID_NAME "NAMOnSteroids"
 #define BUNDLE_MFR "TheToneScientist"
 #define BUNDLE_DOMAIN "com"
 

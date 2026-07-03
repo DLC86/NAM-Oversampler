@@ -22,7 +22,10 @@ def main():
     config = parse_config(projectpath)
     project_name = os.path.basename(projectpath)
     bundle_name = config["BUNDLE_NAME"]
-    bundle_id_name = "".join(c for c in bundle_name if c.isalnum() or c in ("-", "_"))
+    bundle_id_name = config.get(
+        "BUNDLE_ID_NAME",
+        "".join(c for c in bundle_name if c.isalnum() or c in ("-", "_")),
+    )
 
     def resource_path(suffix):
         bundle_path = os.path.join(projectpath, "resources", bundle_name + suffix)
