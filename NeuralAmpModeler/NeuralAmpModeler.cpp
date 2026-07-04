@@ -224,7 +224,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     ->InitEnum("Offline Filter Phase", 2, {"Minimum Phase", "Linear Phase (short)", "Linear Phase (long)"});
   GetParam(kPhaseMulticoreEnabled)
     ->InitEnum("OS Multi-Core", static_cast<int>(ENAMPhaseMulticoreWaitMode::Sleep),
-               {"OFF", "SLEEP", "SPIN", "HYBRID"});
+               {"OFF", "SLEEP", "SPIN", "HYBRID", "IDLE", "SERIAL"});
   GetParam(kPhaseMulticoreThreadCount)
     ->InitEnum("OS Threads", 0, {"Auto", "2", "4", "8", "12", "16", "20", "24", "32"});
   GetParam(kTunerMute)->InitBool("Tuner Mute", true);

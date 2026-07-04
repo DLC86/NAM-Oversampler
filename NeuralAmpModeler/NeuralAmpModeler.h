@@ -267,12 +267,14 @@ enum class ENAMPhaseMulticoreWaitMode : int
   Off = 0,
   Sleep = 1,
   Spin = 2,
-  Hybrid = 3
+  Hybrid = 3,
+  SpinIdle = 4,
+  SpinSerial = 5
 };
 
 static inline ENAMPhaseMulticoreWaitMode NAMPhaseMulticoreWaitModeFromInt(int value)
 {
-  return static_cast<ENAMPhaseMulticoreWaitMode>(std::clamp(value, 0, 3));
+  return static_cast<ENAMPhaseMulticoreWaitMode>(std::clamp(value, 0, 5));
 }
 
 struct NAMPhaseMulticoreRuntimeConfig
@@ -643,6 +645,53 @@ public:
     mJobInvoker = nullptr;
   }
 
+  template <typename Fn>
+  void RunSingleWorker(Fn&& fn)
+  {
+    if (mWorkers.empty())
+    {
+      fn();
+      return;
+    }
+
+    if (!mActive.load(std::memory_order_acquire))
+      SetActive(true);
+
+    using JobType = std::remove_reference_t<Fn>;
+    JobType job = std::forward<Fn>(fn);
+
+    mJobContext = &job;
+    mJobInvoker = [](void* context, int) {
+      (*static_cast<JobType*>(context))();
+    };
+    // Job index zero belongs to the audio thread, so publishing two jobs wakes
+    // exactly worker 1 while the audio thread only waits at the barrier.
+    mJobCount = 2;
+    mCompletedWorkers.store(0, std::memory_order_relaxed);
+    mGeneration.fetch_add(1, std::memory_order_release);
+    mCV.notify_all();
+
+    int spins = 0;
+    while (mCompletedWorkers.load(std::memory_order_acquire) < 1)
+    {
+      NAMPhaseMulticoreRealtimePause();
+      if (++spins >= 16384)
+      {
+        spins = 0;
+#if defined(_WIN32)
+        int observed = mCompletedWorkers.load(std::memory_order_acquire);
+        if (observed < 1)
+          WaitOnAddress(&mCompletedWorkers, &observed, sizeof(observed), 1);
+#else
+        std::this_thread::yield();
+#endif
+      }
+    }
+
+    mJobContext = nullptr;
+    mJobInvoker = nullptr;
+  }
+
 private:
   void WorkerLoop(int workerJobIndex)
   {
@@ -680,8 +729,12 @@ private:
           return;
 
         const auto waitMode = NAMPhaseMulticoreWaitModeFromInt(mWaitMode.load(std::memory_order_acquire));
-        const bool warmWorker =
+        const bool fullSpinMode =
           waitMode == ENAMPhaseMulticoreWaitMode::Spin
+          || waitMode == ENAMPhaseMulticoreWaitMode::SpinIdle
+          || waitMode == ENAMPhaseMulticoreWaitMode::SpinSerial;
+        const bool warmWorker =
+          fullSpinMode
           || (waitMode == ENAMPhaseMulticoreWaitMode::Hybrid
               && workerJobIndex <= mHybridWarmWorkerCount);
 
@@ -1334,19 +1387,41 @@ private:
     if (rightNeedsDeinterleave)
       right.DeinterleavePhaseInputsUnlocked(rightResampledInput, resampledFrames);
 
-    pool->ParallelFor(jobCount, [this,
-                                 &right,
-                                 leftResampledInput,
-                                 rightResampledInput,
-                                 resampledFrames,
-                                 jobCount,
-                                 leftNeedsDeinterleave,
-                                 rightNeedsDeinterleave](int jobIndex) {
+    const auto waitMode = NAMPhaseMulticoreWaitModeFromInt(mPhaseMulticoreWaitMode);
+    auto processLane = [this,
+                        &right,
+                        leftResampledInput,
+                        rightResampledInput,
+                        resampledFrames,
+                        jobCount,
+                        leftNeedsDeinterleave,
+                        rightNeedsDeinterleave](int jobIndex) {
       ProcessPhaseLaneBufferedUnlocked(
         leftResampledInput, resampledFrames, jobIndex, jobCount, leftNeedsDeinterleave);
       right.ProcessPhaseLaneBufferedUnlocked(
         rightResampledInput, resampledFrames, jobIndex, jobCount, rightNeedsDeinterleave);
-    });
+    };
+
+    if (waitMode == ENAMPhaseMulticoreWaitMode::SpinIdle)
+    {
+      // Keep the full spin pool alive, but run every phase lane sequentially on
+      // the host audio thread. No generation is published to the workers.
+      for (int jobIndex = 0; jobIndex < jobCount; ++jobIndex)
+        processLane(jobIndex);
+    }
+    else if (waitMode == ENAMPhaseMulticoreWaitMode::SpinSerial)
+    {
+      // Exercise the pool wake/barrier path, but let exactly one worker process
+      // all phase lanes so there is no parallel NAM computation.
+      pool->RunSingleWorker([&processLane, jobCount] {
+        for (int jobIndex = 0; jobIndex < jobCount; ++jobIndex)
+          processLane(jobIndex);
+      });
+    }
+    else
+    {
+      pool->ParallelFor(jobCount, processLane);
+    }
 
     ReinterleavePhaseOutputsUnlocked(leftResampledOutput, resampledFrames);
     right.ReinterleavePhaseOutputsUnlocked(rightResampledOutput, resampledFrames);
@@ -1383,10 +1458,32 @@ private:
     if (needsDeinterleave)
       DeinterleavePhaseInputsUnlocked(resampledInput, resampledFrames);
 
-    pool->ParallelFor(jobCount, [this, resampledInput, resampledFrames, jobCount, needsDeinterleave](int jobIndex) {
+    const auto waitMode = NAMPhaseMulticoreWaitModeFromInt(mPhaseMulticoreWaitMode);
+    auto processLane = [this, resampledInput, resampledFrames, jobCount, needsDeinterleave](int jobIndex) {
       ProcessPhaseLaneBufferedUnlocked(
         resampledInput, resampledFrames, jobIndex, jobCount, needsDeinterleave);
-    });
+    };
+
+    if (waitMode == ENAMPhaseMulticoreWaitMode::SpinIdle)
+    {
+      // Workers remain in the Spin wait policy while the audio thread executes
+      // every phase lane serially. This isolates idle worker EMI from parallel work.
+      for (int jobIndex = 0; jobIndex < jobCount; ++jobIndex)
+        processLane(jobIndex);
+    }
+    else if (waitMode == ENAMPhaseMulticoreWaitMode::SpinSerial)
+    {
+      // Publish one pool generation and process every phase lane on worker 1.
+      // The audio thread participates only in the completion barrier.
+      pool->RunSingleWorker([&processLane, jobCount] {
+        for (int jobIndex = 0; jobIndex < jobCount; ++jobIndex)
+          processLane(jobIndex);
+      });
+    }
+    else
+    {
+      pool->ParallelFor(jobCount, processLane);
+    }
 
     ReinterleavePhaseOutputsUnlocked(resampledOutput, resampledFrames);
   }

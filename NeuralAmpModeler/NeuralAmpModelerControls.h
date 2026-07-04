@@ -1680,7 +1680,8 @@ class PhaseMulticoreControl : public NAMOversamplingRadioButtonControl
 public:
   PhaseMulticoreControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
                         EDirection direction = EDirection::Vertical)
-  : NAMOversamplingRadioButtonControl(bounds, paramIdx, {"OFF", "SLEEP", "SPIN", "HYBRID"}, style,
+  : NAMOversamplingRadioButtonControl(bounds, paramIdx,
+                                      {"OFF", "SLEEP", "SPIN", "HYBRID", "IDLE", "SERIAL"}, style,
                                       buttonSize, direction) {};
 };
 
@@ -2265,6 +2266,11 @@ public:
     const auto rowLabelStyle = mStyle.WithDrawFrame(false).WithValueText(rowLabelText);
     const auto radioButtonStyle =
       mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));
+    // Six diagnostic states share one row. Use a smaller label and button only
+    // for this control so the options remain inside the oversampling page.
+    const auto multicoreButtonStyle =
+      radioButtonStyle.WithValueText(radioButtonStyle.valueText.WithSize(radioButtonStyle.valueText.mSize - 1.5f));
+    const float multicoreButtonSize = 8.0f;
 
     AddNamedChildControl(new IBitmapControl(page, mBitmap), mControlNames.bitmap)->SetIgnoreMouse(true);
     AddNamedChildControl(new IVLabelControl(titleArea, "OVERSAMPLING", titleStyle), mControlNames.title);
@@ -2301,11 +2307,13 @@ public:
     filterPhaseControl->SetTooltip("Realtime anti-alias filter phase");
 
     auto* phaseMulticoreControl =
-      AddNamedChildControl(new PhaseMulticoreControl(realtimeMulticoreArea, kPhaseMulticoreEnabled, radioButtonStyle,
-                                                     buttonSize, EDirection::Horizontal),
+      AddNamedChildControl(new PhaseMulticoreControl(realtimeMulticoreArea, kPhaseMulticoreEnabled,
+                                                     multicoreButtonStyle, multicoreButtonSize,
+                                                     EDirection::Horizontal),
                            mControlNames.phaseMulticore, kCtrlTagPhaseMulticoreEnabled);
     phaseMulticoreControl->SetTooltip(
-      "Phase worker wait mode. Sleep parks all workers; Spin polls aggressively; Hybrid keeps three workers warm.");
+      "Phase worker diagnostic mode. Idle keeps Spin workers alive but runs all phases on the audio thread; "
+      "Serial runs all phases on one worker through the pool barrier.");
 
     auto* phaseThreadsControl =
       AddNamedChildControl(new PhaseThreadControl(realtimeThreadsArea, kPhaseMulticoreThreadCount, radioButtonStyle,
