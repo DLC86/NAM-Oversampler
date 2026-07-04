@@ -23,9 +23,26 @@ jobs:
         with:
           ref: diagnostic/phase-worker-wait-modes
           fetch-depth: 0
+          show-progress: false
 
       - name: Apply IDLE and SERIAL diagnostics
-        run: python3 .github/scripts/add_phase_wait_diagnostics.py
+        id: patch
+        shell: bash
+        run: |
+          set +e
+          python3 .github/scripts/add_phase_wait_diagnostics.py > /tmp/phase-patch.log 2>&1
+          status=$?
+          cat /tmp/phase-patch.log
+          if [ "$status" -ne 0 ]; then
+            git reset --hard HEAD
+            cp /tmp/phase-patch.log .github/diagnostic-patch-error.txt
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add .github/diagnostic-patch-error.txt
+            git commit -m 'Record diagnostic patch error'
+            git push origin HEAD:diagnostic/phase-worker-wait-modes
+            exit "$status"
+          fi
 
       - name: Validate patch
         shell: bash
@@ -42,6 +59,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -f .github/diagnostic-patch-error.txt
           rm .github/scripts/add_phase_wait_diagnostics.py
           rm .github/workflows/apply-second-phase-wait-diagnostics.yml
           git config user.name 'github-actions[bot]'
