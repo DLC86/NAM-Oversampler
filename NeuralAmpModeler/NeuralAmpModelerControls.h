@@ -2680,30 +2680,31 @@ public:
                              mControlNames.midiChannel);
       midiChannelControl->SetTooltip("MIDI channel used for internal preset Program Change and assigned CCs.");
 
-      const auto highlightColorArea =
-        IRECT(inputArea.MW() - 75.0f, inputArea.T + 42.0f, inputArea.MW() + 75.0f, inputArea.T + 72.0f);
-      auto highlightColorStyle = mRadioButtonStyle.WithColor(kX1, PluginColors::GetThemeColor());
-      auto* highlightColorControl = AddNamedChildControl(
-        new IVColorSwatchControl(
-          highlightColorArea, "Highlight Color",
-          [this](int, IColor color) {
-            WDL_String colorCodeStr;
-            colorCodeStr.SetFormatted(16, "#%06x", color.ToColorCode());
-            GetDelegate()->SendArbitraryMsgFromUI(kMsgTagHighlightColor, kNoTag, colorCodeStr.GetLength(),
-                                                  colorCodeStr.Get());
-          },
-          highlightColorStyle, IVColorSwatchControl::ECellLayout::kHorizontal, {kX1}, {""}),
-        mControlNames.highlightColor);
-      highlightColorControl->SetTooltip("Choose the global highlight color used by red-accent controls.");
+      // Attach highlight color controls
+      const auto colorArea =
+        titleArea.GetFromTop(0.5f * height).GetFromLeft(0.5f * width).GetTranslated(0.0f, 47.0f).GetHPadded(-12.0f);
+      const auto highlightArea = colorArea.GetFromLeft(0.225f * width).GetHPadded(-25.0f).GetVPadded(-15.0f);
+      const auto trackColorArea = colorArea.GetFromRight(0.22f * width).GetHPadded(-16.0f).GetVPadded(-15.0f);
 
-      const auto followTrackColorArea =
-        IRECT(inputArea.MW() - 55.0f, inputArea.T + 78.0f, inputArea.MW() + 55.0f, inputArea.T + 78.0f + NAM_SWTICH_HEIGHT);
-      auto* followTrackColorControl =
-        AddNamedChildControl(new NAMSwitchControl(followTrackColorArea, kFollowTrackColor, "Follow Track Color",
-                                                 mStyle, mSwitchBitmap),
-                             mControlNames.followTrackColor);
-      followTrackColorControl->SetTooltip(
-        "Use the DAW track color as the plugin highlight color when the host provides it.");
+      AddNamedChildControl(
+        new IVColorSwatchControl(highlightArea, "Highlight Color",
+                                 [this](int, IColor color) {
+                                   WDL_String colorCodeStr;
+                                   color.ToColorCodeStr(colorCodeStr, false);
+                                   GetDelegate()->SendArbitraryMsgFromUI(kMsgTagHighlightColor, kNoTag,
+                                                                         colorCodeStr.GetLength(),
+                                                                         colorCodeStr.Get());
+                                 },
+                                 mStyle.WithLabelText(IText(DEFAULT_TEXT_SIZE, COLOR_WHITE)),
+                                 IVColorSwatchControl::ECellLayout::kHorizontal, {kX1}, {""}),
+        mControlNames.highlightColor)
+        ->SetTooltip("Choose the global highlight color used by red-accent controls.");
+
+      AddNamedChildControl(new IVToggleControl(trackColorArea, kFollowTrackColor, "Follow Track Color",
+                                               style.WithLabelText(IText(DEFAULT_TEXT_SIZE, COLOR_WHITE))
+                                                 .WithColor(kFG, PluginColors::NAM_0)),
+                           mControlNames.followTrackColor)
+        ->SetTooltip("Use the DAW track color as the plugin highlight color when the host provides it.");
     }
 
     const float halfWidth = PLUG_WIDTH / 2.0f - pad;
