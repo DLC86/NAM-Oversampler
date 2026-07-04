@@ -14,7 +14,6 @@ permissions:
 
 jobs:
   apply:
-    # The workflow is intentionally self-removing after applying the source patch.
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
@@ -25,43 +24,23 @@ jobs:
           fetch-depth: 0
           show-progress: false
 
-      - name: Fix oversampling-page style selector
+      - name: Temporarily disambiguate UI style anchor
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          path = Path('.github/scripts/add_phase_wait_diagnostics.py')
+          path = Path('NeuralAmpModeler/NeuralAmpModelerControls.h')
           text = path.read_text(encoding='utf-8')
-          old = '''controls = replace_once(
-              controls,
-              \'\'\'    const auto radioButtonStyle =
-                mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));\'\'\',
-              \'\'\'    const auto radioButtonStyle =
-                mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));
-              // Six diagnostic states share one row. Use a smaller label and button only
-              // for this control so the options remain inside the oversampling page.
-              const auto multicoreButtonStyle =
-                radioButtonStyle.WithValueText(radioButtonStyle.valueText.WithSize(radioButtonStyle.valueText.mSize - 1.5f));
-              const float multicoreButtonSize = 8.0f;\'\'\',
-              'compact multicore style',
-          )'''
-          new = '''compact_style_old = \'\'\'    const auto radioButtonStyle =
-            mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));\'\'\'
-          compact_style_new = \'\'\'    const auto radioButtonStyle =
-            mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));
-          // Six diagnostic states share one row. Use a smaller label and button only
-          // for this control so the options remain inside the oversampling page.
-          const auto multicoreButtonStyle =
-            radioButtonStyle.WithValueText(radioButtonStyle.valueText.WithSize(radioButtonStyle.valueText.mSize - 1.5f));
-          const float multicoreButtonSize = 8.0f;\'\'\'
-          compact_style_index = controls.rfind(compact_style_old)
-          if compact_style_index < 0:
-              raise RuntimeError('Oversampling compact style anchor not found')
-          controls = (controls[:compact_style_index] + compact_style_new
-                      + controls[compact_style_index + len(compact_style_old):])'''
-          if old not in text:
-              raise RuntimeError('Patch-script style block not found')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          old = '''    const auto radioButtonStyle =
+            mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));'''
+          guarded = '''    // TEMP_PHASE_WAIT_STYLE_GUARD
+          const auto radioButtonStyle = mRadioButtonStyle.WithValueText(
+            mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));'''
+          first = text.find(old)
+          second = text.find(old, first + len(old)) if first >= 0 else -1
+          if first < 0 or second < 0:
+            raise RuntimeError('Expected two shared radio-button style anchors')
+          path.write_text(text[:first] + guarded + text[first + len(old):], encoding='utf-8')
           PY
 
       - name: Apply IDLE and SERIAL diagnostics
@@ -83,6 +62,23 @@ jobs:
             exit "$status"
           fi
 
+      - name: Restore guarded UI style
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('NeuralAmpModeler/NeuralAmpModelerControls.h')
+          text = path.read_text(encoding='utf-8')
+          guarded = '''    // TEMP_PHASE_WAIT_STYLE_GUARD
+          const auto radioButtonStyle = mRadioButtonStyle.WithValueText(
+            mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));'''
+          original = '''    const auto radioButtonStyle =
+            mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));'''
+          if text.count(guarded) != 1:
+            raise RuntimeError('Temporary style guard missing after patch')
+          path.write_text(text.replace(guarded, original, 1), encoding='utf-8')
+          PY
+
       - name: Validate patch
         shell: bash
         run: |
@@ -93,6 +89,7 @@ jobs:
           grep -q 'void RunSingleWorker' NeuralAmpModeler/NeuralAmpModeler.h
           grep -q '"IDLE", "SERIAL"' NeuralAmpModeler/NeuralAmpModeler.cpp
           grep -q 'multicoreButtonSize = 8.0f' NeuralAmpModeler/NeuralAmpModelerControls.h
+          ! grep -q 'TEMP_PHASE_WAIT_STYLE_GUARD' NeuralAmpModeler/NeuralAmpModelerControls.h
 
       - name: Commit implementation
         shell: bash
