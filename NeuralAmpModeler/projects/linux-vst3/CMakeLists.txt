@@ -82,7 +82,6 @@ target_include_directories(NAMOnSteroids
   PRIVATE
     "${PLUGIN_ROOT}"
     "${IPLUG2_ROOT}"
-    "${IPLUG2_ROOT}/IGraphics"
     "${IPLUG2_ROOT}/IPlug"
     "${IPLUG2_ROOT}/IPlug/Extras"
     "${IPLUG2_ROOT}/IPlug/VST3"

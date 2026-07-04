@@ -26,10 +26,13 @@
 
 #include "ToneStack.h"
 #include "Tuner.h"
-#include "Colors.h"
 
 #include "IPlug_include_in_plug_hdr.h"
 #include "ISender.h"
+
+#if PLUG_HAS_UI
+  #include "Colors.h"
+#endif
 
 #include <algorithm>
 #include <atomic>
