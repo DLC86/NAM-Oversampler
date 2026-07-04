@@ -34,24 +34,52 @@ Click on the logo in the upper-left corner, the Oversampling menu will appear an
 It also includes selectable anti-alias filter phase modes, separate for realtime and offline rendering:
 
 - Minimum Phase (0 latency)
-- Linear Phase short (1.6 ms max latency at 48 kHz)
-- Linear Phase Long (6 ms max latency at 48 kHz)
+- Linear Phase short (1.6 ms latency at 48 kHz)
+- Linear Phase Long (10 ms latency at 48 kHz)
 
-## Pre/post EQ
+## Multi-core
 
-This fork adds a switch to move the EQ pre or post NAM.
+When using oversampling, the load on the CPU can be split to all available cores so you can use high oversampling rates without impacting the performance of your machine.
 
 ## Stereo processing
 
-This fork adds a little button (below the input gain control) to choose between mono and stereo processing. For the moment it just uses the same NAM model and IR for both channels, but in the future I'll add the possibility to load two different models and IRs.
+This fork adds a little button (below the output level control) to choose between mono and stereo processing. For the moment it just uses the same NAM model and IR for both channels, but in the future I'll add the possibility to load two different models and IRs or link them to replicate the current behaviour.
+
+## Customizable tonestacks
+
+The behaviour of the EQ controls can be changed by selecting a different tonestack, the available types are based on schematics of popular amps, pedals and outboard gear.
+They can also be tweaked by changing component values in the Tonestack page (click on the Tonestack label to access it).
+
+## Pre/post EQ
+
+This fork adds a switch to move the EQ pre or post NAM, so you can sculpt the tone before or after distortion
+
+## Filters
+
+Low cut and high cut filters with independent slope control and pre/post switch. The filters page can be accessed by clicking on the red icon in the bottom-right corner.
+
+## Boost
+
+12 dB of additional input gain which can be added by engaging the Boost switch.
 
 ## Noise gate position
 
-This fork also changes the input/gate staging.
-
-The noise gate trigger now works before the input gain control is applied. The input gain is applied after the gate trigger stage and before the NAM model.
+The noise gate trigger, unlike NeuralAmpModelerPlugin, works before the input gain control is applied. The input gain is applied after the gate trigger stage and before the NAM model.
 
 This keeps the gate behavior less affected by input gain changes while preserving the post-NAM gate gain stage.
+
+## Presets
+
+128 internal presets that can be freely named and recall all parameters except those in the Oversampling and Settings pages.
+
+## MIDI support
+
+Presets can be recalled via Program Change messages (PC #000 recalls preset #001), Control Change messages can be assigned to most parameters either manually or via the learn function (right-click on the parameter to assign/learn the CC).
+
+## Theme color
+
+You can customize the color of all lit-up elements via the theme color selector in the Settings page.
+You can also make the color automatically be the same as the color of the track on your DAW by enabling "Follow Track Color"
 
 ## Tuner
 
