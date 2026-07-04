@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - diagnostic/phase-worker-wait-modes
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -15,9 +18,10 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Check out branch
+      - name: Check out diagnostic branch
         uses: actions/checkout@v4
         with:
+          ref: diagnostic/phase-worker-wait-modes
           fetch-depth: 0
 
       - name: Apply IDLE and SERIAL diagnostics
@@ -45,4 +49,4 @@ jobs:
           git add -A
           git diff --cached --check
           git commit -m 'Add idle and serial multicore diagnostics'
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git push origin HEAD:diagnostic/phase-worker-wait-modes
