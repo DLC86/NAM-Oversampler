@@ -262,9 +262,22 @@ static inline void NAMConfigurePhaseWorkerThread(int workerJobIndex)
 }
 
 
+enum class ENAMPhaseMulticoreWaitMode : int
+{
+  Off = 0,
+  Sleep = 1,
+  Spin = 2,
+  Hybrid = 3
+};
+
+static inline ENAMPhaseMulticoreWaitMode NAMPhaseMulticoreWaitModeFromInt(int value)
+{
+  return static_cast<ENAMPhaseMulticoreWaitMode>(std::clamp(value, 0, 3));
+}
+
 struct NAMPhaseMulticoreRuntimeConfig
 {
-  std::atomic<bool> enabled {true};
+  std::atomic<int> waitMode {static_cast<int>(ENAMPhaseMulticoreWaitMode::Sleep)};
   // 0 = Smart Auto. Positive values are exact requested total threads including the audio thread.
   std::atomic<int> requestedThreads {0};
   std::atomic<int> reserveThreads {4};
@@ -408,16 +421,21 @@ static inline int NAMPhaseMulticoreSmartAutoThreadCount()
   return total;
 }
 
-static inline void NAMSetPhaseMulticoreRuntimeSettings(bool enabled, int requestedThreads, int reserveThreads = 4)
+static inline void NAMSetPhaseMulticoreRuntimeSettings(int waitMode, int requestedThreads, int reserveThreads = 4)
 {
-  NAMPhaseMulticoreConfig().enabled.store(enabled);
+  NAMPhaseMulticoreConfig().waitMode.store(static_cast<int>(NAMPhaseMulticoreWaitModeFromInt(waitMode)));
   NAMPhaseMulticoreConfig().requestedThreads.store(NAMPhaseMulticoreClampInt(requestedThreads, 0, 64));
   NAMPhaseMulticoreConfig().reserveThreads.store(NAMPhaseMulticoreClampInt(reserveThreads, 1, 64));
 }
 
+static inline ENAMPhaseMulticoreWaitMode NAMPhaseMulticoreRuntimeWaitMode()
+{
+  return NAMPhaseMulticoreWaitModeFromInt(NAMPhaseMulticoreConfig().waitMode.load());
+}
+
 static inline bool NAMPhaseMulticoreRuntimeEnabled()
 {
-  return NAMPhaseMulticoreConfig().enabled.load();
+  return NAMPhaseMulticoreRuntimeWaitMode() != ENAMPhaseMulticoreWaitMode::Off;
 }
 
 static inline int NAMPhaseMulticoreConfiguredThreadCount()
@@ -460,9 +478,16 @@ static inline void NAMPhaseMulticoreRealtimePause()
 class NAMPhaseMulticorePool
 {
 public:
-  explicit NAMPhaseMulticorePool(int totalThreads)
+  explicit NAMPhaseMulticorePool(int totalThreads, ENAMPhaseMulticoreWaitMode waitMode)
+  : mWaitMode(static_cast<int>(waitMode))
   {
     const int workerCount = std::max(0, totalThreads - 1);
+    mHybridWarmWorkerCount = NAMPhaseMulticoreEnvInt(
+      "NAM_PHASE_MULTICORE_HYBRID_WARM_WORKERS", std::min(3, workerCount), 0, workerCount);
+    mHybridColdSpinLimit = NAMPhaseMulticoreEnvInt(
+      "NAM_PHASE_MULTICORE_HYBRID_COLD_SPINS", 4096, 0, 1048576);
+    mSpinSafetyLimit = NAMPhaseMulticoreEnvInt(
+      "NAM_PHASE_MULTICORE_SPIN_SAFETY_LIMIT", 262144, 1024, 4194304);
     mWorkers.reserve(static_cast<size_t>(workerCount));
 
     // Worker job indices start at 1. The audio thread always runs job 0.
@@ -501,6 +526,14 @@ public:
   {
     const bool previous = mActive.exchange(active, std::memory_order_acq_rel);
     if (previous != active)
+      mCV.notify_all();
+  }
+
+  void SetWaitMode(ENAMPhaseMulticoreWaitMode waitMode)
+  {
+    const int normalized = static_cast<int>(waitMode);
+    const int previous = mWaitMode.exchange(normalized, std::memory_order_acq_rel);
+    if (previous != normalized)
       mCV.notify_all();
   }
 
@@ -646,34 +679,46 @@ private:
         if (mStop.load(std::memory_order_acquire))
           return;
 
-#if defined(__APPLE__)
-        // Avoid a kernel wake-up on every tiny audio block. The timed sleep is
-        // only a fallback for stopped or inactive playback. Apple Silicon can
-        // spin longer because the AudioWorkgroup/P-core path is very effective;
-        // Intel Macs get a shorter spin to reduce condition_variable wake
-        // latency without burning an entire hyper-thread while transport is idle.
-        const int spinLimit = NAMPhaseMulticoreIsAppleSilicon() ? 262144 : 32768;
+        const auto waitMode = NAMPhaseMulticoreWaitModeFromInt(mWaitMode.load(std::memory_order_acquire));
+        const bool warmWorker =
+          waitMode == ENAMPhaseMulticoreWaitMode::Spin
+          || (waitMode == ENAMPhaseMulticoreWaitMode::Hybrid
+              && workerJobIndex <= mHybridWarmWorkerCount);
+
+        int spinLimit = 0;
+        if (warmWorker)
+          spinLimit = mSpinSafetyLimit;
+        else if (waitMode == ENAMPhaseMulticoreWaitMode::Hybrid)
+          spinLimit = mHybridColdSpinLimit;
+
         if (idleSpins++ < spinLimit)
         {
           NAMPhaseMulticoreRealtimePause();
           continue;
         }
 
-        std::unique_lock<std::mutex> lock(mMutex);
-        mCV.wait_for(lock, std::chrono::microseconds(500), [this, seenGeneration] {
+        auto wakePredicate = [this, seenGeneration, waitMode] {
           return mStop.load(std::memory_order_acquire)
                  || !mActive.load(std::memory_order_acquire)
-                 || mGeneration.load(std::memory_order_acquire) != seenGeneration;
-        });
+                 || mGeneration.load(std::memory_order_acquire) != seenGeneration
+                 || NAMPhaseMulticoreWaitModeFromInt(mWaitMode.load(std::memory_order_acquire)) != waitMode;
+        };
+
+        std::unique_lock<std::mutex> lock(mMutex);
+        if (warmWorker)
+        {
+          // Diagnostic Spin and the warm subset of Hybrid poll aggressively
+          // between live blocks, with a short periodic park so stopped transport
+          // cannot leave high-priority workers burning a core indefinitely.
+          mCV.wait_for(lock, std::chrono::microseconds(500), wakePredicate);
+        }
+        else
+        {
+          // Sleep parks immediately. Hybrid cold workers perform the short spin
+          // above and then park until the next generation is published.
+          mCV.wait(lock, wakePredicate);
+        }
         idleSpins = 0;
-#else
-        std::unique_lock<std::mutex> lock(mMutex);
-        mCV.wait(lock, [this, seenGeneration] {
-          return mStop.load(std::memory_order_acquire)
-                 || !mActive.load(std::memory_order_acquire)
-                 || mGeneration.load(std::memory_order_acquire) != seenGeneration;
-        });
-#endif
         continue;
       }
 
@@ -730,8 +775,12 @@ private:
   int mJobCount = 0;
   std::atomic<int> mCompletedWorkers {0};
   std::atomic<unsigned> mGeneration {0};
+  std::atomic<int> mWaitMode {static_cast<int>(ENAMPhaseMulticoreWaitMode::Sleep)};
   std::atomic<bool> mActive {true};
   std::atomic<bool> mStop {false};
+  int mHybridWarmWorkerCount = 0;
+  int mHybridColdSpinLimit = 4096;
+  int mSpinSafetyLimit = 262144;
 #if defined(__APPLE__) && NAM_HAS_AUDIO_WORKGROUP
   os_workgroup_t mAudioWorkgroup = nullptr;
   int mRecommendedThreadCount = 1;
@@ -856,11 +905,12 @@ public:
       ResetUnlocked(mExternalSampleRate, mMaxExternalBlockSize);
   };
 
-  void SetPhaseMulticoreSettings(bool enabled, int requestedThreads)
+  void SetPhaseMulticoreSettings(int waitMode, int requestedThreads)
   {
     mPendingPhaseMulticoreThreads.store(
       NAMPhaseMulticoreClampInt(requestedThreads, 0, 64), std::memory_order_relaxed);
-    mPendingPhaseMulticoreEnabled.store(enabled ? 1 : 0, std::memory_order_release);
+    mPendingPhaseMulticoreWaitMode.store(
+      static_cast<int>(NAMPhaseMulticoreWaitModeFromInt(waitMode)), std::memory_order_release);
   }
 
   void SetAudioWorkgroup(void* workgroup)
@@ -1002,14 +1052,14 @@ private:
 
   void ApplyPendingPhaseMulticoreSettingsUnlocked()
   {
-    const int pendingEnabled = mPendingPhaseMulticoreEnabled.exchange(-1, std::memory_order_acquire);
-    if (pendingEnabled < 0)
+    const int pendingWaitMode = mPendingPhaseMulticoreWaitMode.exchange(-1, std::memory_order_acquire);
+    if (pendingWaitMode < 0)
       return;
 
-    mPhaseMulticoreEnabled = pendingEnabled != 0;
+    mPhaseMulticoreWaitMode = static_cast<int>(NAMPhaseMulticoreWaitModeFromInt(pendingWaitMode));
     mPhaseMulticoreRequestedThreads =
       NAMPhaseMulticoreClampInt(mPendingPhaseMulticoreThreads.load(std::memory_order_relaxed), 0, 64);
-    NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabled, mPhaseMulticoreRequestedThreads, 4);
+    NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreWaitMode, mPhaseMulticoreRequestedThreads, 4);
 
     if (mEncapsulated)
       ResetUnlocked(mExternalSampleRate, mMaxExternalBlockSize);
@@ -1026,7 +1076,8 @@ private:
     // keep one continuous high-rate state and therefore use the single-model
     // path even when multicore is enabled.
     return resamplingActive && mRequestedOversamplingFactor >= 2 && timeScale >= 2 && !mModelPath.empty()
-           && mPhaseMulticoreEnabled && mEncapsulated && mEncapsulated->SupportsStridedProcess();
+           && NAMPhaseMulticoreWaitModeFromInt(mPhaseMulticoreWaitMode) != ENAMPhaseMulticoreWaitMode::Off
+           && mEncapsulated && mEncapsulated->SupportsStridedProcess();
   }
 
   int PhaseMulticoreThreadCountUnlocked() const
@@ -1069,10 +1120,15 @@ private:
     // Keep only one live pool per model instance. The previous cache retained
     // every historical thread count, leaving multiple high-priority worker
     // groups alive after parameter changes and increasing host wake contention.
+    const auto waitMode = NAMPhaseMulticoreWaitModeFromInt(mPhaseMulticoreWaitMode);
     if (!mPhasePool || mPhasePoolThreadCount != clampedThreads)
     {
-      mPhasePool = std::make_shared<NAMPhaseMulticorePool>(clampedThreads);
+      mPhasePool = std::make_shared<NAMPhaseMulticorePool>(clampedThreads, waitMode);
       mPhasePoolThreadCount = clampedThreads;
+    }
+    else
+    {
+      mPhasePool->SetWaitMode(waitMode);
     }
 
     return mPhasePool;
@@ -1171,6 +1227,7 @@ private:
   {
     return mPhaseMulticoreActive && right.mPhaseMulticoreActive && mPhaseCount > 1
            && mPhaseCount == right.mPhaseCount
+           && mPhaseMulticoreWaitMode == right.mPhaseMulticoreWaitMode
            && PhaseMulticoreThreadCountUnlocked() == right.PhaseMulticoreThreadCountUnlocked()
            && mResamplingContainer != nullptr && right.mResamplingContainer != nullptr
            && mResamplingContainer->HasSingleProcessCallbackPerBlock()
@@ -1376,9 +1433,9 @@ double GetRenderingSampleRate(double externalSampleRate) const
   int mRequestedOversamplingFactor = 1;
   int mAppliedModelTimeScale = -1;
   dsp::EAntiAliasFilterPhase mAntiAliasFilterPhase = dsp::EAntiAliasFilterPhase::MinimumPhaseCascadedFIR;
-  bool mPhaseMulticoreEnabled = true;
+  int mPhaseMulticoreWaitMode = static_cast<int>(ENAMPhaseMulticoreWaitMode::Sleep);
   int mPhaseMulticoreRequestedThreads = 0; // 0 = Smart Auto
-  std::atomic<int> mPendingPhaseMulticoreEnabled {-1};
+  std::atomic<int> mPendingPhaseMulticoreWaitMode {-1};
   std::atomic<int> mPendingPhaseMulticoreThreads {0};
   double mExternalSampleRate = 48000.0;
 };
@@ -1626,7 +1683,7 @@ private:
   int _GetAntiAliasFilterPhaseIndex() const;
   int _GetPhaseMulticoreThreadCountFromParam() const;
   void _SetPhaseMulticoreSettingsFromParams();
-  void _ApplyImmediatePhaseMulticoreSettings(bool enabled, int requestedThreads);
+  void _ApplyImmediatePhaseMulticoreSettings(int waitMode, int requestedThreads);
   void _StartRealtimeDSPTransition();
   void _ApplyActiveDSPSettings(bool allowSmoothRealtimeTransition);
   void _ApplyImmediateDSPSettings(int oversamplingFactor, int filterPhaseIndex);
@@ -1746,7 +1803,8 @@ private:
   int mAppliedAntiAliasFilterPhase = 0;
   std::atomic<int> mAntiAliasFilterPhaseIndex = 0;
   std::atomic<int> mOfflineAntiAliasFilterPhaseIndex = 2;
-  std::atomic<bool> mPhaseMulticoreEnabledParam = true;
+  std::atomic<int> mPhaseMulticoreWaitModeParam {
+    static_cast<int>(ENAMPhaseMulticoreWaitMode::Sleep)};
   std::atomic<int> mPhaseMulticoreRequestedThreadsParam = 0; // 0 = Smart Auto
   std::atomic<void*> mAudioWorkgroup {nullptr};
   NAMTunerDetector mTunerDetector;
@@ -1761,7 +1819,7 @@ private:
   std::atomic<bool> mStereoProcessing = false;
   std::atomic<int> mPendingOversamplingFactor = 0;
   std::atomic<int> mPendingAntiAliasFilterPhase = -1;
-  std::atomic<int> mPendingPhaseMulticoreEnabled = -1;
+  std::atomic<int> mPendingPhaseMulticoreWaitMode = -1;
   std::atomic<int> mPendingPhaseMulticoreThreads = 0;
   bool mRealtimeDSPTransitionFadingOut = false;
   bool mRealtimeDSPTransitionFadingIn = false;

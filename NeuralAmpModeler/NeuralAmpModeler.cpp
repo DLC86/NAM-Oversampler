@@ -222,7 +222,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kOfflineOversamplingFactor)->InitEnum("Offline Oversampling", 0, {"OFF", "2x", "4x", "8x", "16x", "32x"});
   GetParam(kOfflineAntiAliasFilterPhase)
     ->InitEnum("Offline Filter Phase", 2, {"Minimum Phase", "Linear Phase (short)", "Linear Phase (long)"});
-  GetParam(kPhaseMulticoreEnabled)->InitBool("OS Multi-Core", true);
+  GetParam(kPhaseMulticoreEnabled)
+    ->InitEnum("OS Multi-Core", static_cast<int>(ENAMPhaseMulticoreWaitMode::Sleep),
+               {"OFF", "SLEEP", "SPIN", "HYBRID"});
   GetParam(kPhaseMulticoreThreadCount)
     ->InitEnum("OS Threads", 0, {"Auto", "2", "4", "8", "12", "16", "20", "24", "32"});
   GetParam(kTunerMute)->InitBool("Tuner Mute", true);
@@ -244,7 +246,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                    {"Omni", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13",
                                     "14", "15", "16"});
   GetParam(kFollowTrackColor)->InitBool("followTrackColor", false);
-  NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
+  NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreWaitModeParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
   MakeDefaultPreset("Default");
   _LoadGlobalInternalPresetBank();
 
@@ -1626,11 +1628,11 @@ void NeuralAmpModeler::OnReset()
 
   // Reset the model/IR first, then apply the active realtime/offline oversampling/filter settings.
   _ResetModelAndIR(sampleRate, GetBlockSize());
-  mPendingPhaseMulticoreEnabled.store(-1, std::memory_order_release);
+  mPendingPhaseMulticoreWaitMode.store(-1, std::memory_order_release);
   mRealtimeDSPTransitionFadingOut = false;
   mRealtimeDSPTransitionFadingIn = false;
   _ApplyImmediatePhaseMulticoreSettings(
-    mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load());
+    mPhaseMulticoreWaitModeParam.load(), mPhaseMulticoreRequestedThreadsParam.load());
   _ApplyActiveDSPSettings(false);
 
   mToneStack->Reset(sampleRate, maxBlockSize);
@@ -2464,40 +2466,42 @@ int NeuralAmpModeler::_GetPhaseMulticoreThreadCountFromParam() const
 
 void NeuralAmpModeler::_SetPhaseMulticoreSettingsFromParams()
 {
-  const bool enabled = GetParam(kPhaseMulticoreEnabled)->Bool();
+  const int waitMode = static_cast<int>(
+    NAMPhaseMulticoreWaitModeFromInt(GetParam(kPhaseMulticoreEnabled)->Int()));
   const int requestedThreads = _GetPhaseMulticoreThreadCountFromParam();
 
-  mPhaseMulticoreEnabledParam = enabled;
+  mPhaseMulticoreWaitModeParam = waitMode;
   mPhaseMulticoreRequestedThreadsParam = requestedThreads;
 
   // Staged models are not audible yet, so keep them ready without waiting for
   // the realtime transition.
   if (mStagedModel != nullptr)
-    mStagedModel->SetPhaseMulticoreSettings(enabled, requestedThreads);
+    mStagedModel->SetPhaseMulticoreSettings(waitMode, requestedThreads);
   if (mStagedModelRight != nullptr)
-    mStagedModelRight->SetPhaseMulticoreSettings(enabled, requestedThreads);
+    mStagedModelRight->SetPhaseMulticoreSettings(waitMode, requestedThreads);
 
   if (mModel == nullptr || GetRenderingOffline())
   {
-    _ApplyImmediatePhaseMulticoreSettings(enabled, requestedThreads);
+    _ApplyImmediatePhaseMulticoreSettings(waitMode, requestedThreads);
     return;
   }
 
   // Do not change the global runtime policy or queue a model reset until the
   // audible signal has reached the bottom of the fade-out.
   mPendingPhaseMulticoreThreads.store(requestedThreads, std::memory_order_relaxed);
-  mPendingPhaseMulticoreEnabled.store(enabled ? 1 : 0, std::memory_order_release);
+  mPendingPhaseMulticoreWaitMode.store(waitMode, std::memory_order_release);
   _StartRealtimeDSPTransition();
 }
 
-void NeuralAmpModeler::_ApplyImmediatePhaseMulticoreSettings(bool enabled, int requestedThreads)
+void NeuralAmpModeler::_ApplyImmediatePhaseMulticoreSettings(int waitMode, int requestedThreads)
 {
-  NAMSetPhaseMulticoreRuntimeSettings(enabled, requestedThreads, 4);
+  waitMode = static_cast<int>(NAMPhaseMulticoreWaitModeFromInt(waitMode));
+  NAMSetPhaseMulticoreRuntimeSettings(waitMode, requestedThreads, 4);
 
   if (mModel != nullptr)
-    mModel->SetPhaseMulticoreSettings(enabled, requestedThreads);
+    mModel->SetPhaseMulticoreSettings(waitMode, requestedThreads);
   if (mModelRight != nullptr)
-    mModelRight->SetPhaseMulticoreSettings(enabled, requestedThreads);
+    mModelRight->SetPhaseMulticoreSettings(waitMode, requestedThreads);
 
   _UpdateLatency();
 }
@@ -2580,11 +2584,11 @@ void NeuralAmpModeler::_PrepareRealtimeDSPTransition(const double sampleRate)
     if (pendingFactor > 0 && pendingFilterPhase >= 0)
       _ApplyImmediateDSPSettings(pendingFactor, pendingFilterPhase);
 
-    const int pendingMulticoreEnabled = mPendingPhaseMulticoreEnabled.exchange(-1, std::memory_order_acquire);
-    if (pendingMulticoreEnabled >= 0)
+    const int pendingMulticoreWaitMode = mPendingPhaseMulticoreWaitMode.exchange(-1, std::memory_order_acquire);
+    if (pendingMulticoreWaitMode >= 0)
     {
       const int pendingThreads = mPendingPhaseMulticoreThreads.load(std::memory_order_relaxed);
-      _ApplyImmediatePhaseMulticoreSettings(pendingMulticoreEnabled != 0, pendingThreads);
+      _ApplyImmediatePhaseMulticoreSettings(pendingMulticoreWaitMode, pendingThreads);
     }
 
     mRealtimeDSPTransitionFadingOut = false;
@@ -2597,7 +2601,7 @@ void NeuralAmpModeler::_PrepareRealtimeDSPTransition(const double sampleRate)
   // A thread/multicore change received during fade-in waits until that fade is
   // complete, then starts one clean fade-out on the following block.
   if (!mRealtimeDSPTransitionFadingOut && !mRealtimeDSPTransitionFadingIn
-      && mPendingPhaseMulticoreEnabled.load(std::memory_order_acquire) >= 0)
+      && mPendingPhaseMulticoreWaitMode.load(std::memory_order_acquire) >= 0)
     _StartRealtimeDSPTransition();
 }
 
@@ -2725,7 +2729,7 @@ std::unique_ptr<ResamplingNAM> NeuralAmpModeler::_CreateModel(const WDL_String& 
 
   std::unique_ptr<ResamplingNAM> temp = std::make_unique<ResamplingNAM>(std::move(model), GetSampleRate(), dspPath);
   temp->Reset(GetSampleRate(), GetBlockSize());
-  temp->SetPhaseMulticoreSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load());
+  temp->SetPhaseMulticoreSettings(mPhaseMulticoreWaitModeParam.load(), mPhaseMulticoreRequestedThreadsParam.load());
   temp->SetSlimmableSize(GetParam(kSlim)->Value());
 
   return temp;

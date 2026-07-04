@@ -1680,7 +1680,8 @@ class PhaseMulticoreControl : public NAMOversamplingRadioButtonControl
 public:
   PhaseMulticoreControl(const IRECT& bounds, int paramIdx, const IVStyle& style, float buttonSize,
                         EDirection direction = EDirection::Vertical)
-  : NAMOversamplingRadioButtonControl(bounds, paramIdx, {"OFF", "ON"}, style, buttonSize, direction) {};
+  : NAMOversamplingRadioButtonControl(bounds, paramIdx, {"OFF", "SLEEP", "SPIN", "HYBRID"}, style,
+                                      buttonSize, direction) {};
 };
 
 class PhaseThreadControl : public NAMOversamplingRadioButtonControl
@@ -2252,7 +2253,7 @@ public:
     const auto realtimeRadioArea = realtimeOSRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto realtimeFilterArea = realtimeFilterRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto realtimeMulticoreArea =
-      realtimeMulticoreRow.GetFromRight(rowsArea.W() - rowLabelWidth).GetFromLeft((rowsArea.W() - rowLabelWidth) / 3.0f);
+      realtimeMulticoreRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto realtimeThreadsArea = realtimeThreadsRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto offlineRadioArea = offlineOSRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto offlineFilterArea = offlineFilterRow.GetFromRight(rowsArea.W() - rowLabelWidth);
@@ -2303,7 +2304,8 @@ public:
       AddNamedChildControl(new PhaseMulticoreControl(realtimeMulticoreArea, kPhaseMulticoreEnabled, radioButtonStyle,
                                                      buttonSize, EDirection::Horizontal),
                            mControlNames.phaseMulticore, kCtrlTagPhaseMulticoreEnabled);
-    phaseMulticoreControl->SetTooltip("Enable phase-parallel oversampling multicore");
+    phaseMulticoreControl->SetTooltip(
+      "Phase worker wait mode. Sleep parks all workers; Spin polls aggressively; Hybrid keeps three workers warm.");
 
     auto* phaseThreadsControl =
       AddNamedChildControl(new PhaseThreadControl(realtimeThreadsArea, kPhaseMulticoreThreadCount, radioButtonStyle,
