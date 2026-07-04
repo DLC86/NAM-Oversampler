@@ -31,16 +31,15 @@ jobs:
           from pathlib import Path
           path = Path('NeuralAmpModeler/NeuralAmpModelerControls.h')
           text = path.read_text(encoding='utf-8')
-          old = '''    const auto radioButtonStyle =
-            mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));'''
-          guarded = '''    // TEMP_PHASE_WAIT_STYLE_GUARD
-          const auto radioButtonStyle = mRadioButtonStyle.WithValueText(
-            mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));'''
-          first = text.find(old)
-          second = text.find(old, first + len(old)) if first >= 0 else -1
+          needle = '''const auto radioButtonStyle =
+                mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));'''
+          first = text.find(needle)
+          second = text.find(needle, first + len(needle)) if first >= 0 else -1
           if first < 0 or second < 0:
-            raise RuntimeError('Expected two shared radio-button style anchors')
-          path.write_text(text[:first] + guarded + text[first + len(old):], encoding='utf-8')
+            raise RuntimeError(f'Expected two shared style anchors, found first={first}, second={second}')
+          guarded = needle.replace('mRadioButtonStyle.WithValueText',
+                                   '/* TEMP_PHASE_WAIT_STYLE_GUARD */ mRadioButtonStyle.WithValueText', 1)
+          path.write_text(text[:first] + guarded + text[first + len(needle):], encoding='utf-8')
           PY
 
       - name: Apply IDLE and SERIAL diagnostics
@@ -69,14 +68,10 @@ jobs:
           from pathlib import Path
           path = Path('NeuralAmpModeler/NeuralAmpModelerControls.h')
           text = path.read_text(encoding='utf-8')
-          guarded = '''    // TEMP_PHASE_WAIT_STYLE_GUARD
-          const auto radioButtonStyle = mRadioButtonStyle.WithValueText(
-            mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));'''
-          original = '''    const auto radioButtonStyle =
-            mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));'''
-          if text.count(guarded) != 1:
+          marker = '/* TEMP_PHASE_WAIT_STYLE_GUARD */ '
+          if text.count(marker) != 1:
             raise RuntimeError('Temporary style guard missing after patch')
-          path.write_text(text.replace(guarded, original, 1), encoding='utf-8')
+          path.write_text(text.replace(marker, '', 1), encoding='utf-8')
           PY
 
       - name: Validate patch
