@@ -25,6 +25,45 @@ jobs:
           fetch-depth: 0
           show-progress: false
 
+      - name: Fix oversampling-page style selector
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/scripts/add_phase_wait_diagnostics.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''controls = replace_once(
+              controls,
+              \'\'\'    const auto radioButtonStyle =
+                mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));\'\'\',
+              \'\'\'    const auto radioButtonStyle =
+                mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));
+              // Six diagnostic states share one row. Use a smaller label and button only
+              // for this control so the options remain inside the oversampling page.
+              const auto multicoreButtonStyle =
+                radioButtonStyle.WithValueText(radioButtonStyle.valueText.WithSize(radioButtonStyle.valueText.mSize - 1.5f));
+              const float multicoreButtonSize = 8.0f;\'\'\',
+              'compact multicore style',
+          )'''
+          new = '''compact_style_old = \'\'\'    const auto radioButtonStyle =
+            mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));\'\'\'
+          compact_style_new = \'\'\'    const auto radioButtonStyle =
+            mRadioButtonStyle.WithValueText(mRadioButtonStyle.valueText.WithSize(mRadioButtonStyle.valueText.mSize - 1.0f));
+          // Six diagnostic states share one row. Use a smaller label and button only
+          // for this control so the options remain inside the oversampling page.
+          const auto multicoreButtonStyle =
+            radioButtonStyle.WithValueText(radioButtonStyle.valueText.WithSize(radioButtonStyle.valueText.mSize - 1.5f));
+          const float multicoreButtonSize = 8.0f;\'\'\'
+          compact_style_index = controls.rfind(compact_style_old)
+          if compact_style_index < 0:
+              raise RuntimeError('Oversampling compact style anchor not found')
+          controls = (controls[:compact_style_index] + compact_style_new
+                      + controls[compact_style_index + len(compact_style_old):])'''
+          if old not in text:
+              raise RuntimeError('Patch-script style block not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
       - name: Apply IDLE and SERIAL diagnostics
         id: patch
         shell: bash
