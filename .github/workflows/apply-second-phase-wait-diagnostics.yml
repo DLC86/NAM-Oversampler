@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   apply:
+    # The workflow is intentionally self-removing after applying the source patch.
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
