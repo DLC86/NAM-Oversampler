@@ -92,7 +92,7 @@ private:
   // for a tuner while keeping the YIN analysis cost modest.
   static constexpr int kAnalysisHop = 1024;
   static constexpr float kYinThreshold = 0.15f;
-  static constexpr float kMinimumRMS = 0.001f;
+  static constexpr float kMinimumRMS = 0.00003f;
 
   void Analyze()
   {
