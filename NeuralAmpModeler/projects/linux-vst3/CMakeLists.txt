@@ -60,6 +60,9 @@ set(PLUGIN_SOURCES
   "${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3.cpp"
   "${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_Controller.cpp"
   "${IPLUG2_ROOT}/IPlug/VST3/IPlugVST3_ProcessorBase.cpp"
+  # The SDK's `sdk` target does not include this implementation, although
+  # IPlugVST3_ProcessorBase derives from SingleComponentEffect.
+  "${VST3_SDK_ROOT}/public.sdk/source/vst/vstsinglecomponenteffect.cpp"
   "${AUDIO_DSP_TOOLS_ROOT}/dsp/dsp.cpp"
   "${AUDIO_DSP_TOOLS_ROOT}/dsp/ImpulseResponse.cpp"
   "${AUDIO_DSP_TOOLS_ROOT}/dsp/NoiseGate.cpp"
@@ -102,6 +105,9 @@ target_include_directories(NAMOnSteroids
 target_link_libraries(NAMOnSteroids PRIVATE sdk)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_link_libraries(NAMOnSteroids PRIVATE stdc++fs)
+  # Shared libraries otherwise allow unresolved symbols, which only surface
+  # when a host attempts to dlopen the VST3 module.
+  target_link_options(NAMOnSteroids PRIVATE "-Wl,-z,defs")
 endif()
 
 target_compile_options(NAMOnSteroids
