@@ -135,22 +135,30 @@ public:
 class NAMChannelModeControl : public IControl
 {
 public:
-  NAMChannelModeControl(const IRECT& bounds, int paramIdx)
+  NAMChannelModeControl(const IRECT& bounds, int paramIdx, const char* label, const IVStyle& style)
   : IControl(bounds)
+  , mLabel(label)
+  , mStyle(style)
   {
     SetParamIdx(paramIdx);
   }
 
   void Draw(IGraphics& g) override
   {
+    IRECT textRect;
+    g.MeasureText(mStyle.labelText, mLabel.c_str(), textRect);
+
+    IRECT labelBounds = mRECT.GetFromBottom(textRect.H()).GetCentredInside(mRECT.W(), textRect.H());
+    IRECT widgetArea = mRECT.GetReducedFromBottom(textRect.H());
+
     if (mMouseIsOver)
-      g.FillEllipse(PluginColors::MOUSEOVER, mRECT.GetCentredInside(26.0f, 26.0f));
+      g.FillEllipse(PluginColors::MOUSEOVER, widgetArea.GetCentredInside(26.0f, 26.0f));
 
     const IColor color = PLUG()->GetThemeColor();
     const float radius = 6.0f;
     const float stroke = 1.8f;
-    const float cx = mRECT.MW();
-    const float cy = mRECT.MH();
+    const float cx = widgetArea.MW();
+    const float cy = widgetArea.MH();
 
     if (GetValue() > 0.5)
     {
@@ -161,12 +169,19 @@ public:
     {
       g.DrawCircle(color, cx, cy, radius, nullptr, stroke);
     }
+
+    IBlend blend = GetBlend();
+    g.DrawText(mStyle.labelText, mLabel.c_str(), labelBounds, &mBlend);
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
     SetValueFromUserInput(GetValue() > 0.5 ? 0.0 : 1.0);
   }
+
+private:
+  std::string mLabel;
+  IVStyle mStyle;
 };
 
 /// Full-window dim layer; click dismisses (used for Slim overlay).

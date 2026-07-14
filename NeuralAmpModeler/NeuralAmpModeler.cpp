@@ -452,7 +452,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(new NAMSwitchControl(eqPositionArea, kEQPostNAM, "Pre/Post", style, switchHandleBitmap),
                              kCtrlTagEQPostNAM)
       ->SetTooltip("EQ position: off = pre NAM, on = post NAM");
-    pGraphics->AttachControl(new NAMChannelModeControl(channelModeArea.GetCentredInside(30.0f, 30.0f), kChannelMode),
+    pGraphics->AttachControl(new NAMChannelModeControl(channelModeArea, kChannelMode, "Mono/Stereo", style),
                              kCtrlTagChannelMode)
       ->SetTooltip("Channel mode: mono or stereo");
 
