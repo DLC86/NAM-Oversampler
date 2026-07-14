@@ -45,17 +45,19 @@ using namespace igraphics;
 const double kDCBlockerFrequency = 5.0;
 
 #if PLUG_HAS_UI
+iplug::igraphics::IColor mAppliedThemeColor = PluginColors::NAM_THEMECOLOR;
+
 // Styles
 const IVColorSpec colorSpec{
   DEFAULT_BGCOLOR, // Background
-  PluginColors::GetThemeColor(), // Foreground
-  PluginColors::GetThemeColor().WithOpacity(0.3f), // Pressed
-  PluginColors::GetThemeColor().WithOpacity(0.4f), // Frame
+  mAppliedThemeColor, // Foreground
+  mAppliedThemeColor.WithOpacity(0.3f), // Pressed
+  mAppliedThemeColor.WithOpacity(0.4f), // Frame
   PluginColors::MOUSEOVER, // Highlight
   DEFAULT_SHCOLOR, // Shadow
-  PluginColors::GetThemeColor(), // Extra 1
+  mAppliedThemeColor, // Extra 1
   COLOR_RED, // Extra 2 --> color for clipping in meters
-  PluginColors::GetThemeColor().WithContrast(0.1f), // Extra 3
+  mAppliedThemeColor.WithContrast(0.1f), // Extra 3
 };
 
 const IVStyle style =
@@ -76,10 +78,10 @@ const IVStyle style =
 const IVStyle titleStyle =
   DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular")).WithDrawFrame(false).WithShadowOffset(2.f);
 const IVStyle radioButtonStyle =
-  style
-    .WithColor(EVColor::kON, PluginColors::GetThemeColor()) // Pressed buttons and their labels
-    .WithColor(EVColor::kOFF, PluginColors::GetThemeColor().WithOpacity(0.1f)) // Unpressed buttons
-    .WithColor(EVColor::kX1, PluginColors::GetThemeColor().WithOpacity(0.6f)); // Unpressed buttons' labels
+    style
+        .WithColor(EVColor::kON, mAppliedThemeColor) // Pressed buttons and their labels
+        .WithColor(EVColor::kOFF, mAppliedThemeColor.WithOpacity(0.1f)) // Unpressed buttons
+        .WithColor(EVColor::kX1, mAppliedThemeColor.WithOpacity(0.6f)); // Unpressed buttons' labels
 
 EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char* str, const char* caption,
                               EMsgBoxType type)
@@ -1818,12 +1820,12 @@ bool NAMColorsEqual(const IColor& lhs, const IColor& rhs)
 
 IColor NeuralAmpModeler::GetThemeColor() const
 {
-  return PluginColors::GetThemeColor();
+  return mAppliedThemeColor;
 }
 
 void NeuralAmpModeler::SetThemeColor(const IColor& color)
 {
-  PluginColors::SetThemeColor(color);
+  mAppliedThemeColor = color;
 }
 
 IColor NeuralAmpModeler::_ResolveDesiredThemeColor() const
@@ -1972,10 +1974,6 @@ void NeuralAmpModeler::OnIdle()
       // pGraphics->GetControlWithTag(kCtrlTagOutputMode)->SetDisabled(false);
       static_cast<NAMSettingsPageControl*>(pGraphics->GetControlWithTag(kCtrlTagSettingsBox))->ClearModelInfo();
       if (auto* p = pGraphics->GetControlWithTag(kCtrlTagSlimmableIcon))
-        p->Hide(true);
-      if (auto* p = pGraphics->GetControlWithTag(kCtrlTagSlimOverlayBackdrop))
-        p->Hide(true);
-      if (auto* p = pGraphics->GetControlWithTag(kCtrlTagSlimKnob))
         p->Hide(true);
       pGraphics->SetAllControlsDirty();
       mModelCleared = false;
@@ -2187,10 +2185,10 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
         pGraphics->SetAllControlsDirty();
         break;
       case kIRToggle: pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->SetDisabled(!active); break;
-      case kFollowTrackColor:
+       case kFollowTrackColor:
         _ApplyThemeColorToUI(true);
         break;
-      default: break;
+     default: break;
     }
   }
 #endif
