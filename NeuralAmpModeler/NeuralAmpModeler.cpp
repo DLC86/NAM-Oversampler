@@ -96,7 +96,7 @@ EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char
 #endif
 
 const std::string kCalibrateInputParamName = "CalibrateInput";
-const bool kDefaultCalibrateInput = false;
+const bool kDefaultCalibrateInput = true;
 const std::string kInputCalibrationLevelParamName = "InputCalibrationLevel";
 const double kDefaultInputCalibrationLevel = 12.0;
 
@@ -1130,6 +1130,8 @@ std::string NeuralAmpModeler::_SerializeInternalPresetState() const
   for (int cc = 0; cc < 128; ++cc)
     state["midiCC"].push_back(mMidiCCToParam[cc]);
   state["midiChannel"] = GetParam(kMidiChannel)->Int();
+  state["globalCalibrateInput"] = GetParam(kCalibrateInput)->Bool() ? 1.0 : 0.0;
+  state["globalInputCalibrationLevel"] = GetParam(kInputCalibrationLevel)->Value();
 
   state["presets"] = nlohmann::json::array();
   for (const auto& preset : mInternalPresets)
@@ -1161,6 +1163,20 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
   // paramSchema < 1 means the bank was saved before the NAMToggle serialization was fixed.
   // In that case, even if paramCount == kNumParams, NAMToggle may have been written as 0.
   const bool hasCorrectNAMToggle = state.value("paramSchema", 0) >= 1;
+  // Restore global calibration settings (not part of individual presets)
+  mApplyingInternalPreset.store(true, std::memory_order_release);
+  if (state.contains("globalCalibrateInput"))
+  {
+    GetParam(kCalibrateInput)->Set(state["globalCalibrateInput"].get<double>());
+    OnParamChange(kCalibrateInput);
+  }
+  if (state.contains("globalInputCalibrationLevel"))
+  {
+    GetParam(kInputCalibrationLevel)->Set(state["globalInputCalibrationLevel"].get<double>());
+    OnParamChange(kInputCalibrationLevel);
+  }
+  mApplyingInternalPreset.store(false, std::memory_order_release);
+
   if (state.contains("midiCC") && state["midiCC"].is_array())
   {
     for (int cc = 0; cc < 128 && cc < (int)state["midiCC"].size(); ++cc)
@@ -2109,6 +2125,10 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
   {
     case kCalibrateInput:
     case kInputCalibrationLevel:
+      _SetInputGain();
+      if (!mApplyingInternalPreset.load(std::memory_order_acquire))
+        _SaveGlobalInternalPresetBank();
+      break;
     case kInputBoost:
     case kInputLevel: _SetInputGain(); break;
 
