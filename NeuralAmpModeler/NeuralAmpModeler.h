@@ -98,6 +98,7 @@ enum EParams
   kNoiseGateActive,
   kEQActive,
   kIRToggle,
+  kNAMToggle,
   // Input calibration
   kCalibrateInput,
   kInputCalibrationLevel,
@@ -1592,7 +1593,7 @@ private:
   void _RestageCurrentModelAndIRForStereo();
   bool _NeedsStereoModelRestageForPath(const std::string& modelPath);
   bool _NeedsStereoIRRestageForPath(const std::string& irPath);
-  std::unique_ptr<ResamplingNAM> _CreateModel(const WDL_String& modelPath);
+  std::unique_ptr<ResamplingNAM> _CreateModel(const WDL_String& modelPath, nam::dspData* returnedConfig = nullptr);
   // Loads a NAM model and stores it to mStagedNAM
   // Returns an empty string on success, or an error message on failure.
   std::string _StageModel(const WDL_String& dspFile);
@@ -1720,6 +1721,8 @@ private:
   std::string mLiveIRRightPath;
   std::string mStagedIRPath;
   std::string mStagedIRRightPath;
+  std::string mStagedGearType;
+  std::string mLoadedGearType;
   std::mutex mDSPStagingMutex;
   // Flags to take away the modules at a safe time.
   std::atomic<bool> mShouldRemoveModel = false;

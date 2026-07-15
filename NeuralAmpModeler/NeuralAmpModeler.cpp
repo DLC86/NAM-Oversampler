@@ -212,8 +212,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kNoiseGateThreshold)->InitGain("Threshold", -80.0, -100.0, 0.0, 0.1);
   GetParam(kNoiseGateActive)->InitBool("NoiseGateActive", true);
   GetParam(kEQActive)->InitBool("ToneStack", true);
-  GetParam(kOutputMode)->InitEnum("OutputMode", 1, {"Raw", "Normalized", "Calibrated"}); // TODO DRY w/ control
+  GetParam(kOutputMode)->InitEnum("OutputMode", 3, {"Raw", "Normalized", "Calibrated", "Auto"}); // TODO DRY w/ control
   GetParam(kIRToggle)->InitBool("IRToggle", true);
+  GetParam(kNAMToggle)->InitBool("NAMToggle", true);
   GetParam(kCalibrateInput)->InitBool(kCalibrateInputParamName.c_str(), kDefaultCalibrateInput);
   GetParam(kInputCalibrationLevel)
     ->InitDouble(kInputCalibrationLevelParamName.c_str(), kDefaultInputCalibrationLevel, -60.0, 60.0, 0.1, "dBu");
@@ -340,7 +341,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       contentArea.GetFromBottom((2.0f * fileHeight)).GetFromTop(fileHeight).GetMidHPadded(fileWidth).GetVShifted(-1);
     const auto slimIconArea =
       IRECT(modelArea.R + 6.f, modelArea.MH() - 14.f, modelArea.R + 6.f + 2.f * 28.f, modelArea.MH() + 14.f);
-    const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 10);
+    const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 10).GetCentredInside(30.f, 14.f);
     const auto irArea = modelArea.GetVShifted(irYOffset);
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
     const auto cutFiltersButtonArea = IRECT(irArea.R + 6.0f, irArea.MH() - 14.0f,
@@ -396,7 +397,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(new IVLabelControl(titleArea, "NAM ON STEROIDS", titleStyle));
     pGraphics->AttachControl(new NAMInternalPresetSlotControl(internalPresetArea, leftArrowSVG, rightArrowSVG),
                              kCtrlTagInternalPresetSlot);
-    pGraphics->AttachControl(new ISVGControl(modelIconArea, modelIconSVG));
+    pGraphics->AttachControl(new NAMIconSwitchControl(modelIconArea, modelIconSVG, kNAMToggle));
 
 #ifdef NAM_PICK_DIRECTORY
     const std::string defaultNamFileString = "Select model directory...";
@@ -410,7 +411,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(
       new NAMFileBrowserControl(modelArea, kMsgTagClearModel, defaultNamFileString.c_str(), "nam",
                                 loadModelCompletionHandler, style, fileSVG, crossSVG, leftArrowSVG, rightArrowSVG,
-                                fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl),
+                                fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl, kNAMToggle),
       kCtrlTagModelFileBrowser);
 
     pGraphics
@@ -423,11 +424,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                       kCtrlTagSlimmableIcon)
       ->Hide(true);
 
-    pGraphics->AttachControl(new ISVGSwitchControl(irSwitchArea, {irIconOffSVG, irIconOnSVG}, kIRToggle));
+    pGraphics->AttachControl(new NAMIconSwitchControl(irSwitchArea, irIconOnSVG, kIRToggle));
     pGraphics->AttachControl(
       new NAMFileBrowserControl(irArea, kMsgTagClearIR, defaultIRString.c_str(), "wav", loadIRCompletionHandler, style,
                                 fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
-                                "Get IRs", getUrl),
+                                "Get IRs", getUrl, kIRToggle),
       kCtrlTagIRFileBrowser);
     pGraphics->AttachControl(new NAMCutFiltersButtonControl(cutFiltersButtonArea,
                                                             [pGraphics](IControl* pCaller) {
@@ -742,6 +743,7 @@ bool NeuralAmpModeler::IsMidiAssignableParam(int paramIdx) const
     case kNoiseGateActive:
     case kEQActive:
     case kIRToggle:
+    case kNAMToggle:
     case kEQPostNAM:
     case kInputBoost:
     case kLowCutFrequency:
@@ -1123,6 +1125,7 @@ std::string NeuralAmpModeler::_SerializeInternalPresetState() const
   nlohmann::json state = nlohmann::json::object();
   state["current"] = mCurrentInternalPreset.load(std::memory_order_acquire);
   state["toneStackTypeSchema"] = 2;
+  state["paramSchema"] = 1; // 0 = before NAMToggle fix, 1 = NAMToggle correctly serialized
   state["midiCC"] = nlohmann::json::array();
   for (int cc = 0; cc < 128; ++cc)
     state["midiCC"].push_back(mMidiCCToParam[cc]);
@@ -1155,6 +1158,9 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
 
   const auto& state = config[kInternalPresetStateKey];
   const bool hasStableToneStackNames = state.value("toneStackTypeSchema", 0) >= 2;
+  // paramSchema < 1 means the bank was saved before the NAMToggle serialization was fixed.
+  // In that case, even if paramCount == kNumParams, NAMToggle may have been written as 0.
+  const bool hasCorrectNAMToggle = state.value("paramSchema", 0) >= 1;
   if (state.contains("midiCC") && state["midiCC"].is_array())
   {
     for (int cc = 0; cc < 128 && cc < (int)state["midiCC"].size(); ++cc)
@@ -1194,9 +1200,43 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
 
       if (p.contains("params") && p["params"].is_array())
       {
-        const int paramCount = std::min((int)kNumParams, (int)p["params"].size());
-        for (int paramIdx = 0; paramIdx < paramCount; ++paramIdx)
-          preset.paramValues[paramIdx] = p["params"][paramIdx].get<double>();
+        const int oldParamCount = (int)p["params"].size();
+        if (oldParamCount < kNumParams)
+        {
+          // Old bank: kNAMToggle not yet in params — remap and inject default
+          for (int paramIdx = 0; paramIdx < kNumParams; ++paramIdx)
+          {
+            if (paramIdx < kNAMToggle)
+            {
+              if (paramIdx < oldParamCount)
+                preset.paramValues[paramIdx] = p["params"][paramIdx].get<double>();
+              else
+                preset.paramValues[paramIdx] = GetParam(paramIdx)->GetDefault();
+            }
+            else if (paramIdx == kNAMToggle)
+            {
+              preset.paramValues[paramIdx] = 1.0;
+            }
+            else
+            {
+              const int oldIdx = paramIdx - 1;
+              if (oldIdx < oldParamCount)
+                preset.paramValues[paramIdx] = p["params"][oldIdx].get<double>();
+              else
+                preset.paramValues[paramIdx] = GetParam(paramIdx)->GetDefault();
+            }
+          }
+        }
+        else
+        {
+          const int paramCount = std::min((int)kNumParams, oldParamCount);
+          for (int paramIdx = 0; paramIdx < paramCount; ++paramIdx)
+            preset.paramValues[paramIdx] = p["params"][paramIdx].get<double>();
+          // Banks saved before the NAMToggle fix (paramSchema < 1) may have a wrong
+          // value at kNAMToggle even though paramCount == kNumParams. Force it to engaged.
+          if (!hasCorrectNAMToggle)
+            preset.paramValues[kNAMToggle] = 1.0;
+        }
       }
 
       if (!preset.toneStackTypeName.empty())
@@ -1523,12 +1563,13 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
     modelInputPointers = mToneStack->Process(preCutPointers, numChannelsInternal, nFrames);
 
   void* audioWorkgroup = mAudioWorkgroup.load(std::memory_order_acquire);
-  if (mModel != nullptr)
+  const bool namActive = GetParam(kNAMToggle)->Value();
+  if (mModel != nullptr && namActive)
     mModel->SetAudioWorkgroup(audioWorkgroup);
-  if (mModelRight != nullptr)
+  if (mModelRight != nullptr && namActive)
     mModelRight->SetAudioWorkgroup(audioWorkgroup);
 
-  if (mModel != nullptr)
+  if (mModel != nullptr && namActive)
   {
     if (numChannelsInternal == kNumChannelsStereo)
     {
@@ -2184,7 +2225,14 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
         updateToneStackControlAvailability();
         pGraphics->SetAllControlsDirty();
         break;
-      case kIRToggle: pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->SetDisabled(!active); break;
+      case kIRToggle:
+        pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->SetDisabled(!active);
+        pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->SetDirty();
+        break;
+      case kNAMToggle:
+        pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser)->SetDisabled(!active);
+        pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser)->SetDirty();
+        break;
        case kFollowTrackColor:
         _ApplyThemeColorToUI(true);
         break;
@@ -2250,6 +2298,8 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     mModelRight = nullptr;
     mLiveModelPath.clear();
     mLiveModelRightPath.clear();
+    mLoadedGearType.clear();
+    mStagedGearType.clear();
     mNAMPath.Set("");
     mShouldRemoveModel = false;
     mModelCleared = true;
@@ -2282,6 +2332,7 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     mModelRight = std::move(mStagedModelRight);
     mLiveModelPath = mStagedModelPath;
     mLiveModelRightPath = mStagedModelRightPath;
+    mLoadedGearType = mStagedGearType;
     mStagedModel = nullptr;
     mStagedModelRight = nullptr;
     mStagedModelPath.clear();
@@ -2425,6 +2476,43 @@ void NeuralAmpModeler::_SetOutputGain()
           gainDB += (outputLevel - inputLevel);
         }
         break;
+      case 3: // Auto
+      {
+        int targetMode = 2; // Default fallback to Calibrated (2)
+        if (!mLoadedGearType.empty())
+        {
+          if (mLoadedGearType == "amp" || mLoadedGearType == "pedal_amp" ||
+              mLoadedGearType == "amp_cab" || mLoadedGearType == "amp_pedal_cab")
+          {
+            targetMode = 1; // Normalized
+          }
+          else if (mLoadedGearType == "pedal" || mLoadedGearType == "preamp" ||
+                   mLoadedGearType == "studio")
+          {
+            targetMode = 2; // Calibrated
+          }
+        }
+        
+        if (targetMode == 1) // Normalized
+        {
+          if (mModel->HasLoudness())
+          {
+            const double loudness = mModel->GetLoudness();
+            const double targetLoudness = -18.0;
+            gainDB += (targetLoudness - loudness);
+          }
+        }
+        else if (targetMode == 2) // Calibrated
+        {
+          if (mModel->HasOutputLevel())
+          {
+            const double inputLevel = GetParam(kInputCalibrationLevel)->Value();
+            const double outputLevel = mModel->GetOutputLevel();
+            gainDB += (outputLevel - inputLevel);
+          }
+        }
+        break;
+      }
       case 0: // Raw
       default: break;
     }
@@ -2707,10 +2795,10 @@ bool NeuralAmpModeler::_CanProcessStereo(const size_t nChansIn, const size_t nCh
   return true;
 }
 
-std::unique_ptr<ResamplingNAM> NeuralAmpModeler::_CreateModel(const WDL_String& modelPath)
+std::unique_ptr<ResamplingNAM> NeuralAmpModeler::_CreateModel(const WDL_String& modelPath, nam::dspData* returnedConfig)
 {
   auto dspPath = std::filesystem::u8path(modelPath.Get());
-  std::unique_ptr<nam::DSP> model = nam::get_dsp(dspPath);
+  std::unique_ptr<nam::DSP> model = returnedConfig != nullptr ? nam::get_dsp(dspPath, *returnedConfig) : nam::get_dsp(dspPath);
 
   if (model->NumInputChannels() != 1)
   {
@@ -2881,23 +2969,84 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
   WDL_String previousNAMPath = mNAMPath;
   try
   {
-    auto stagedModel = _CreateModel(modelPath);
+    nam::dspData returnedConfig;
+    auto stagedModel = _CreateModel(modelPath, &returnedConfig);
     std::unique_ptr<ResamplingNAM> stagedModelRight;
     if (_IsStereoRequested())
       stagedModelRight = _CreateModel(modelPath);
 
+    std::string gearType = "";
+    if (!returnedConfig.metadata.is_null())
+    {
+      if (returnedConfig.metadata.contains("gear_type") && !returnedConfig.metadata["gear_type"].is_null())
+      {
+        if (returnedConfig.metadata["gear_type"].is_string())
+        {
+          gearType = returnedConfig.metadata["gear_type"].get<std::string>();
+          std::transform(gearType.begin(), gearType.end(), gearType.begin(), ::tolower);
+        }
+      }
+    }
+
+    double returnLevel = 0.0;
+    bool hasReturnLevel = false;
+    if (!returnedConfig.metadata.is_null())
+    {
+      if (returnedConfig.metadata.contains("output_level_dbu") && !returnedConfig.metadata["output_level_dbu"].is_null())
+      {
+        returnLevel = returnedConfig.metadata["output_level_dbu"].get<double>();
+        hasReturnLevel = true;
+      }
+      else if (returnedConfig.metadata.contains("return_level") && !returnedConfig.metadata["return_level"].is_null())
+      {
+        returnLevel = returnedConfig.metadata["return_level"].get<double>();
+        hasReturnLevel = true;
+      }
+      else if (returnedConfig.metadata.contains("return_level_dbu") && !returnedConfig.metadata["return_level_dbu"].is_null())
+      {
+        returnLevel = returnedConfig.metadata["return_level_dbu"].get<double>();
+        hasReturnLevel = true;
+      }
+    }
+
+    if (hasReturnLevel)
+    {
+      if (stagedModel != nullptr && !stagedModel->HasOutputLevel())
+        stagedModel->SetOutputLevel(returnLevel);
+      if (stagedModelRight != nullptr && !stagedModelRight->HasOutputLevel())
+        stagedModelRight->SetOutputLevel(returnLevel);
+    }
+
     WDL_String loadedNAMPath;
-  {
-    std::lock_guard<std::mutex> lock(mDSPStagingMutex);
-    mStagedModel = std::move(stagedModel);
-    mStagedModelRight = std::move(stagedModelRight);
-    mStagedModelPath = modelPath.Get();
-    mStagedModelRightPath = mStagedModelRight != nullptr ? modelPath.Get() : "";
-    mNAMPath = modelPath;
-    mShouldRemoveModel = false;
-    mModelCleared = false;
-    loadedNAMPath = mNAMPath;
-  }
+    {
+      std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+      mStagedModel = std::move(stagedModel);
+      mStagedModelRight = std::move(stagedModelRight);
+      mStagedModelPath = modelPath.Get();
+      mStagedModelRightPath = mStagedModelRight != nullptr ? modelPath.Get() : "";
+      mStagedGearType = gearType;
+      mNAMPath = modelPath;
+      mShouldRemoveModel = false;
+      mModelCleared = false;
+      loadedNAMPath = mNAMPath;
+    }
+
+    if (!mApplyingInternalPreset.load())
+    {
+      if (gearType == "amp_cab" || gearType == "amp_pedal_cab" ||
+          gearType == "pedal" || gearType == "preamp" || gearType == "studio")
+      {
+        GetParam(kIRToggle)->Set(false);
+        OnParamChange(kIRToggle);
+        SendParameterValueFromDelegate(kIRToggle, GetParam(kIRToggle)->GetNormalized(), true);
+      }
+      else if (gearType == "amp" || gearType == "pedal_amp")
+      {
+        GetParam(kIRToggle)->Set(true);
+        OnParamChange(kIRToggle);
+        SendParameterValueFromDelegate(kIRToggle, GetParam(kIRToggle)->GetNormalized(), true);
+      }
+    }
     _MarkCurrentInternalPresetDirty();
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, loadedNAMPath.GetLength(),
                                loadedNAMPath.Get());
@@ -3149,6 +3298,22 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
       auto* c = static_cast<OutputModeControl*>(pGraphics->GetControlWithTag(kCtrlTagOutputMode));
       c->SetNormalizedDisable(!mModel->HasLoudness());
       c->SetCalibratedDisable(!mModel->HasOutputLevel());
+
+      std::string resolvedMode = "Calibrated";
+      if (!mLoadedGearType.empty())
+      {
+        if (mLoadedGearType == "amp" || mLoadedGearType == "pedal_amp" ||
+            mLoadedGearType == "amp_cab" || mLoadedGearType == "amp_pedal_cab")
+        {
+          resolvedMode = "Normalized";
+        }
+        else if (mLoadedGearType == "pedal" || mLoadedGearType == "preamp" ||
+                 mLoadedGearType == "studio")
+        {
+          resolvedMode = "Calibrated";
+        }
+      }
+      c->SetAutoLabel(resolvedMode);
     }
 
     if (auto* pSlimIcon = pGraphics->GetControlWithTag(kCtrlTagSlimmableIcon))

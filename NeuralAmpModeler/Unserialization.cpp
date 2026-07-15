@@ -33,6 +33,10 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
   mApplyingInternalPreset.store(true, std::memory_order_release);
   if (!config.contains("followTrackColor"))
     config["followTrackColor"] = 0.0;
+  if (!config.contains("NAMToggle"))
+    config["NAMToggle"] = 1.0;
+  if (!config.contains("IRToggle"))
+    config["IRToggle"] = 1.0;
 
   auto getParamByName = [&](std::string& name) {
     // Could use a map but eh
@@ -133,6 +137,7 @@ void _RenameKeys(nlohmann::json& j, std::unordered_map<std::string, std::string>
 void _UpdateConfigFrom_1_5_2(nlohmann::json& config);
 void _UpdateConfigFrom_1_6_0(nlohmann::json& config);
 int _GetConfigFrom_1_6_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config);
+int _GetConfigFrom_2_2_5(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config);
 
 // v2.0.1
 
@@ -602,6 +607,91 @@ int _GetConfigFrom_Earlier(const iplug::IByteChunk& chunk, int startPos, nlohman
 }
 
 //==============================================================================
+// v2.2.5 - adds NAMToggle parameter
+
+int _GetConfigFrom_2_2_5(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  // Same layout as 2.0.1 but with NAMToggle inserted after IRToggle in the param list
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "NAMToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Model Size",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling",
+                                      "EQ Post",
+                                      "Channel Mode",
+                                      "Offline Filter Phase",
+                                      "OS Multi-Core",
+                                      "OS Threads",
+                                      "Tuner Mute",
+                                      "ToneStack Type",
+                                      "Low Cut",
+                                      "Low Cut Slope",
+                                      "Low Cut Post",
+                                      "High Cut",
+                                      "High Cut Slope",
+                                      "High Cut Post",
+                                      "Input Boost",
+                                      "MIDI Channel",
+                                      "followTrackColor"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_6_0(config);
+
+  auto tryReadJsonString = [&](int readPos, nlohmann::json& value) {
+    WDL_String serialized;
+    const int nextPos = chunk.GetStr(serialized, readPos);
+    if (nextPos < 0)
+      return -1;
+    try
+    {
+      value = nlohmann::json::parse(serialized.Get());
+      return nextPos;
+    }
+    catch (...)
+    {
+      return -1;
+    }
+  };
+
+  nlohmann::json toneStackState;
+  const int posAfterToneStack = tryReadJsonString(pos, toneStackState);
+  if (posAfterToneStack >= 0)
+  {
+    config["ToneStack Components"] = toneStackState;
+    pos = posAfterToneStack;
+  }
+
+  nlohmann::json internalPresetState;
+  const int posAfterInternalPresets = tryReadJsonString(pos, internalPresetState);
+  if (posAfterInternalPresets >= 0)
+  {
+    config["Internal Presets"] = internalPresetState;
+    pos = posAfterInternalPresets;
+  }
+
+  WDL_String highlightColor;
+  const int posAfterHighlight = chunk.GetStr(highlightColor, pos);
+  if (posAfterHighlight >= 0)
+  {
+    config["HighLightColor"] = std::string(highlightColor.Get());
+    pos = posAfterHighlight;
+  }
+  return pos;
+}
+
+//==============================================================================
 
 class _Version
 {
@@ -680,7 +770,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   _Version version(versionStr);
   // Act accordingly
   nlohmann::json config;
-  if (version >= _Version(2, 0, 1))
+  if (version >= _Version(2, 2, 5))
+  {
+    pos = _GetConfigFrom_2_2_5(chunk, pos, config);
+  }
+  else if (version >= _Version(2, 0, 1))
   {
     pos = _GetConfigFrom_2_0_1(chunk, pos, config);
   }

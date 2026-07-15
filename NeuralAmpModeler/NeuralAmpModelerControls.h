@@ -71,6 +71,29 @@ private:
   bool mUseThemeStroke = false;
 };
 
+class NAMIconSwitchControl : public ISwitchControlBase
+{
+public:
+  NAMIconSwitchControl(const IRECT& bounds, const ISVG& svg, int paramIdx)
+  : ISwitchControlBase(bounds, paramIdx, nullptr, 2)
+  , mSVG(svg)
+  {
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    if (mMouseIsOver)
+      g.FillRoundRect(PluginColors::MOUSEOVER, mRECT, 2.f);
+
+    const bool active = GetValue() > 0.5;
+    IColor color = active ? PLUG()->GetThemeColor() : IColor(255, 100, 100, 100);
+    g.DrawSVG(mSVG, mRECT, &mBlend, &color, &color);
+  }
+
+private:
+  ISVG mSVG;
+};
+
 class NAMBitmapButtonControl : public IButtonControlBase, public IBitmapBase
 {
 public:
@@ -999,9 +1022,22 @@ private:
 class NAMFileNameControl : public IVButtonControl
 {
 public:
-  NAMFileNameControl(const IRECT& bounds, const char* label, const IVStyle& style)
+  NAMFileNameControl(const IRECT& bounds, const char* label, const IVStyle& style, int paramIdx = kNoParameter)
   : IVButtonControl(bounds, DefaultClickActionFunc, label, style)
+  , mParamIdx(paramIdx)
   {
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const bool active = mParamIdx == kNoParameter || GetDelegate()->GetParam(mParamIdx)->Value() > 0.5;
+    IColor origColor = mStyle.valueText.mFGColor;
+    if (!active)
+    {
+      mStyle.valueText.mFGColor = PluginColors::HELP_TEXT.WithOpacity(0.35f);
+    }
+    IVButtonControl::Draw(g);
+    mStyle.valueText.mFGColor = origColor;
   }
 
   void SetLabelAndTooltip(const char* str)
@@ -1031,6 +1067,8 @@ public:
     SetLabelStr(ellipsizedFileName.c_str());
     SetTooltip(fileName.get_filepart());
   }
+private:
+  int mParamIdx = kNoParameter;
 };
 
 // URL control for the "Get" models/irs links
@@ -1056,7 +1094,7 @@ public:
   NAMFileBrowserControl(const IRECT& bounds, int clearMsgTag, const char* labelStr, const char* fileExtension,
                         IFileDialogCompletionHandlerFunc ch, const IVStyle& style, const ISVG& loadSVG,
                         const ISVG& clearSVG, const ISVG& leftSVG, const ISVG& rightSVG, const IBitmap& bitmap,
-                        const ISVG& globeSVG, const char* getButtonLabel, const char* getButtonURL)
+                        const ISVG& globeSVG, const char* getButtonLabel, const char* getButtonURL, int paramIdx = kNoParameter)
   : IDirBrowseControlBase(bounds, fileExtension, false, false)
   , mClearMsgTag(clearMsgTag)
   , mDefaultLabelStr(labelStr)
@@ -1071,6 +1109,7 @@ public:
   , mGetButtonLabel(getButtonLabel)
   , mGetButtonURL(getButtonURL)
   , mBrowserState(NAMBrowserState::Empty)
+  , mParamIdx(paramIdx)
   {
     mIgnoreMouse = true;
   }
@@ -1186,7 +1225,7 @@ public:
       ->SetAnimationEndActionFunction(prevFileFunc);
     AddChildControl(new NAMSquareButtonControl(rightButtonBounds, DefaultClickActionFunc, mRightSVG))
       ->SetAnimationEndActionFunction(nextFileFunc);
-    AddChildControl(mFileNameControl = new NAMFileNameControl(fileNameButtonBounds, mDefaultLabelStr.Get(), mStyle))
+    AddChildControl(mFileNameControl = new NAMFileNameControl(fileNameButtonBounds, mDefaultLabelStr.Get(), mStyle, mParamIdx))
       ->SetAnimationEndActionFunction(chooseFileFunc);
 
     // creates both right-side controls but only show one based on state
@@ -1295,6 +1334,7 @@ private:
   NAMBrowserState mBrowserState;
   NAMSquareButtonControl* mClearButton = nullptr;
   NAMGetButtonControl* mGetButton = nullptr;
+  int mParamIdx = kNoParameter;
 };
 
 class NAMMeterControl : public IVPeakAvgMeterControl<2>, public IBitmapBase
@@ -1610,6 +1650,17 @@ public:
       ss << " [Not supported by model]";
     }
     mTabLabels.Get(2)->Set(ss.str().c_str());
+  };
+
+  void SetAutoLabel(const std::string& resolvedModeName)
+  {
+    std::stringstream ss;
+    ss << "Auto";
+    if (!resolvedModeName.empty())
+    {
+      ss << " [" << resolvedModeName << "]";
+    }
+    mTabLabels.Get(3)->Set(ss.str().c_str());
   };
 
   void DrawWidget(IGraphics& g) override
@@ -2675,7 +2726,7 @@ public:
                              mControlNames.outputMode, kCtrlTagOutputMode);
       outputModeControl->SetTooltip(
         "How to adjust the level of the output.\nRaw=No adjustment.\nNormalized=Adjust the level so that all models "
-        "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration.");
+        "are about the same loudness.\nCalibrated=Match the input's digital-analog calibration.\nAuto=Selects Normalized or Calibrated depending on the gear type.");
 
       const auto midiChannelArea =
         IRECT(outputArea.MW() - 45.0f, outputArea.T + 42.0f, outputArea.MW() + 45.0f, outputArea.T + 72.0f);
