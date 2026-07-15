@@ -341,7 +341,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       contentArea.GetFromBottom((2.0f * fileHeight)).GetFromTop(fileHeight).GetMidHPadded(fileWidth).GetVShifted(-1);
     const auto slimIconArea =
       IRECT(modelArea.R + 6.f, modelArea.MH() - 14.f, modelArea.R + 6.f + 2.f * 28.f, modelArea.MH() + 14.f);
-    const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 10).GetCentredInside(30.f, 14.f);
+    const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 0).GetCentredInside(30.f, 14.f);
     const auto irArea = modelArea.GetVShifted(irYOffset);
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
     const auto cutFiltersButtonArea = IRECT(irArea.R + 6.0f, irArea.MH() - 14.0f,
