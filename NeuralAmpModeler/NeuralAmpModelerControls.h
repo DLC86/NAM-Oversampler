@@ -82,12 +82,16 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    if (mMouseIsOver)
-      g.FillRoundRect(PluginColors::MOUSEOVER, mRECT, 2.f);
-
     const bool active = GetValue() > 0.5;
     IColor color = active ? PLUG()->GetThemeColor() : IColor(255, 100, 100, 100);
     g.DrawSVG(mSVG, mRECT, &mBlend, &color, &color);
+
+    if (mMouseIsOver)
+    {
+      // Redraw twice to increase brightness on hover
+      g.DrawSVG(mSVG, mRECT, &mBlend, &color, &color);
+      g.DrawSVG(mSVG, mRECT, &mBlend, &color, &color);
+    }
   }
 
 private:
@@ -108,7 +112,7 @@ public:
   void Draw(IGraphics& g) override
   {
     if (mMouseIsOver)
-      g.FillRoundRect(PluginColors::MOUSEOVER, mRECT.GetPadded(-3.0f), 2.f);
+      g.FillRoundRect(IColor(180, 17, 17, 17), mRECT.GetPadded(-3.0f), 2.f);
     g.DrawFittedBitmap(mBitmap, mRECT);
   }
 };
@@ -174,9 +178,6 @@ public:
     IRECT labelBounds = mRECT.GetFromBottom(textRect.H()).GetCentredInside(mRECT.W(), textRect.H());
     IRECT widgetArea = mRECT.GetReducedFromBottom(textRect.H());
 
-    if (mMouseIsOver)
-      g.FillEllipse(PluginColors::MOUSEOVER, widgetArea.GetCentredInside(26.0f, 26.0f));
-
     const IColor color = PLUG()->GetThemeColor();
     const float radius = 6.0f;
     const float stroke = 1.8f;
@@ -187,10 +188,22 @@ public:
     {
       g.DrawCircle(color, cx - 4.2f, cy, radius, nullptr, stroke);
       g.DrawCircle(color, cx + 4.2f, cy, radius, nullptr, stroke);
+      if (mMouseIsOver)
+      {
+        g.DrawCircle(color, cx - 4.2f, cy, radius, nullptr, stroke);
+        g.DrawCircle(color, cx + 4.2f, cy, radius, nullptr, stroke);
+        g.DrawCircle(color, cx - 4.2f, cy, radius, nullptr, stroke);
+        g.DrawCircle(color, cx + 4.2f, cy, radius, nullptr, stroke);
+      }
     }
     else
     {
       g.DrawCircle(color, cx, cy, radius, nullptr, stroke);
+      if (mMouseIsOver)
+      {
+        g.DrawCircle(color, cx, cy, radius, nullptr, stroke);
+        g.DrawCircle(color, cx, cy, radius, nullptr, stroke);
+      }
     }
 
     IBlend blend = GetBlend();
@@ -974,15 +987,20 @@ public:
 
   void Draw(IGraphics& g) override
   {
-    if (mMouseIsOver)
-      g.FillRoundRect(PluginColors::MOUSEOVER, mRECT.GetPadded(-2.0f), 2.0f);
-
     const IColor color = PLUG()->GetThemeColor();
     const float stroke = 1.8f;
     const auto left = mRECT.GetFromLeft(mRECT.W() * 0.5f).GetPadded(-4.0f);
     const auto right = mRECT.GetFromRight(mRECT.W() * 0.5f).GetPadded(-4.0f);
     DrawLowCut(g, left, color, stroke);
     DrawHighCut(g, right, color, stroke);
+    if (mMouseIsOver)
+    {
+      // Redraw twice to increase brightness on hover
+      DrawLowCut(g, left, color, stroke);
+      DrawHighCut(g, right, color, stroke);
+      DrawLowCut(g, left, color, stroke);
+      DrawHighCut(g, right, color, stroke);
+    }
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
