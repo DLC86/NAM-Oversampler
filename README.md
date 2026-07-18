@@ -1,6 +1,6 @@
 # NAM On Steroids
 
-NAM On Steroids is a fork of the Neural Amp Modeler plugin focused on adding experimental oversampling support for NAM models.
+NAM On Steroids is a fork of the Neural Amp Modeler plugin focused on adding experimental oversampling support for NAM models and improving/expanding its features.
 
 ## Oversampling approach
 
@@ -75,6 +75,14 @@ This keeps the gate behavior less affected by input gain changes while preservin
 ## MIDI support
 
 Presets can be recalled via Program Change messages (PC #000 recalls preset #001), Control Change messages can be assigned to most parameters either manually or via the learn function (right-click on the parameter to assign/learn the CC).
+
+## Auto IR bypass and Output mode
+
+Automatic bypass/engage logic for the IR based on gear type:
+It is automatically bypassed when selecting a .nam file with gear_type metadata being amp_cab, amp_pedal_cab, pedal, preamp or studio.
+It's automatically engaged when gear_type is amp or pedal_amp.
+
+Additional 'Auto' option in the Output mode, this automatically sets the output mode to Calibrated when gear_type is pedal or preamp, and sets it to Normalized for all other possible types.
 
 ## Theme color
 
