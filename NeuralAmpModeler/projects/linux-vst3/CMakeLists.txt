@@ -42,6 +42,8 @@ smtg_create_pluginterfaces_target()
 smtg_create_public_sdk_common_target()
 smtg_create_public_sdk_target()
 
+find_package(Threads REQUIRED)
+
 file(GLOB NAM_CORE_SOURCES
   "${NAM_CORE_ROOT}/NAM/*.cpp"
   "${NAM_CORE_ROOT}/NAM/*.c"
@@ -63,6 +65,8 @@ set(PLUGIN_SOURCES
   # The SDK's `sdk` target does not include this implementation, although
   # IPlugVST3_ProcessorBase derives from SingleComponentEffect.
   "${VST3_SDK_ROOT}/public.sdk/source/vst/vstsinglecomponenteffect.cpp"
+  # Entry point functions (ModuleEntry/ModuleExit) for Linux VST3
+  "${VST3_SDK_ROOT}/public.sdk/source/main/linuxmain.cpp"
   "${AUDIO_DSP_TOOLS_ROOT}/dsp/dsp.cpp"
   "${AUDIO_DSP_TOOLS_ROOT}/dsp/ImpulseResponse.cpp"
   "${AUDIO_DSP_TOOLS_ROOT}/dsp/NoiseGate.cpp"
@@ -102,9 +106,11 @@ target_include_directories(NAMOnSteroids
     "${AUDIO_DSP_TOOLS_ROOT}/Dependencies/eigen"
 )
 
-target_link_libraries(NAMOnSteroids PRIVATE sdk)
+target_link_libraries(NAMOnSteroids PRIVATE sdk Threads::Threads)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  target_link_libraries(NAMOnSteroids PRIVATE stdc++fs)
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0")
+    target_link_libraries(NAMOnSteroids PRIVATE stdc++fs)
+  endif()
   # Shared libraries otherwise allow unresolved symbols, which only surface
   # when a host attempts to dlopen the VST3 module.
   target_link_options(NAMOnSteroids PRIVATE "-Wl,-z,defs")
