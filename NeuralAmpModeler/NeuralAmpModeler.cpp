@@ -247,6 +247,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                    {"Omni", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13",
                                     "14", "15", "16"});
   GetParam(kFollowTrackColor)->InitBool("followTrackColor", false);
+  GetParam(kDCBlockerActive)->InitBool("DC Filter", true);
   NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
   MakeDefaultPreset("Default");
   _LoadGlobalInternalPresetBank();
@@ -732,6 +733,9 @@ bool NeuralAmpModeler::_IsInternalPresetParam(int paramIdx) const
 
 bool NeuralAmpModeler::IsMidiAssignableParam(int paramIdx) const
 {
+  if (paramIdx == kMidiActionPreviousPreset || paramIdx == kMidiActionNextPreset)
+    return true;
+
   switch (paramIdx)
   {
     case kInputLevel:
@@ -1438,7 +1442,11 @@ void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
     if (cc >= 0 && cc < 128)
     {
       const int paramIdx = mMidiCCToParam[cc];
-      if (IsMidiAssignableParam(paramIdx))
+      if (paramIdx == kMidiActionPreviousPreset && msg.mData2 >= 64)
+        SelectAdjacentInternalPreset(-1);
+      else if (paramIdx == kMidiActionNextPreset && msg.mData2 >= 64)
+        SelectAdjacentInternalPreset(1);
+      else if (IsMidiAssignableParam(paramIdx))
         _ApplyParamNormalizedFromMidi(paramIdx, msg.mData2 / 127.0);
     }
   }
@@ -1640,7 +1648,9 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
   // const recursive_linear_filter::LowPassParams lowPassParams(sampleRate, lowPassCutoffFreq);
   mHighPass.SetParams(highPassParams);
   // mLowPass.SetParams(lowPassParams);
-  sample** hpfPointers = mHighPass.Process(postCutPointers, numChannelsInternal, numFrames);
+  sample** hpfPointers = GetParam(kDCBlockerActive)->Bool()
+                          ? mHighPass.Process(postCutPointers, numChannelsInternal, numFrames)
+                          : postCutPointers;
   // sample** lpfPointers = mLowPass.Process(hpfPointers, numChannelsInternal, numFrames);
 
   // restore previous floating point state

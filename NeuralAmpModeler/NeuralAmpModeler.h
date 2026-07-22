@@ -123,6 +123,7 @@ enum EParams
   kInputBoost,
   kMidiChannel,
   kFollowTrackColor,
+  kDCBlockerActive,
   kNumParams
 };
 
@@ -1548,6 +1549,8 @@ public:
   void AssignMidiCCToParam(int paramIdx, int cc);
   int GetMidiCCForParam(int paramIdx) const;
   bool IsMidiLearnArmedForParam(int paramIdx) const;
+  static constexpr int kMidiActionPreviousPreset = kNumParams;
+  static constexpr int kMidiActionNextPreset = kNumParams + 1;
 #if PLUG_HAS_UI
   iplug::igraphics::IColor GetThemeColor() const;
   void SetThemeColor(const iplug::igraphics::IColor& color);

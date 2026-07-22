@@ -450,7 +450,7 @@ public:
   }
 };
 
-class NAMInternalPresetSlotControl : public IControl
+class NAMInternalPresetSlotControl : public IControl, public NAMMidiCCMenuMixin
 {
 public:
   NAMInternalPresetSlotControl(const IRECT& bounds, const ISVG& leftSVG, const ISVG& rightSVG)
@@ -480,6 +480,8 @@ public:
     DrawIconButton(g, areas.list, PLUG()->GetThemeColor().WithOpacity(mHoverPart == HoverPart::List ? 0.9f : 0.55f), fill);
     g.DrawSVG(mLeftSVG, areas.left.GetCentredInside(10.0f, 10.0f));
     g.DrawSVG(mRightSVG, areas.right.GetCentredInside(10.0f, 10.0f));
+    DrawMidiLearnBadge(g, this, areas.left, NeuralAmpModeler::kMidiActionPreviousPreset);
+    DrawMidiLearnBadge(g, this, areas.right, NeuralAmpModeler::kMidiActionNextPreset);
     WDL_String name;
     const int current = PLUG()->GetCurrentInternalPresetIndex();
     if (current < 0)
@@ -520,6 +522,21 @@ public:
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
   {
     const auto areas = GetAreas();
+    if (HandleMidiLearnBadgeClick(this, areas.left, x, y, NeuralAmpModeler::kMidiActionPreviousPreset) ||
+        HandleMidiLearnBadgeClick(this, areas.right, x, y, NeuralAmpModeler::kMidiActionNextPreset))
+      return;
+
+    if (mod.R && areas.left.Contains(x, y))
+    {
+      OpenMidiCCMenu(this, NeuralAmpModeler::kMidiActionPreviousPreset);
+      return;
+    }
+    if (mod.R && areas.right.Contains(x, y))
+    {
+      OpenMidiCCMenu(this, NeuralAmpModeler::kMidiActionNextPreset);
+      return;
+    }
+
     if (areas.left.Contains(x, y))
       PLUG()->SelectAdjacentInternalPreset(-1);
     else if (areas.right.Contains(x, y))
@@ -559,6 +576,12 @@ public:
 
   void OnPopupMenuSelection(IPopupMenu* pSelectedMenu, int valIdx) override
   {
+    if (HandleMidiCCMenuSelection(pSelectedMenu, this))
+    {
+      SetDirty(false);
+      return;
+    }
+
     if (pSelectedMenu && pSelectedMenu->GetChosenItem())
     {
       const int index = pSelectedMenu->GetChosenItemIdx();
@@ -1522,6 +1545,15 @@ public:
     AddFilterColumn(lowArea, "LOW CUT", kLowCutFrequency, kLowCutSlope, kLowCutPostNAM);
     AddFilterColumn(highArea, "HIGH CUT", kHighCutFrequency, kHighCutSlope, kHighCutPostNAM);
 
+    const auto dcSwitchArea = panelArea.GetPadded(-14.0f)
+                                .GetReducedFromTop(208.0f)
+                                .GetFromTop(NAM_SWTICH_HEIGHT)
+                                .GetCentredInside(110.0f, NAM_SWTICH_HEIGHT);
+    auto* dcSwitch = AddNamedChildControl(new NAMSwitchControl(dcSwitchArea, kDCBlockerActive, "DC Filter", mStyle,
+                                                                 mSwitchBitmap),
+                                           "DCFilter");
+    dcSwitch->SetTooltip("Enable DC offset filter");
+
     auto closeAction = [&](IControl* pCaller) {
       static_cast<NAMCutFiltersPageControl*>(pCaller->GetParent())->HideAnimated(true);
     };
@@ -2336,7 +2368,7 @@ public:
     const auto realtimeThreadsArea = realtimeThreadsRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto offlineRadioArea = offlineOSRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto offlineFilterArea = offlineFilterRow.GetFromRight(rowsArea.W() - rowLabelWidth);
-    const auto infoArea = content.GetFromBottom(72.0f).GetHPadded(-8.0f);
+    const auto infoArea = content.GetFromBottom(72.0f).GetHPadded(-8.0f).GetVShifted(2.0f);
     const float buttonSize = 10.0f;
     const auto infoText = IText(12, EAlign::Center, PluginColors::HELP_TEXT);
     const auto infoStyle = mStyle.WithDrawFrame(false).WithValueText(infoText);
