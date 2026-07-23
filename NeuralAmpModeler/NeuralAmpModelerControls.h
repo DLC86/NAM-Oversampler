@@ -1335,7 +1335,17 @@ public:
       case kMsgTagLoadedIR:
       case kMsgTagLoadedIRRight:
       {
-        if (pData == nullptr || dataSize <= 0 || reinterpret_cast<const char*>(pData)[0] == '\0')
+        std::string pathStr;
+        if (pData != nullptr && dataSize > 0)
+        {
+          const char* strData = reinterpret_cast<const char*>(pData);
+          size_t len = 0;
+          while (len < static_cast<size_t>(dataSize) && strData[len] != '\0')
+            len++;
+          pathStr.assign(strData, len);
+        }
+
+        if (pathStr.empty())
         {
           ClearPathList();
           SetupMenu();
@@ -1344,9 +1354,7 @@ public:
           break;
         }
 
-        WDL_String fileName, directory;
-        fileName.Set(reinterpret_cast<const char*>(pData));
-        directory.Set(reinterpret_cast<const char*>(pData));
+        WDL_String fileName(pathStr.c_str()), directory(pathStr.c_str());
         directory.remove_filepart(true);
 
         ClearPathList();

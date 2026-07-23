@@ -2184,7 +2184,7 @@ void NeuralAmpModeler::OnUIOpen()
 
   if (mNAMPath.GetLength())
   {
-    SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
+    SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength() + 1, mNAMPath.Get());
     // If it's not loaded yet, then mark as failed.
     // If it's yet to be loaded, then the completion handler will set us straight once it runs.
     if (mModel == nullptr && mStagedModel == nullptr)
@@ -2193,21 +2193,21 @@ void NeuralAmpModeler::OnUIOpen()
 
   if (mNAMRightPath.GetLength())
   {
-    SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadedModelRight, mNAMRightPath.GetLength(), mNAMRightPath.Get());
+    SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadedModelRight, mNAMRightPath.GetLength() + 1, mNAMRightPath.Get());
     if (mModelRight == nullptr && mStagedModelRight == nullptr)
       SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadFailed);
   }
 
   if (mIRPath.GetLength())
   {
-    SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, mIRPath.GetLength(), mIRPath.Get());
+    SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, mIRPath.GetLength() + 1, mIRPath.Get());
     if (mIR == nullptr && mStagedIR == nullptr)
       SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadFailed);
   }
 
   if (mIRRightPath.GetLength())
   {
-    SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadedIRRight, mIRRightPath.GetLength(), mIRRightPath.Get());
+    SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadedIRRight, mIRRightPath.GetLength() + 1, mIRRightPath.Get());
     if (mIRRight == nullptr && mStagedIRRight == nullptr)
       SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadFailed);
   }
@@ -3323,11 +3323,11 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       }
     }
     _MarkCurrentInternalPresetDirty();
-    SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, loadedNAMPath.GetLength(),
+    SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, loadedNAMPath.GetLength() ? loadedNAMPath.GetLength() + 1 : 0,
                                loadedNAMPath.Get());
     if (linkNAM || !isStereo)
     {
-      SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadedModelRight, mNAMRightPath.GetLength(), mNAMRightPath.Get());
+      SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadedModelRight, mNAMRightPath.GetLength() ? mNAMRightPath.GetLength() + 1 : 0, mNAMRightPath.Get());
     }
   }
   catch (std::runtime_error& e)
@@ -3367,7 +3367,7 @@ std::string NeuralAmpModeler::_StageModelRight(const WDL_String& modelPath)
     }
 
     _MarkCurrentInternalPresetDirty();
-    SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadedModelRight, loadedNAMRightPath.GetLength(), loadedNAMRightPath.Get());
+    SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadedModelRight, loadedNAMRightPath.GetLength() ? loadedNAMRightPath.GetLength() + 1 : 0, loadedNAMRightPath.Get());
   }
   catch (std::runtime_error& e)
   {
@@ -3437,10 +3437,10 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
       loadedIRPath = mIRPath;
     }
     _MarkCurrentInternalPresetDirty();
-    SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, loadedIRPath.GetLength(), loadedIRPath.Get());
+    SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, loadedIRPath.GetLength() ? loadedIRPath.GetLength() + 1 : 0, loadedIRPath.Get());
     if (linkIR || !isStereo)
     {
-      SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadedIRRight, mIRRightPath.GetLength(), mIRRightPath.Get());
+      SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadedIRRight, mIRRightPath.GetLength() ? mIRRightPath.GetLength() + 1 : 0, mIRRightPath.Get());
     }
   }
   else
@@ -3489,7 +3489,7 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIRRight(const WDL_String& irPat
       loadedIRRightPath = mIRRightPath;
     }
     _MarkCurrentInternalPresetDirty();
-    SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadedIRRight, loadedIRRightPath.GetLength(), loadedIRRightPath.Get());
+    SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadedIRRight, loadedIRRightPath.GetLength() ? loadedIRRightPath.GetLength() + 1 : 0, loadedIRRightPath.Get());
   }
   else
   {
