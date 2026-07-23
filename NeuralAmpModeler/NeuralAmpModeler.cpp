@@ -1301,9 +1301,9 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
       if (p.contains("params") && p["params"].is_array())
       {
         const int oldParamCount = (int)p["params"].size();
-        if (oldParamCount < kNumParams)
+        if (oldParamCount < 10)
         {
-          // Old bank: kNAMToggle not yet in params — remap and inject default
+          // Legacy bank saved before kNAMToggle (v2.2.5) — inject default at kNAMToggle
           for (int paramIdx = 0; paramIdx < kNumParams; ++paramIdx)
           {
             if (paramIdx < kNAMToggle)
@@ -1320,7 +1320,7 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
             else
             {
               const int oldIdx = paramIdx - 1;
-              if (oldIdx < oldParamCount)
+              if (oldIdx >= 0 && oldIdx < oldParamCount)
                 preset.paramValues[paramIdx] = p["params"][oldIdx].get<double>();
               else
                 preset.paramValues[paramIdx] = GetParam(paramIdx)->GetDefault();
@@ -1332,12 +1332,22 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
           const int paramCount = std::min((int)kNumParams, oldParamCount);
           for (int paramIdx = 0; paramIdx < paramCount; ++paramIdx)
             preset.paramValues[paramIdx] = p["params"][paramIdx].get<double>();
-          // Banks saved before the NAMToggle fix (paramSchema < 1) may have a wrong
-          // value at kNAMToggle even though paramCount == kNumParams. Force it to engaged.
+          for (int paramIdx = paramCount; paramIdx < kNumParams; ++paramIdx)
+            preset.paramValues[paramIdx] = GetParam(paramIdx)->GetDefault();
+
           if (!hasCorrectNAMToggle)
             preset.paramValues[kNAMToggle] = 1.0;
         }
       }
+
+      // Sanitize ranges to prevent corrupted presets from crashing the DSP or UI
+      preset.paramValues[kLowCutFrequency] = std::clamp(preset.paramValues[kLowCutFrequency], 20.0, 1000.0);
+      preset.paramValues[kLowCutSlope] = std::clamp(preset.paramValues[kLowCutSlope], 0.0, 5.0);
+      preset.paramValues[kHighCutFrequency] = std::clamp(preset.paramValues[kHighCutFrequency], 1000.0, 20000.0);
+      preset.paramValues[kHighCutSlope] = std::clamp(preset.paramValues[kHighCutSlope], 0.0, 5.0);
+      preset.paramValues[kSlim] = std::clamp(preset.paramValues[kSlim], 0.0, 1.0);
+      preset.paramValues[kChannelMode] = std::clamp(preset.paramValues[kChannelMode], 0.0, 1.0);
+      preset.paramValues[kOutputMode] = std::clamp(preset.paramValues[kOutputMode], 0.0, 3.0);
 
       if (!preset.toneStackTypeName.empty())
       {
