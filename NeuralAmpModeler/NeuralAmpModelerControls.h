@@ -1177,6 +1177,19 @@ public:
     }
   }
 
+  void Hide(bool hide) override
+  {
+    IControl::Hide(hide);
+    if (!hide)
+    {
+      OnResize();
+    }
+    else
+    {
+      IDirBrowseControlBase::Hide(hide);
+    }
+  }
+
   void SetStereoMode(bool isStereo)
   {
     if (mIsStereoMode != isStereo)
