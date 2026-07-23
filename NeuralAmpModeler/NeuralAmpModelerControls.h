@@ -1213,6 +1213,10 @@ public:
     IDirBrowseControlBase::OnResize();
     if (NChildren() >= 6)
     {
+      // Ensure main elements (Load button and Text control) are unhidden when container is active
+      GetChild(0)->Hide(false);
+      GetChild(3)->Hide(false);
+
       IRECT padded = mRECT.GetPadded(-6.f).GetHPadded(-2.f);
       const auto buttonWidth = std::min(padded.H(), std::max(12.0f, padded.W() / 6.0f));
 
