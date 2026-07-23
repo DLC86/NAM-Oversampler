@@ -37,6 +37,10 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
     config["NAMToggle"] = 1.0;
   if (!config.contains("IRToggle"))
     config["IRToggle"] = 1.0;
+  if (!config.contains("NAM Link"))
+    config["NAM Link"] = 1.0;
+  if (!config.contains("IR Link"))
+    config["IR Link"] = 1.0;
 
   auto getParamByName = [&](std::string& name) {
     // Could use a map but eh
@@ -77,8 +81,22 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
   _UnserializeApplyInternalPresetState(config, true);
   LEAVE_PARAMS_MUTEX
 
-  mNAMPath.Set(static_cast<std::string>(config["NAMPath"]).c_str());
-  mIRPath.Set(static_cast<std::string>(config["IRPath"]).c_str());
+  if (config.contains("NAMPath") && config["NAMPath"].is_string())
+    mNAMPath.Set(config["NAMPath"].get<std::string>().c_str());
+  else
+    mNAMPath.Set("");
+  if (config.contains("NAMRightPath") && config["NAMRightPath"].is_string())
+    mNAMRightPath.Set(config["NAMRightPath"].get<std::string>().c_str());
+  else
+    mNAMRightPath.Set("");
+  if (config.contains("IRPath") && config["IRPath"].is_string())
+    mIRPath.Set(config["IRPath"].get<std::string>().c_str());
+  else
+    mIRPath.Set("");
+  if (config.contains("IRRightPath") && config["IRRightPath"].is_string())
+    mIRRightPath.Set(config["IRRightPath"].get<std::string>().c_str());
+  else
+    mIRRightPath.Set("");
   if (config.contains("HighLightColor") && config["HighLightColor"].is_string())
     mHighLightColor.Set(config["HighLightColor"].get<std::string>().c_str());
   else
@@ -692,6 +710,109 @@ int _GetConfigFrom_2_2_5(const iplug::IByteChunk& chunk, int startPos, nlohmann:
 }
 
 //==============================================================================
+// v2.3.0 - adds NAM Link, IR Link, DC Filter params and right-channel paths
+
+int _GetConfigFrom_2_3_0(const iplug::IByteChunk& chunk, int startPos, nlohmann::json& config)
+{
+  std::vector<std::string> paramNames{"Input",
+                                      "Threshold",
+                                      "Bass",
+                                      "Middle",
+                                      "Treble",
+                                      "Output",
+                                      "NoiseGateActive",
+                                      "ToneStack",
+                                      "IRToggle",
+                                      "NAMToggle",
+                                      "CalibrateInput",
+                                      "InputCalibrationLevel",
+                                      "OutputMode",
+                                      "Model Size",
+                                      "Oversampling",
+                                      "Filter Phase",
+                                      "Offline Oversampling",
+                                      "EQ Post",
+                                      "Channel Mode",
+                                      "Offline Filter Phase",
+                                      "OS Multi-Core",
+                                      "OS Threads",
+                                      "Tuner Mute",
+                                      "ToneStack Type",
+                                      "Low Cut",
+                                      "Low Cut Slope",
+                                      "Low Cut Post",
+                                      "High Cut",
+                                      "High Cut Slope",
+                                      "High Cut Post",
+                                      "Input Boost",
+                                      "MIDI Channel",
+                                      "followTrackColor",
+                                      "DC Filter",
+                                      "NAM Link",
+                                      "IR Link"};
+
+  int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
+  _UpdateConfigFrom_1_6_0(config);
+
+  // Read right-channel paths (new in 2.2.6)
+  WDL_String namRightPath;
+  const int posAfterNAMRight = chunk.GetStr(namRightPath, pos);
+  if (posAfterNAMRight >= 0)
+  {
+    config["NAMRightPath"] = std::string(namRightPath.Get());
+    pos = posAfterNAMRight;
+  }
+  WDL_String irRightPath;
+  const int posAfterIRRight = chunk.GetStr(irRightPath, pos);
+  if (posAfterIRRight >= 0)
+  {
+    config["IRRightPath"] = std::string(irRightPath.Get());
+    pos = posAfterIRRight;
+  }
+
+  auto tryReadJsonString = [&](int readPos, nlohmann::json& value) {
+    WDL_String serialized;
+    const int nextPos = chunk.GetStr(serialized, readPos);
+    if (nextPos < 0)
+      return -1;
+    try
+    {
+      value = nlohmann::json::parse(serialized.Get());
+      return nextPos;
+    }
+    catch (...)
+    {
+      return -1;
+    }
+  };
+
+  nlohmann::json toneStackState;
+  const int posAfterToneStack = tryReadJsonString(pos, toneStackState);
+  if (posAfterToneStack >= 0)
+  {
+    config["ToneStack Components"] = toneStackState;
+    pos = posAfterToneStack;
+  }
+
+  nlohmann::json internalPresetState;
+  const int posAfterInternalPresets = tryReadJsonString(pos, internalPresetState);
+  if (posAfterInternalPresets >= 0)
+  {
+    config["Internal Presets"] = internalPresetState;
+    pos = posAfterInternalPresets;
+  }
+
+  WDL_String highlightColor;
+  const int posAfterHighlight = chunk.GetStr(highlightColor, pos);
+  if (posAfterHighlight >= 0)
+  {
+    config["HighLightColor"] = std::string(highlightColor.Get());
+    pos = posAfterHighlight;
+  }
+  return pos;
+}
+
+//==============================================================================
 
 class _Version
 {
@@ -770,7 +891,11 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   _Version version(versionStr);
   // Act accordingly
   nlohmann::json config;
-  if (version >= _Version(2, 2, 5))
+  if (version >= _Version(2, 3, 0))
+  {
+    pos = _GetConfigFrom_2_3_0(chunk, pos, config);
+  }
+  else if (version >= _Version(2, 2, 5))
   {
     pos = _GetConfigFrom_2_2_5(chunk, pos, config);
   }

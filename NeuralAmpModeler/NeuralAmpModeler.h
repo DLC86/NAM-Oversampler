@@ -124,6 +124,8 @@ enum EParams
   kMidiChannel,
   kFollowTrackColor,
   kDCBlockerActive,
+  kNAMLink,
+  kIRLink,
   kNumParams
 };
 
@@ -132,7 +134,11 @@ const int numKnobs = 6;
 enum ECtrlTags
 {
   kCtrlTagModelFileBrowser = 0,
+  kCtrlTagModelRightFileBrowser,
   kCtrlTagIRFileBrowser,
+  kCtrlTagIRRightFileBrowser,
+  kCtrlTagNAMLink,
+  kCtrlTagIRLink,
   kCtrlTagInputMeter,
   kCtrlTagOutputMeter,
   kCtrlTagSettingsBox,
@@ -166,12 +172,16 @@ enum EMsgTags
 {
   // These tags are used from UI -> DSP
   kMsgTagClearModel = 0,
+  kMsgTagClearModelRight,
   kMsgTagClearIR,
+  kMsgTagClearIRRight,
   kMsgTagHighlightColor,
   // The following tags are from DSP -> UI
   kMsgTagLoadFailed,
   kMsgTagLoadedModel,
+  kMsgTagLoadedModelRight,
   kMsgTagLoadedIR,
+  kMsgTagLoadedIRRight,
   kNumMsgTags
 };
 
@@ -1568,7 +1578,9 @@ private:
     bool hasEditedName = false;
     std::array<double, kNumParams> paramValues {};
     std::string namPath;
+    std::string namRightPath;
     std::string irPath;
+    std::string irRightPath;
     std::string toneStackTypeName;
     std::string toneStackComponentState;
   };
@@ -1600,10 +1612,13 @@ private:
   // Loads a NAM model and stores it to mStagedNAM
   // Returns an empty string on success, or an error message on failure.
   std::string _StageModel(const WDL_String& dspFile);
+  std::string _StageModelRight(const WDL_String& dspFile);
   // Loads an IR and stores it to mStagedIR.
   // Return status code so that error messages can be relayed if
   // it wasn't successful.
   dsp::wav::LoadReturnCode _StageIR(const WDL_String& irPath);
+  dsp::wav::LoadReturnCode _StageIRRight(const WDL_String& irPath);
+  void _UpdateLinkAndBrowserAvailability();
 
   bool _HaveModel() const { return this->mModel != nullptr; };
   // Prepare the input & output buffers
@@ -1776,8 +1791,10 @@ private:
 
   // Path to model's config.json or model.nam
   WDL_String mNAMPath;
+  WDL_String mNAMRightPath;
   // Path to IR (.wav file)
   WDL_String mIRPath;
+  WDL_String mIRRightPath;
 
   WDL_String mHighLightColor;
 #if PLUG_HAS_UI

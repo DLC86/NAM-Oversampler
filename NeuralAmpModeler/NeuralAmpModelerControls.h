@@ -82,11 +82,18 @@ public:
 
   void Draw(IGraphics& g) override
   {
+    if (!mSVG.mImage)
+      return;
     const bool active = GetValue() > 0.5;
-    IColor color = active ? PLUG()->GetThemeColor() : IColor(255, 100, 100, 100);
+    IColor color;
+    if (IsDisabled())
+      color = IColor(100, 60, 60, 60);
+    else
+      color = active ? PLUG()->GetThemeColor() : IColor(255, 100, 100, 100);
+
     g.DrawSVG(mSVG, mRECT, &mBlend, &color, &color);
 
-    if (mMouseIsOver)
+    if (mMouseIsOver && !IsDisabled())
     {
       // Redraw twice to increase brightness on hover
       g.DrawSVG(mSVG, mRECT, &mBlend, &color, &color);
@@ -1155,7 +1162,23 @@ public:
     mIgnoreMouse = true;
   }
 
-  void Draw(IGraphics& g) override { g.DrawFittedBitmap(mBitmap, mRECT); }
+  void SetDisabled(bool disable) override
+  {
+    IDirBrowseControlBase::SetDisabled(disable);
+    for (int c = 0; c < NChildren(); c++)
+    {
+      GetChild(c)->SetDisabled(disable);
+    }
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    g.DrawFittedBitmap(mBitmap, mRECT);
+    if (IsDisabled())
+    {
+      g.FillRoundRect(IColor(170, 30, 30, 30), mRECT, 2.f);
+    }
+  }
 
   void OnPopupMenuSelection(IPopupMenu* pSelectedMenu, int valIdx) override
   {
@@ -1253,7 +1276,7 @@ public:
     };
 
     IRECT padded = mRECT.GetPadded(-6.f).GetHPadded(-2.f);
-    const auto buttonWidth = padded.H();
+    const auto buttonWidth = std::min(padded.H(), std::max(12.0f, padded.W() / 6.0f));
     const auto loadFileButtonBounds = padded.ReduceFromLeft(buttonWidth);
     const auto clearAndGetButtonBounds = padded.ReduceFromRight(buttonWidth);
     const auto leftButtonBounds = padded.ReduceFromLeft(buttonWidth);
@@ -1294,6 +1317,9 @@ public:
 
   void OnMsgFromDelegate(int msgTag, int dataSize, const void* pData) override
   {
+    if (!mFileNameControl)
+      return;
+
     switch (msgTag)
     {
       case kMsgTagLoadFailed:
@@ -1305,7 +1331,9 @@ public:
         }
         break;
       case kMsgTagLoadedModel:
+      case kMsgTagLoadedModelRight:
       case kMsgTagLoadedIR:
+      case kMsgTagLoadedIRRight:
       {
         if (pData == nullptr || dataSize <= 0 || reinterpret_cast<const char*>(pData)[0] == '\0')
         {
@@ -1348,16 +1376,19 @@ private:
   {
     mBrowserState = newState;
 
-    switch (mBrowserState)
+    if (mClearButton != nullptr && mGetButton != nullptr)
     {
-      case NAMBrowserState::Empty:
-        mClearButton->Hide(true);
-        mGetButton->Hide(false);
-        break;
-      case NAMBrowserState::Loaded:
-        mClearButton->Hide(false);
-        mGetButton->Hide(true);
-        break;
+      switch (mBrowserState)
+      {
+        case NAMBrowserState::Empty:
+          mClearButton->Hide(true);
+          mGetButton->Hide(false);
+          break;
+        case NAMBrowserState::Loaded:
+          mClearButton->Hide(false);
+          mGetButton->Hide(true);
+          break;
+      }
     }
   }
 

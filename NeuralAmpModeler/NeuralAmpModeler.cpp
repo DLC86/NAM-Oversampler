@@ -248,6 +248,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                     "14", "15", "16"});
   GetParam(kFollowTrackColor)->InitBool("followTrackColor", false);
   GetParam(kDCBlockerActive)->InitBool("DC Filter", true);
+  GetParam(kNAMLink)->InitBool("NAM Link", true);
+  GetParam(kIRLink)->InitBool("IR Link", true);
   NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
   MakeDefaultPreset("Default");
   _LoadGlobalInternalPresetBank();
@@ -280,6 +282,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto tunerSVG = pGraphics->LoadSVG(TUNER_FN);
     const auto fileSVG = pGraphics->LoadSVG(FILE_FN);
     const auto globeSVG = pGraphics->LoadSVG(GLOBE_ICON_FN);
+    const auto linkSVG = pGraphics->LoadSVG(LINK_ICON_FN);
     const auto crossSVG = pGraphics->LoadSVG(CLOSE_BUTTON_FN);
     const auto rightArrowSVG = pGraphics->LoadSVG(RIGHT_ARROW_FN);
     const auto leftArrowSVG = pGraphics->LoadSVG(LEFT_ARROW_FN);
@@ -335,15 +338,26 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       outputKnobArea.GetVShifted(outputKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
 
     // Areas for model and IR
-    const auto fileWidth = 200.0f;
+    const auto fileWidth = 230.0f;
     const auto fileHeight = 30.0f;
     const auto irYOffset = 38.0f;
     const auto modelArea =
       contentArea.GetFromBottom((2.0f * fileHeight)).GetFromTop(fileHeight).GetMidHPadded(fileWidth).GetVShifted(-1);
+    
+    const float subFileWidth = (fileWidth - 20.0f) / 2.0f; // 105.0f
+    const auto modelLeftArea = modelArea.GetFromLeft(subFileWidth);
+    const auto modelRightArea = modelArea.GetFromRight(subFileWidth);
+    const auto namLinkArea = IRECT(modelLeftArea.R, modelArea.T, modelRightArea.L, modelArea.B).GetCentredInside(18.0f, 18.0f);
+
     const auto slimIconArea =
       IRECT(modelArea.R + 6.f, modelArea.MH() - 14.f, modelArea.R + 6.f + 2.f * 28.f, modelArea.MH() + 14.f);
     const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 0).GetCentredInside(30.f, 14.f);
+
     const auto irArea = modelArea.GetVShifted(irYOffset);
+    const auto irLeftArea = irArea.GetFromLeft(subFileWidth);
+    const auto irRightArea = irArea.GetFromRight(subFileWidth);
+    const auto irLinkArea = IRECT(irLeftArea.R, irArea.T, irRightArea.L, irArea.B).GetCentredInside(18.0f, 18.0f);
+
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
     const auto cutFiltersButtonArea = IRECT(irArea.R + 6.0f, irArea.MH() - 14.0f,
                                            irArea.R + 6.0f + 56.0f, irArea.MH() + 14.0f);
@@ -359,13 +373,11 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto oversamplingIndicatorArea =
       oversamplingButtonArea.GetTranslated(34.0f, 0.0f).GetCentredInside(38.0f, 22.0f);
 
-    // Model loader button
+    // Model loader button (Left)
     auto loadModelCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
       if (fileName.GetLength())
       {
-        // Sets mNAMPath and mStagedNAM
         const std::string msg = _StageModel(fileName);
-        // TODO error messages like the IR loader.
         if (msg.size())
         {
           std::stringstream ss;
@@ -376,7 +388,22 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       }
     };
 
-    // IR loader button
+    // Model loader button (Right)
+    auto loadModelRightCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
+      if (fileName.GetLength())
+      {
+        const std::string msg = _StageModelRight(fileName);
+        if (msg.size())
+        {
+          std::stringstream ss;
+          ss << "Failed to load Right NAM model. Message:\n\n" << msg;
+          _ShowMessageBox(GetUI(), ss.str().c_str(), "Failed to load model!", kMB_OK);
+        }
+        std::cout << "Loaded Right: " << fileName.Get() << std::endl;
+      }
+    };
+
+    // IR loader button (Left)
     auto loadIRCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
       if (fileName.GetLength())
       {
@@ -386,6 +413,23 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
         {
           std::stringstream message;
           message << "Failed to load IR file " << fileName.Get() << ":\n";
+          message << dsp::wav::GetMsgForLoadReturnCode(retCode);
+
+          _ShowMessageBox(GetUI(), message.str().c_str(), "Failed to load IR!", kMB_OK);
+        }
+      }
+    };
+
+    // IR loader button (Right)
+    auto loadIRRightCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
+      if (fileName.GetLength())
+      {
+        mIRRightPath = fileName;
+        const dsp::wav::LoadReturnCode retCode = _StageIRRight(fileName);
+        if (retCode != dsp::wav::LoadReturnCode::SUCCESS)
+        {
+          std::stringstream message;
+          message << "Failed to load Right IR file " << fileName.Get() << ":\n";
           message << dsp::wav::GetMsgForLoadReturnCode(retCode);
 
           _ShowMessageBox(GetUI(), message.str().c_str(), "Failed to load IR!", kMB_OK);
@@ -410,10 +454,19 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // Getting started page listing additional resources
     const char* const getUrl = "https://www.neuralampmodeler.com/users#comp-marb84o5";
     pGraphics->AttachControl(
-      new NAMFileBrowserControl(modelArea, kMsgTagClearModel, defaultNamFileString.c_str(), "nam",
+      new NAMFileBrowserControl(modelLeftArea, kMsgTagClearModel, defaultNamFileString.c_str(), "nam",
                                 loadModelCompletionHandler, style, fileSVG, crossSVG, leftArrowSVG, rightArrowSVG,
                                 fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl, kNAMToggle),
       kCtrlTagModelFileBrowser);
+
+    pGraphics->AttachControl(new NAMIconSwitchControl(namLinkArea, linkSVG, kNAMLink), kCtrlTagNAMLink)
+      ->SetTooltip("Link Left and Right NAM models");
+
+    pGraphics->AttachControl(
+      new NAMFileBrowserControl(modelRightArea, kMsgTagClearModelRight, defaultNamFileString.c_str(), "nam",
+                                loadModelRightCompletionHandler, style, fileSVG, crossSVG, leftArrowSVG, rightArrowSVG,
+                                fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl, kNAMToggle),
+      kCtrlTagModelRightFileBrowser);
 
     pGraphics
       ->AttachControl(new IVSliderControl(slimIconArea, kSlim, "Model Size",
@@ -427,10 +480,19 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     pGraphics->AttachControl(new NAMIconSwitchControl(irSwitchArea, irIconOnSVG, kIRToggle));
     pGraphics->AttachControl(
-      new NAMFileBrowserControl(irArea, kMsgTagClearIR, defaultIRString.c_str(), "wav", loadIRCompletionHandler, style,
+      new NAMFileBrowserControl(irLeftArea, kMsgTagClearIR, defaultIRString.c_str(), "wav", loadIRCompletionHandler, style,
                                 fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
                                 "Get IRs", getUrl, kIRToggle),
       kCtrlTagIRFileBrowser);
+
+    pGraphics->AttachControl(new NAMIconSwitchControl(irLinkArea, linkSVG, kIRLink), kCtrlTagIRLink)
+      ->SetTooltip("Link Left and Right IRs");
+
+    pGraphics->AttachControl(
+      new NAMFileBrowserControl(irRightArea, kMsgTagClearIRRight, defaultIRString.c_str(), "wav", loadIRRightCompletionHandler, style,
+                                fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
+                                "Get IRs", getUrl, kIRToggle),
+      kCtrlTagIRRightFileBrowser);
     pGraphics->AttachControl(new NAMCutFiltersButtonControl(cutFiltersButtonArea,
                                                             [pGraphics](IControl* pCaller) {
                                                               pGraphics->GetControlWithTag(kCtrlTagCutFiltersBox)
@@ -576,7 +638,9 @@ void NeuralAmpModeler::_InitInternalPresets()
     preset.hasEditedName = false;
     preset.paramValues.fill(0.0);
     preset.namPath.clear();
+    preset.namRightPath.clear();
     preset.irPath.clear();
+    preset.irRightPath.clear();
     preset.toneStackTypeName.clear();
     preset.toneStackComponentState.clear();
   }
@@ -880,7 +944,9 @@ void NeuralAmpModeler::_StoreInternalPreset(int index)
     preset.paramValues[i] = GetParam(i)->Value();
 
   preset.namPath = mNAMPath.Get();
+  preset.namRightPath = mNAMRightPath.Get();
   preset.irPath = mIRPath.Get();
+  preset.irRightPath = mIRRightPath.Get();
   preset.toneStackTypeName = dsp::tone_stack::GetToneStackTypeName(
     dsp::tone_stack::ToneStackTypeFromInt(GetParam(kToneStackType)->Int()));
   preset.toneStackComponentState = _SerializeToneStackComponentState();
@@ -1072,6 +1138,11 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
     {
       WDL_String path(preset.namPath.c_str());
       _StageModel(path);
+      if (!preset.namRightPath.empty() && preset.namRightPath != preset.namPath)
+      {
+        WDL_String rightPath(preset.namRightPath.c_str());
+        _StageModelRight(rightPath);
+      }
     }
 
     if (preset.irPath.empty())
@@ -1085,6 +1156,11 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
     {
       WDL_String path(preset.irPath.c_str());
       _StageIR(path);
+      if (!preset.irRightPath.empty() && preset.irRightPath != preset.irPath)
+      {
+        WDL_String rightPath(preset.irRightPath.c_str());
+        _StageIRRight(rightPath);
+      }
     }
   }
 
@@ -1144,7 +1220,9 @@ std::string NeuralAmpModeler::_SerializeInternalPresetState() const
     p["name"] = preset.name;
     p["saved"] = preset.saved;
     p["namPath"] = preset.namPath;
+    p["namRightPath"] = preset.namRightPath;
     p["irPath"] = preset.irPath;
+    p["irRightPath"] = preset.irRightPath;
     p["toneStackTypeName"] = preset.toneStackTypeName;
     p["toneStackComponents"] = preset.toneStackComponentState;
     p["params"] = nlohmann::json::array();
@@ -1214,7 +1292,9 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
       preset.hasEditedName = false;
       preset.saved = p.value("saved", false);
       preset.namPath = p.value("namPath", "");
+      preset.namRightPath = p.value("namRightPath", preset.namPath);
       preset.irPath = p.value("irPath", "");
+      preset.irRightPath = p.value("irRightPath", preset.irPath);
       preset.toneStackTypeName = p.value("toneStackTypeName", "");
       preset.toneStackComponentState = p.value("toneStackComponents", "");
 
@@ -1290,7 +1370,9 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
         preset.editedName.clear();
         preset.hasEditedName = false;
         preset.namPath.clear();
+        preset.namRightPath.clear();
         preset.irPath.clear();
+        preset.irRightPath.clear();
         preset.toneStackTypeName.clear();
         preset.toneStackComponentState.clear();
         for (int paramIdx = 0; paramIdx < kNumParams; ++paramIdx)
@@ -1595,7 +1677,7 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
 
   if (mModel != nullptr && namActive)
   {
-    if (numChannelsInternal == kNumChannelsStereo)
+    if (numChannelsInternal == kNumChannelsStereo && mModelRight != nullptr)
     {
       sample* modelInputLeft[1] = {modelInputPointers[0]};
       sample* modelOutputLeft[1] = {mOutputPointers[0]};
@@ -1625,7 +1707,7 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
   sample** irPointers = toneStackOutPointers;
   if (mIR != nullptr && GetParam(kIRToggle)->Value())
   {
-    if (numChannelsInternal == kNumChannelsStereo)
+    if (numChannelsInternal == kNumChannelsStereo && mIRRight != nullptr)
     {
       sample* irInputLeft[1] = {toneStackOutPointers[0]};
       sample* irInputRight[1] = {toneStackOutPointers[1]};
@@ -2064,6 +2146,9 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
   const bool paramsSerialized = SerializeParams(chunk);
   if (paramsSerialized)
   {
+    // Right-channel paths (new in 2.3.0)
+    chunk.PutStr(mNAMRightPath.Get());
+    chunk.PutStr(mIRRightPath.Get());
     const std::string toneStackComponentState = _SerializeToneStackComponentState();
     chunk.PutStr(toneStackComponentState.c_str());
     const std::string internalPresetState = _SerializeInternalPresetState();
@@ -2106,12 +2191,28 @@ void NeuralAmpModeler::OnUIOpen()
       SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadFailed);
   }
 
+  if (mNAMRightPath.GetLength())
+  {
+    SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadedModelRight, mNAMRightPath.GetLength(), mNAMRightPath.Get());
+    if (mModelRight == nullptr && mStagedModelRight == nullptr)
+      SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadFailed);
+  }
+
   if (mIRPath.GetLength())
   {
     SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, mIRPath.GetLength(), mIRPath.Get());
     if (mIR == nullptr && mStagedIR == nullptr)
       SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadFailed);
   }
+
+  if (mIRRightPath.GetLength())
+  {
+    SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadedIRRight, mIRRightPath.GetLength(), mIRRightPath.Get());
+    if (mIRRight == nullptr && mStagedIRRight == nullptr)
+      SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadFailed);
+  }
+
+  _UpdateLinkAndBrowserAvailability();
 
   if (mModel != nullptr)
   {
@@ -2211,14 +2312,72 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
     }
 
     case kEQPostNAM: mEQPostNAM = GetParam(kEQPostNAM)->Bool(); break;
+    case kNAMLink:
+    case kIRLink:
     case kChannelMode:
-      if (_IsStereoRequested())
-        _RestageCurrentModelAndIRForStereo();
+      // Skip restaging during preset/state load — the caller will explicitly
+      // stage models and IRs after all parameters have been set.
+      if (!mApplyingInternalPreset.load(std::memory_order_acquire))
+      {
+        if (_IsStereoRequested())
+          _RestageCurrentModelAndIRForStereo();
+        else
+          _SetStereoProcessingFromParam();
+      }
       else
+      {
         _SetStereoProcessingFromParam();
+      }
       break;
     default: break;
   }
+}
+
+void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
+{
+#if PLUG_HAS_UI
+  if (auto pGraphics = GetUI())
+  {
+    const bool isStereo = _IsStereoRequested();
+    const bool namActive = GetParam(kNAMToggle)->Bool();
+    const bool irActive = GetParam(kIRToggle)->Bool();
+    const bool namLink = GetParam(kNAMLink)->Bool();
+    const bool irLink = GetParam(kIRLink)->Bool();
+
+    if (auto* leftNamCtrl = pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser))
+    {
+      leftNamCtrl->SetDisabled(!namActive);
+      leftNamCtrl->SetDirty();
+    }
+    if (auto* rightNamCtrl = pGraphics->GetControlWithTag(kCtrlTagModelRightFileBrowser))
+    {
+      bool rightNamDisabled = !namActive || !isStereo || namLink;
+      rightNamCtrl->SetDisabled(rightNamDisabled);
+      rightNamCtrl->SetDirty();
+    }
+    if (auto* leftIrCtrl = pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser))
+    {
+      leftIrCtrl->SetDisabled(!irActive);
+      leftIrCtrl->SetDirty();
+    }
+    if (auto* rightIrCtrl = pGraphics->GetControlWithTag(kCtrlTagIRRightFileBrowser))
+    {
+      bool rightIrDisabled = !irActive || !isStereo || irLink;
+      rightIrCtrl->SetDisabled(rightIrDisabled);
+      rightIrCtrl->SetDirty();
+    }
+    if (auto* namLinkCtrl = pGraphics->GetControlWithTag(kCtrlTagNAMLink))
+    {
+      namLinkCtrl->SetDisabled(!isStereo);
+      namLinkCtrl->SetDirty();
+    }
+    if (auto* irLinkCtrl = pGraphics->GetControlWithTag(kCtrlTagIRLink))
+    {
+      irLinkCtrl->SetDisabled(!isStereo);
+      irLinkCtrl->SetDirty();
+    }
+  }
+#endif
 }
 
 void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
@@ -2256,12 +2415,11 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
         pGraphics->SetAllControlsDirty();
         break;
       case kIRToggle:
-        pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->SetDisabled(!active);
-        pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->SetDirty();
-        break;
       case kNAMToggle:
-        pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser)->SetDisabled(!active);
-        pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser)->SetDirty();
+      case kNAMLink:
+      case kIRLink:
+      case kChannelMode:
+        _UpdateLinkAndBrowserAvailability();
         break;
        case kFollowTrackColor:
         _ApplyThemeColorToUI(true);
@@ -2277,11 +2435,57 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
   switch (msgTag)
   {
     case kMsgTagClearModel:
+      mNAMPath.Set("");
       mShouldRemoveModel = true;
+      if (GetParam(kNAMLink)->Bool() || !_IsStereoRequested())
+      {
+        mNAMRightPath.Set("");
+        std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+        mStagedModelRight = nullptr;
+        mStagedModelRightPath.clear();
+#if PLUG_HAS_UI
+        SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadedModelRight, 0, "");
+#endif
+      }
+      _MarkCurrentInternalPresetDirty();
+      return true;
+    case kMsgTagClearModelRight:
+      mNAMRightPath.Set("");
+      {
+        std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+        mStagedModelRight = nullptr;
+        mStagedModelRightPath.clear();
+      }
+#if PLUG_HAS_UI
+      SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadedModelRight, 0, "");
+#endif
       _MarkCurrentInternalPresetDirty();
       return true;
     case kMsgTagClearIR:
+      mIRPath.Set("");
       mShouldRemoveIR = true;
+      if (GetParam(kIRLink)->Bool() || !_IsStereoRequested())
+      {
+        mIRRightPath.Set("");
+        std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+        mStagedIRRight = nullptr;
+        mStagedIRRightPath.clear();
+#if PLUG_HAS_UI
+        SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadedIRRight, 0, "");
+#endif
+      }
+      _MarkCurrentInternalPresetDirty();
+      return true;
+    case kMsgTagClearIRRight:
+      mIRRightPath.Set("");
+      {
+        std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+        mStagedIRRight = nullptr;
+        mStagedIRRightPath.clear();
+      }
+#if PLUG_HAS_UI
+      SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadedIRRight, 0, "");
+#endif
       _MarkCurrentInternalPresetDirty();
       return true;
 #if PLUG_HAS_UI
@@ -2331,6 +2535,7 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     mLoadedGearType.clear();
     mStagedGearType.clear();
     mNAMPath.Set("");
+    mNAMRightPath.Set("");
     mShouldRemoveModel = false;
     mModelCleared = true;
     _UpdateLatency();
@@ -2356,17 +2561,23 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     mShouldRemoveIR = false;
   }
   // Move things from staged to live
-  if (mStagedModel != nullptr)
+  if (mStagedModel != nullptr || mStagedModelRight != nullptr)
   {
-    mModel = std::move(mStagedModel);
-    mModelRight = std::move(mStagedModelRight);
-    mLiveModelPath = mStagedModelPath;
-    mLiveModelRightPath = mStagedModelRightPath;
-    mLoadedGearType = mStagedGearType;
-    mStagedModel = nullptr;
-    mStagedModelRight = nullptr;
-    mStagedModelPath.clear();
-    mStagedModelRightPath.clear();
+    if (mStagedModel != nullptr)
+    {
+      mModel = std::move(mStagedModel);
+      mLiveModelPath = mStagedModelPath;
+      mLoadedGearType = mStagedGearType;
+      mStagedModel = nullptr;
+      mStagedModelPath.clear();
+    }
+    if (mStagedModelRight != nullptr)
+    {
+      mModelRight = std::move(mStagedModelRight);
+      mLiveModelRightPath = mStagedModelRightPath;
+      mStagedModelRight = nullptr;
+      mStagedModelRightPath.clear();
+    }
     mAppliedOversamplingFactor = 0;
     mAppliedAntiAliasFilterPhase = -1;
     _ApplyActiveDSPSettings(false);
@@ -2375,16 +2586,22 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     _SetInputGain();
     _SetOutputGain();
   }
-  if (mStagedIR != nullptr)
+  if (mStagedIR != nullptr || mStagedIRRight != nullptr)
   {
-    mIR = std::move(mStagedIR);
-    mIRRight = std::move(mStagedIRRight);
-    mLiveIRPath = mStagedIRPath;
-    mLiveIRRightPath = mStagedIRRightPath;
-    mStagedIR = nullptr;
-    mStagedIRRight = nullptr;
-    mStagedIRPath.clear();
-    mStagedIRRightPath.clear();
+    if (mStagedIR != nullptr)
+    {
+      mIR = std::move(mStagedIR);
+      mLiveIRPath = mStagedIRPath;
+      mStagedIR = nullptr;
+      mStagedIRPath.clear();
+    }
+    if (mStagedIRRight != nullptr)
+    {
+      mIRRight = std::move(mStagedIRRight);
+      mLiveIRRightPath = mStagedIRRightPath;
+      mStagedIRRight = nullptr;
+      mStagedIRRightPath.clear();
+    }
   }
 
   const bool stereoReady = _IsStereoRequested() && (mModel == nullptr || mModelRight != nullptr)
@@ -2931,6 +3148,11 @@ bool NeuralAmpModeler::_NeedsStereoModelRestageForPath(const std::string& modelP
     return false;
 
   const bool stereoRequested = _IsStereoRequested();
+  const bool linkNAM = GetParam(kNAMLink)->Bool();
+  const std::string expectedRightPath = (stereoRequested && !linkNAM && CStringHasContents(mNAMRightPath.Get()))
+                                          ? mNAMRightPath.Get()
+                                          : modelPath;
+
   std::lock_guard<std::mutex> lock(mDSPStagingMutex);
 
   if (modelPath != mNAMPath.Get())
@@ -2945,7 +3167,7 @@ bool NeuralAmpModeler::_NeedsStereoModelRestageForPath(const std::string& modelP
       return true;
     if (!mStagedModelPath.empty() && mStagedModelPath != modelPath)
       return true;
-    if (!mStagedModelRightPath.empty() && mStagedModelRightPath != modelPath)
+    if (!mStagedModelRightPath.empty() && mStagedModelRightPath != expectedRightPath)
       return true;
     return false;
   }
@@ -2954,7 +3176,7 @@ bool NeuralAmpModeler::_NeedsStereoModelRestageForPath(const std::string& modelP
     return true;
   if (!mLiveModelPath.empty() && mLiveModelPath != modelPath)
     return true;
-  if (!mLiveModelRightPath.empty() && mLiveModelRightPath != modelPath)
+  if (!mLiveModelRightPath.empty() && mLiveModelRightPath != expectedRightPath)
     return true;
   return false;
 }
@@ -2966,6 +3188,11 @@ bool NeuralAmpModeler::_NeedsStereoIRRestageForPath(const std::string& irPath)
 
   const bool stereoRequested = _IsStereoRequested();
   const bool irEnabled = GetParam(kIRToggle)->Value();
+  const bool linkIR = GetParam(kIRLink)->Bool();
+  const std::string expectedRightPath = (stereoRequested && !linkIR && CStringHasContents(mIRRightPath.Get()))
+                                          ? mIRRightPath.Get()
+                                          : irPath;
+
   std::lock_guard<std::mutex> lock(mDSPStagingMutex);
 
   if (irPath != mIRPath.Get())
@@ -2980,7 +3207,7 @@ bool NeuralAmpModeler::_NeedsStereoIRRestageForPath(const std::string& irPath)
       return true;
     if (!mStagedIRPath.empty() && mStagedIRPath != irPath)
       return true;
-    if (!mStagedIRRightPath.empty() && mStagedIRRightPath != irPath)
+    if (!mStagedIRRightPath.empty() && mStagedIRRightPath != expectedRightPath)
       return true;
     return false;
   }
@@ -2989,7 +3216,7 @@ bool NeuralAmpModeler::_NeedsStereoIRRestageForPath(const std::string& irPath)
     return true;
   if (!mLiveIRPath.empty() && mLiveIRPath != irPath)
     return true;
-  if (!mLiveIRRightPath.empty() && mLiveIRRightPath != irPath)
+  if (!mLiveIRRightPath.empty() && mLiveIRRightPath != expectedRightPath)
     return true;
   return false;
 }
@@ -3002,8 +3229,26 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     nam::dspData returnedConfig;
     auto stagedModel = _CreateModel(modelPath, &returnedConfig);
     std::unique_ptr<ResamplingNAM> stagedModelRight;
-    if (_IsStereoRequested())
-      stagedModelRight = _CreateModel(modelPath);
+
+    bool isStereo = _IsStereoRequested();
+    bool linkNAM = GetParam(kNAMLink)->Bool();
+
+    if (isStereo)
+    {
+      if (linkNAM || !CStringHasContents(mNAMRightPath.Get()))
+      {
+        stagedModelRight = _CreateModel(modelPath);
+        mNAMRightPath = modelPath;
+      }
+      else
+      {
+        stagedModelRight = _CreateModel(mNAMRightPath);
+      }
+    }
+    else
+    {
+      mNAMRightPath = modelPath;
+    }
 
     std::string gearType = "";
     if (!returnedConfig.metadata.is_null())
@@ -3053,7 +3298,7 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       mStagedModel = std::move(stagedModel);
       mStagedModelRight = std::move(stagedModelRight);
       mStagedModelPath = modelPath.Get();
-      mStagedModelRightPath = mStagedModelRight != nullptr ? modelPath.Get() : "";
+      mStagedModelRightPath = mNAMRightPath.Get();
       mStagedGearType = gearType;
       mNAMPath = modelPath;
       mShouldRemoveModel = false;
@@ -3080,6 +3325,10 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     _MarkCurrentInternalPresetDirty();
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, loadedNAMPath.GetLength(),
                                loadedNAMPath.Get());
+    if (linkNAM || !isStereo)
+    {
+      SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadedModelRight, mNAMRightPath.GetLength(), mNAMRightPath.Get());
+    }
   }
   catch (std::runtime_error& e)
   {
@@ -3100,22 +3349,72 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
   return "";
 }
 
+std::string NeuralAmpModeler::_StageModelRight(const WDL_String& modelPath)
+{
+  WDL_String previousNAMRightPath = mNAMRightPath;
+  try
+  {
+    nam::dspData returnedConfig;
+    auto stagedModelRight = _CreateModel(modelPath, &returnedConfig);
+
+    WDL_String loadedNAMRightPath;
+    {
+      std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+      mStagedModelRight = std::move(stagedModelRight);
+      mStagedModelRightPath = modelPath.Get();
+      mNAMRightPath = modelPath;
+      loadedNAMRightPath = mNAMRightPath;
+    }
+
+    _MarkCurrentInternalPresetDirty();
+    SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadedModelRight, loadedNAMRightPath.GetLength(), loadedNAMRightPath.Get());
+  }
+  catch (std::runtime_error& e)
+  {
+    SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadFailed);
+
+    {
+      std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+      mStagedModelRight = nullptr;
+      mStagedModelRightPath.clear();
+      mNAMRightPath = previousNAMRightPath;
+    }
+    std::cerr << "Failed to read Right DSP module" << std::endl;
+    std::cerr << e.what() << std::endl;
+    return e.what();
+  }
+  return "";
+}
+
 dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
 {
-  // FIXME it'd be better for the path to be "staged" as well. Just in case the
-  // path and the model got caught on opposite sides of the fence...
   WDL_String previousIRPath = mIRPath;
   const double sampleRate = GetSampleRate();
   dsp::wav::LoadReturnCode wavState = dsp::wav::LoadReturnCode::ERROR_OTHER;
   std::unique_ptr<dsp::ImpulseResponse> stagedIR;
   std::unique_ptr<dsp::ImpulseResponse> stagedIRRight;
+
+  bool isStereo = _IsStereoRequested();
+  bool linkIR = GetParam(kIRLink)->Bool();
+
   try
   {
     auto irPathU8 = std::filesystem::u8path(irPath.Get());
     stagedIR = std::make_unique<dsp::ImpulseResponse>(irPathU8.string().c_str(), sampleRate);
     wavState = stagedIR->GetWavState();
     if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
-      stagedIRRight = std::make_unique<dsp::ImpulseResponse>(stagedIR->GetData(), sampleRate);
+    {
+      if (linkIR || !isStereo || !CStringHasContents(mIRRightPath.Get()))
+      {
+        stagedIRRight = std::make_unique<dsp::ImpulseResponse>(stagedIR->GetData(), sampleRate);
+        mIRRightPath = irPath;
+      }
+      else
+      {
+        auto irRightPathU8 = std::filesystem::u8path(mIRRightPath.Get());
+        stagedIRRight = std::make_unique<dsp::ImpulseResponse>(irRightPathU8.string().c_str(), sampleRate);
+      }
+    }
   }
   catch (std::runtime_error& e)
   {
@@ -3127,18 +3426,22 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
   if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
   {
     WDL_String loadedIRPath;
-  {
-    std::lock_guard<std::mutex> lock(mDSPStagingMutex);
-    mStagedIR = std::move(stagedIR);
-    mStagedIRRight = std::move(stagedIRRight);
-    mStagedIRPath = irPath.Get();
-    mStagedIRRightPath = mStagedIRRight != nullptr ? irPath.Get() : "";
-    mIRPath = irPath;
-    mShouldRemoveIR = false;
-    loadedIRPath = mIRPath;
-  }
+    {
+      std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+      mStagedIR = std::move(stagedIR);
+      mStagedIRRight = std::move(stagedIRRight);
+      mStagedIRPath = irPath.Get();
+      mStagedIRRightPath = mIRRightPath.Get();
+      mIRPath = irPath;
+      mShouldRemoveIR = false;
+      loadedIRPath = mIRPath;
+    }
     _MarkCurrentInternalPresetDirty();
     SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, loadedIRPath.GetLength(), loadedIRPath.Get());
+    if (linkIR || !isStereo)
+    {
+      SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadedIRRight, mIRRightPath.GetLength(), mIRRightPath.Get());
+    }
   }
   else
   {
@@ -3151,6 +3454,52 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
       mIRPath = previousIRPath;
     }
     SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadFailed);
+  }
+
+  return wavState;
+}
+
+dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIRRight(const WDL_String& irPath)
+{
+  WDL_String previousIRRightPath = mIRRightPath;
+  const double sampleRate = GetSampleRate();
+  dsp::wav::LoadReturnCode wavState = dsp::wav::LoadReturnCode::ERROR_OTHER;
+  std::unique_ptr<dsp::ImpulseResponse> stagedIRRight;
+  try
+  {
+    auto irPathU8 = std::filesystem::u8path(irPath.Get());
+    stagedIRRight = std::make_unique<dsp::ImpulseResponse>(irPathU8.string().c_str(), sampleRate);
+    wavState = stagedIRRight->GetWavState();
+  }
+  catch (std::runtime_error& e)
+  {
+    wavState = dsp::wav::LoadReturnCode::ERROR_OTHER;
+    std::cerr << "Caught unhandled exception while attempting to load Right IR:" << std::endl;
+    std::cerr << e.what() << std::endl;
+  }
+
+  if (wavState == dsp::wav::LoadReturnCode::SUCCESS)
+  {
+    WDL_String loadedIRRightPath;
+    {
+      std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+      mStagedIRRight = std::move(stagedIRRight);
+      mStagedIRRightPath = irPath.Get();
+      mIRRightPath = irPath;
+      loadedIRRightPath = mIRRightPath;
+    }
+    _MarkCurrentInternalPresetDirty();
+    SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadedIRRight, loadedIRRightPath.GetLength(), loadedIRRightPath.Get());
+  }
+  else
+  {
+    {
+      std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+      mStagedIRRight = nullptr;
+      mStagedIRRightPath.clear();
+      mIRRightPath = previousIRRightPath;
+    }
+    SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadFailed);
   }
 
   return wavState;
