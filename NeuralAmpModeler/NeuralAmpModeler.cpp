@@ -2345,6 +2345,10 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
 void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
 {
 #if PLUG_HAS_UI
+  if (mUpdatingLinkAndBrowserAvailability)
+    return;
+  mUpdatingLinkAndBrowserAvailability = true;
+
   if (auto pGraphics = GetUI())
   {
     const bool isStereo = _IsStereoRequested();
@@ -2356,36 +2360,38 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
     if (auto* leftNamCtrl = pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser))
     {
       leftNamCtrl->SetDisabled(!namActive);
-      leftNamCtrl->SetDirty();
+      leftNamCtrl->SetDirty(false);
     }
     if (auto* rightNamCtrl = pGraphics->GetControlWithTag(kCtrlTagModelRightFileBrowser))
     {
       bool rightNamDisabled = !namActive || !isStereo || namLink;
       rightNamCtrl->SetDisabled(rightNamDisabled);
-      rightNamCtrl->SetDirty();
+      rightNamCtrl->SetDirty(false);
     }
     if (auto* leftIrCtrl = pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser))
     {
       leftIrCtrl->SetDisabled(!irActive);
-      leftIrCtrl->SetDirty();
+      leftIrCtrl->SetDirty(false);
     }
     if (auto* rightIrCtrl = pGraphics->GetControlWithTag(kCtrlTagIRRightFileBrowser))
     {
       bool rightIrDisabled = !irActive || !isStereo || irLink;
       rightIrCtrl->SetDisabled(rightIrDisabled);
-      rightIrCtrl->SetDirty();
+      rightIrCtrl->SetDirty(false);
     }
     if (auto* namLinkCtrl = pGraphics->GetControlWithTag(kCtrlTagNAMLink))
     {
       namLinkCtrl->SetDisabled(!isStereo);
-      namLinkCtrl->SetDirty();
+      namLinkCtrl->SetDirty(false);
     }
     if (auto* irLinkCtrl = pGraphics->GetControlWithTag(kCtrlTagIRLink))
     {
       irLinkCtrl->SetDisabled(!isStereo);
-      irLinkCtrl->SetDirty();
+      irLinkCtrl->SetDirty(false);
     }
   }
+
+  mUpdatingLinkAndBrowserAvailability = false;
 #endif
 }
 
