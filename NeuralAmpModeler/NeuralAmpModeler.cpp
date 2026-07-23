@@ -338,25 +338,24 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       outputKnobArea.GetVShifted(outputKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
 
     // Areas for model and IR
-    const auto fileWidth = 230.0f;
+    const auto fileWidth = 290.0f;
     const auto fileHeight = 30.0f;
     const auto irYOffset = 38.0f;
     const auto modelArea =
       contentArea.GetFromBottom((2.0f * fileHeight)).GetFromTop(fileHeight).GetMidHPadded(fileWidth).GetVShifted(-1);
     
-    const float subFileWidth = (fileWidth - 20.0f) / 2.0f; // 105.0f
-    const auto modelLeftArea = modelArea.GetFromLeft(subFileWidth);
-    const auto modelRightArea = modelArea.GetFromRight(subFileWidth);
-    const auto namLinkArea = IRECT(modelLeftArea.R, modelArea.T, modelRightArea.L, modelArea.B).GetCentredInside(18.0f, 18.0f);
+    const auto namLinkArea = IRECT(modelArea.MW() - 9.0f, modelArea.T + 6.0f, modelArea.MW() + 9.0f, modelArea.T + 24.0f);
+    const auto modelLeftArea = IRECT(modelArea.L, modelArea.T, modelArea.MW() - 11.0f, modelArea.B);
+    const auto modelRightArea = IRECT(modelArea.MW() + 11.0f, modelArea.T, modelArea.R, modelArea.B);
 
     const auto slimIconArea =
       IRECT(modelArea.R + 6.f, modelArea.MH() - 14.f, modelArea.R + 6.f + 2.f * 28.f, modelArea.MH() + 14.f);
     const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 0).GetCentredInside(30.f, 14.f);
 
     const auto irArea = modelArea.GetVShifted(irYOffset);
-    const auto irLeftArea = irArea.GetFromLeft(subFileWidth);
-    const auto irRightArea = irArea.GetFromRight(subFileWidth);
-    const auto irLinkArea = IRECT(irLeftArea.R, irArea.T, irRightArea.L, irArea.B).GetCentredInside(18.0f, 18.0f);
+    const auto irLinkArea = IRECT(irArea.MW() - 9.0f, irArea.T + 6.0f, irArea.MW() + 9.0f, irArea.T + 24.0f);
+    const auto irLeftArea = IRECT(irArea.L, irArea.T, irArea.MW() - 11.0f, irArea.B);
+    const auto irRightArea = IRECT(irArea.MW() + 11.0f, irArea.T, irArea.R, irArea.B);
 
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
     const auto cutFiltersButtonArea = IRECT(irArea.R + 6.0f, irArea.MH() - 14.0f,
@@ -2357,36 +2356,63 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
     const bool namLink = GetParam(kNAMLink)->Bool();
     const bool irLink = GetParam(kIRLink)->Bool();
 
+    const auto b = pGraphics->GetBounds();
+    const auto contentArea = b.GetPadded(-10.0f).GetReducedFromTop(30.0f).GetReducedFromBottom(20.0f);
+    const auto fileWidth = 290.0f;
+    const auto fileHeight = 30.0f;
+    const auto irYOffset = 38.0f;
+    const auto modelArea =
+      contentArea.GetFromBottom((2.0f * fileHeight)).GetFromTop(fileHeight).GetMidHPadded(fileWidth).GetVShifted(-1);
+
+    const auto namLinkArea = IRECT(modelArea.MW() - 9.0f, modelArea.T + 6.0f, modelArea.MW() + 9.0f, modelArea.T + 24.0f);
+    const auto modelLeftArea = IRECT(modelArea.L, modelArea.T, modelArea.MW() - 11.0f, modelArea.B);
+    const auto modelRightArea = IRECT(modelArea.MW() + 11.0f, modelArea.T, modelArea.R, modelArea.B);
+
+    const auto irArea = modelArea.GetVShifted(irYOffset);
+    const auto irLinkArea = IRECT(irArea.MW() - 9.0f, irArea.T + 6.0f, irArea.MW() + 9.0f, irArea.T + 24.0f);
+    const auto irLeftArea = IRECT(irArea.L, irArea.T, irArea.MW() - 11.0f, irArea.B);
+    const auto irRightArea = IRECT(irArea.MW() + 11.0f, irArea.T, irArea.R, irArea.B);
+
     if (auto* leftNamCtrl = pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser))
     {
+      leftNamCtrl->SetTargetAndDrawRECTs(isStereo ? modelLeftArea : modelArea);
       leftNamCtrl->SetDisabled(!namActive);
       leftNamCtrl->SetDirty(false);
     }
     if (auto* rightNamCtrl = pGraphics->GetControlWithTag(kCtrlTagModelRightFileBrowser))
     {
+      rightNamCtrl->SetTargetAndDrawRECTs(modelRightArea);
       bool rightNamDisabled = !namActive || !isStereo || namLink;
       rightNamCtrl->SetDisabled(rightNamDisabled);
+      rightNamCtrl->Hide(!isStereo);
       rightNamCtrl->SetDirty(false);
+    }
+    if (auto* namLinkCtrl = pGraphics->GetControlWithTag(kCtrlTagNAMLink))
+    {
+      namLinkCtrl->SetTargetAndDrawRECTs(namLinkArea);
+      namLinkCtrl->SetDisabled(!isStereo);
+      namLinkCtrl->Hide(!isStereo);
+      namLinkCtrl->SetDirty(false);
     }
     if (auto* leftIrCtrl = pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser))
     {
+      leftIrCtrl->SetTargetAndDrawRECTs(isStereo ? irLeftArea : irArea);
       leftIrCtrl->SetDisabled(!irActive);
       leftIrCtrl->SetDirty(false);
     }
     if (auto* rightIrCtrl = pGraphics->GetControlWithTag(kCtrlTagIRRightFileBrowser))
     {
+      rightIrCtrl->SetTargetAndDrawRECTs(irRightArea);
       bool rightIrDisabled = !irActive || !isStereo || irLink;
       rightIrCtrl->SetDisabled(rightIrDisabled);
+      rightIrCtrl->Hide(!isStereo);
       rightIrCtrl->SetDirty(false);
-    }
-    if (auto* namLinkCtrl = pGraphics->GetControlWithTag(kCtrlTagNAMLink))
-    {
-      namLinkCtrl->SetDisabled(!isStereo);
-      namLinkCtrl->SetDirty(false);
     }
     if (auto* irLinkCtrl = pGraphics->GetControlWithTag(kCtrlTagIRLink))
     {
+      irLinkCtrl->SetTargetAndDrawRECTs(irLinkArea);
       irLinkCtrl->SetDisabled(!isStereo);
+      irLinkCtrl->Hide(!isStereo);
       irLinkCtrl->SetDirty(false);
     }
   }

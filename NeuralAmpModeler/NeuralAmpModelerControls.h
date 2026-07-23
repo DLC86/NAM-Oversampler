@@ -1167,6 +1167,28 @@ public:
     IDirBrowseControlBase::SetDisabled(disable);
   }
 
+  void OnResize() override
+  {
+    IDirBrowseControlBase::OnResize();
+    if (NChildren() >= 6)
+    {
+      IRECT padded = mRECT.GetPadded(-6.f).GetHPadded(-2.f);
+      const auto buttonWidth = std::min(padded.H(), std::max(12.0f, padded.W() / 6.0f));
+      const auto loadFileButtonBounds = padded.ReduceFromLeft(buttonWidth);
+      const auto clearAndGetButtonBounds = padded.ReduceFromRight(buttonWidth);
+      const auto leftButtonBounds = padded.ReduceFromLeft(buttonWidth);
+      const auto rightButtonBounds = padded.ReduceFromLeft(buttonWidth);
+      const auto fileNameButtonBounds = padded;
+
+      GetChild(0)->SetTargetAndDrawRECTs(loadFileButtonBounds);
+      GetChild(1)->SetTargetAndDrawRECTs(leftButtonBounds);
+      GetChild(2)->SetTargetAndDrawRECTs(rightButtonBounds);
+      GetChild(3)->SetTargetAndDrawRECTs(fileNameButtonBounds);
+      GetChild(4)->SetTargetAndDrawRECTs(clearAndGetButtonBounds);
+      GetChild(5)->SetTargetAndDrawRECTs(clearAndGetButtonBounds);
+    }
+  }
+
   void Draw(IGraphics& g) override
   {
     g.DrawFittedBitmap(mBitmap, mRECT);
