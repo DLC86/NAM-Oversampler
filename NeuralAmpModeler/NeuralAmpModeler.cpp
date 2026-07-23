@@ -338,7 +338,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       outputKnobArea.GetVShifted(outputKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
 
     // Areas for model and IR
-    const auto fileWidth = 290.0f;
+    const auto fileWidth = 230.0f;
     const auto fileHeight = 30.0f;
     const auto irYOffset = 38.0f;
     const auto modelArea =
@@ -2358,7 +2358,7 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
 
     const auto b = pGraphics->GetBounds();
     const auto contentArea = b.GetPadded(-10.0f).GetReducedFromTop(30.0f).GetReducedFromBottom(20.0f);
-    const auto fileWidth = 290.0f;
+    const auto fileWidth = 230.0f;
     const auto fileHeight = 30.0f;
     const auto irYOffset = 38.0f;
     const auto modelArea =
