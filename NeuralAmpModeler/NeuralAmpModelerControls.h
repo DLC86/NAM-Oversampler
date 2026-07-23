@@ -1165,10 +1165,6 @@ public:
   void SetDisabled(bool disable) override
   {
     IDirBrowseControlBase::SetDisabled(disable);
-    for (int c = 0; c < NChildren(); c++)
-    {
-      GetChild(c)->SetDisabled(disable);
-    }
   }
 
   void Draw(IGraphics& g) override
@@ -2715,9 +2711,8 @@ public:
 
   void ClearModelInfo()
   {
-    auto* modelInfoControl = static_cast<ModelInfoControl*>(GetNamedChild(mControlNames.modelInfo));
-    assert(modelInfoControl != nullptr);
-    modelInfoControl->ClearModelInfo();
+    if (auto* modelInfoControl = static_cast<ModelInfoControl*>(GetNamedChild(mControlNames.modelInfo)))
+      modelInfoControl->ClearModelInfo();
   }
 
   bool OnKeyDown(float x, float y, const IKeyPress& key) override
