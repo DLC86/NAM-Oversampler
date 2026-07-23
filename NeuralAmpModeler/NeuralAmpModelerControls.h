@@ -1167,6 +1167,24 @@ public:
     IDirBrowseControlBase::SetDisabled(disable);
   }
 
+  void SetStereoMode(bool isStereo)
+  {
+    if (mIsStereoMode != isStereo)
+    {
+      mIsStereoMode = isStereo;
+      OnResize();
+    }
+  }
+
+  void SetDefaultLabelStr(const char* labelStr)
+  {
+    mDefaultLabelStr.Set(labelStr);
+    if (mBrowserState == NAMBrowserState::Empty && mFileNameControl != nullptr)
+    {
+      mFileNameControl->SetLabelAndTooltip(mDefaultLabelStr.Get());
+    }
+  }
+
   void OnResize() override
   {
     IDirBrowseControlBase::OnResize();
@@ -1174,18 +1192,52 @@ public:
     {
       IRECT padded = mRECT.GetPadded(-6.f).GetHPadded(-2.f);
       const auto buttonWidth = std::min(padded.H(), std::max(12.0f, padded.W() / 6.0f));
-      const auto loadFileButtonBounds = padded.ReduceFromLeft(buttonWidth);
-      const auto clearAndGetButtonBounds = padded.ReduceFromRight(buttonWidth);
-      const auto leftButtonBounds = padded.ReduceFromLeft(buttonWidth);
-      const auto rightButtonBounds = padded.ReduceFromLeft(buttonWidth);
-      const auto fileNameButtonBounds = padded;
 
-      GetChild(0)->SetTargetAndDrawRECTs(loadFileButtonBounds);
-      GetChild(1)->SetTargetAndDrawRECTs(leftButtonBounds);
-      GetChild(2)->SetTargetAndDrawRECTs(rightButtonBounds);
-      GetChild(3)->SetTargetAndDrawRECTs(fileNameButtonBounds);
-      GetChild(4)->SetTargetAndDrawRECTs(clearAndGetButtonBounds);
-      GetChild(5)->SetTargetAndDrawRECTs(clearAndGetButtonBounds);
+      if (mIsStereoMode)
+      {
+        // Stereo mode: hide left/right arrows and globe button
+        GetChild(1)->Hide(true);
+        GetChild(2)->Hide(true);
+        GetChild(5)->Hide(true);
+
+        const auto loadFileButtonBounds = padded.ReduceFromLeft(buttonWidth);
+        GetChild(0)->SetTargetAndDrawRECTs(loadFileButtonBounds);
+
+        if (mBrowserState == NAMBrowserState::Loaded)
+        {
+          const auto clearButtonBounds = padded.ReduceFromRight(buttonWidth);
+          GetChild(4)->SetTargetAndDrawRECTs(clearButtonBounds);
+          GetChild(4)->Hide(false);
+        }
+        else
+        {
+          GetChild(4)->Hide(true);
+        }
+
+        const auto fileNameButtonBounds = padded;
+        GetChild(3)->SetTargetAndDrawRECTs(fileNameButtonBounds);
+      }
+      else
+      {
+        // Mono mode: show arrows
+        GetChild(1)->Hide(false);
+        GetChild(2)->Hide(false);
+
+        const auto loadFileButtonBounds = padded.ReduceFromLeft(buttonWidth);
+        const auto clearAndGetButtonBounds = padded.ReduceFromRight(buttonWidth);
+        const auto leftButtonBounds = padded.ReduceFromLeft(buttonWidth);
+        const auto rightButtonBounds = padded.ReduceFromLeft(buttonWidth);
+        const auto fileNameButtonBounds = padded;
+
+        GetChild(0)->SetTargetAndDrawRECTs(loadFileButtonBounds);
+        GetChild(1)->SetTargetAndDrawRECTs(leftButtonBounds);
+        GetChild(2)->SetTargetAndDrawRECTs(rightButtonBounds);
+        GetChild(3)->SetTargetAndDrawRECTs(fileNameButtonBounds);
+        GetChild(4)->SetTargetAndDrawRECTs(clearAndGetButtonBounds);
+        GetChild(5)->SetTargetAndDrawRECTs(clearAndGetButtonBounds);
+
+        SetBrowserState(mBrowserState);
+      }
     }
   }
 
@@ -1408,7 +1460,7 @@ private:
       {
         case NAMBrowserState::Empty:
           mClearButton->Hide(true);
-          mGetButton->Hide(false);
+          mGetButton->Hide(mIsStereoMode ? true : false);
           break;
         case NAMBrowserState::Loaded:
           mClearButton->Hide(false);
@@ -1433,6 +1485,7 @@ private:
   NAMSquareButtonControl* mClearButton = nullptr;
   NAMGetButtonControl* mGetButton = nullptr;
   int mParamIdx = kNoParameter;
+  bool mIsStereoMode = false;
 };
 
 class NAMMeterControl : public IVPeakAvgMeterControl<2>, public IBitmapBase

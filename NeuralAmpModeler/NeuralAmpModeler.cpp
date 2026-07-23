@@ -2373,14 +2373,26 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
     const auto irLeftArea = IRECT(irArea.L, irArea.T, irArea.MW() - 11.0f, irArea.B);
     const auto irRightArea = IRECT(irArea.MW() + 11.0f, irArea.T, irArea.R, irArea.B);
 
-    if (auto* leftNamCtrl = pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser))
+    if (auto* leftNamCtrl = dynamic_cast<NAMFileBrowserControl*>(pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser)))
     {
+      leftNamCtrl->SetStereoMode(isStereo);
+#ifdef NAM_PICK_DIRECTORY
+      leftNamCtrl->SetDefaultLabelStr(isStereo ? "Select left model directory..." : "Select model directory...");
+#else
+      leftNamCtrl->SetDefaultLabelStr(isStereo ? "Select left model..." : "Select model...");
+#endif
       leftNamCtrl->SetTargetAndDrawRECTs(isStereo ? modelLeftArea : modelArea);
       leftNamCtrl->SetDisabled(!namActive);
       leftNamCtrl->SetDirty(false);
     }
-    if (auto* rightNamCtrl = pGraphics->GetControlWithTag(kCtrlTagModelRightFileBrowser))
+    if (auto* rightNamCtrl = dynamic_cast<NAMFileBrowserControl*>(pGraphics->GetControlWithTag(kCtrlTagModelRightFileBrowser)))
     {
+      rightNamCtrl->SetStereoMode(isStereo);
+#ifdef NAM_PICK_DIRECTORY
+      rightNamCtrl->SetDefaultLabelStr("Select right model directory...");
+#else
+      rightNamCtrl->SetDefaultLabelStr("Select right model...");
+#endif
       rightNamCtrl->SetTargetAndDrawRECTs(modelRightArea);
       bool rightNamDisabled = !namActive || !isStereo || namLink;
       rightNamCtrl->SetDisabled(rightNamDisabled);
@@ -2394,14 +2406,26 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
       namLinkCtrl->Hide(!isStereo);
       namLinkCtrl->SetDirty(false);
     }
-    if (auto* leftIrCtrl = pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser))
+    if (auto* leftIrCtrl = dynamic_cast<NAMFileBrowserControl*>(pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)))
     {
+      leftIrCtrl->SetStereoMode(isStereo);
+#ifdef NAM_PICK_DIRECTORY
+      leftIrCtrl->SetDefaultLabelStr(isStereo ? "Select left IR directory..." : "Select IR directory...");
+#else
+      leftIrCtrl->SetDefaultLabelStr(isStereo ? "Select left IR..." : "Select IR...");
+#endif
       leftIrCtrl->SetTargetAndDrawRECTs(isStereo ? irLeftArea : irArea);
       leftIrCtrl->SetDisabled(!irActive);
       leftIrCtrl->SetDirty(false);
     }
-    if (auto* rightIrCtrl = pGraphics->GetControlWithTag(kCtrlTagIRRightFileBrowser))
+    if (auto* rightIrCtrl = dynamic_cast<NAMFileBrowserControl*>(pGraphics->GetControlWithTag(kCtrlTagIRRightFileBrowser)))
     {
+      rightIrCtrl->SetStereoMode(isStereo);
+#ifdef NAM_PICK_DIRECTORY
+      rightIrCtrl->SetDefaultLabelStr("Select right IR directory...");
+#else
+      rightIrCtrl->SetDefaultLabelStr("Select right IR...");
+#endif
       rightIrCtrl->SetTargetAndDrawRECTs(irRightArea);
       bool rightIrDisabled = !irActive || !isStereo || irLink;
       rightIrCtrl->SetDisabled(rightIrDisabled);
