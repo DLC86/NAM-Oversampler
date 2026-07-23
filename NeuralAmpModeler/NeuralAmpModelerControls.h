@@ -53,6 +53,9 @@ public:
 
   void Draw(IGraphics& g) override
   {
+    if (IsHidden())
+      return;
+
     if (mMouseIsOver)
       g.FillRoundRect(PluginColors::MOUSEOVER, mRECT, 2.f);
 
@@ -1078,6 +1081,9 @@ public:
 
   void Draw(IGraphics& g) override
   {
+    if (IsHidden())
+      return;
+
     const bool active = mParamIdx == kNoParameter || GetDelegate()->GetParam(mParamIdx)->Value() > 0.5;
     IColor origColor = mStyle.valueText.mFGColor;
     if (!active)
@@ -1207,10 +1213,12 @@ public:
         const auto loadFileButtonBounds = padded.ReduceFromLeft(buttonWidth);
         GetChild(0)->SetTargetAndDrawRECTs(loadFileButtonBounds);
 
+        const auto clearButtonBounds = padded.ReduceFromRight(buttonWidth);
+        GetChild(4)->SetTargetAndDrawRECTs(clearButtonBounds);
+        GetChild(5)->SetTargetAndDrawRECTs(clearButtonBounds);
+
         if (mBrowserState == NAMBrowserState::Loaded)
         {
-          const auto clearButtonBounds = padded.ReduceFromRight(buttonWidth);
-          GetChild(4)->SetTargetAndDrawRECTs(clearButtonBounds);
           GetChild(4)->Hide(false);
         }
         else
@@ -1231,16 +1239,26 @@ public:
         const auto clearAndGetButtonBounds = padded.ReduceFromRight(buttonWidth);
         const auto leftButtonBounds = padded.ReduceFromLeft(buttonWidth);
         const auto rightButtonBounds = padded.ReduceFromLeft(buttonWidth);
-        const auto fileNameButtonBounds = padded;
 
         GetChild(0)->SetTargetAndDrawRECTs(loadFileButtonBounds);
         GetChild(1)->SetTargetAndDrawRECTs(leftButtonBounds);
         GetChild(2)->SetTargetAndDrawRECTs(rightButtonBounds);
-        GetChild(3)->SetTargetAndDrawRECTs(fileNameButtonBounds);
         GetChild(4)->SetTargetAndDrawRECTs(clearAndGetButtonBounds);
         GetChild(5)->SetTargetAndDrawRECTs(clearAndGetButtonBounds);
 
-        SetBrowserState(mBrowserState);
+        if (mBrowserState == NAMBrowserState::Empty)
+        {
+          GetChild(4)->Hide(true);
+          GetChild(5)->Hide(false);
+        }
+        else
+        {
+          GetChild(4)->Hide(false);
+          GetChild(5)->Hide(true);
+        }
+
+        const auto fileNameButtonBounds = padded;
+        GetChild(3)->SetTargetAndDrawRECTs(fileNameButtonBounds);
       }
     }
   }
