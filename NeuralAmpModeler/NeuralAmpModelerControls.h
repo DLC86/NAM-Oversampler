@@ -1165,6 +1165,10 @@ public:
   void SetDisabled(bool disable) override
   {
     IDirBrowseControlBase::SetDisabled(disable);
+    for (int c = 0; c < NChildren(); c++)
+    {
+      GetChild(c)->SetDisabled(disable);
+    }
   }
 
   void SetStereoMode(bool isStereo)
@@ -1267,6 +1271,8 @@ public:
   void OnAttached() override
   {
     auto prevFileFunc = [this](IControl* pCaller) {
+      if (IsDisabled() || pCaller->IsDisabled())
+        return;
       const auto nItems = NItems();
       if (nItems == 0)
         return;
@@ -1279,6 +1285,8 @@ public:
     };
 
     auto nextFileFunc = [this](IControl* pCaller) {
+      if (IsDisabled() || pCaller->IsDisabled())
+        return;
       const auto nItems = NItems();
       if (nItems == 0)
         return;
@@ -1291,6 +1299,8 @@ public:
     };
 
     auto loadFileFunc = [this](IControl* pCaller) {
+      if (IsDisabled() || pCaller->IsDisabled())
+        return;
       WDL_String fileName;
       WDL_String path;
       GetSelectedFileDirectory(path);
@@ -1321,14 +1331,16 @@ public:
     };
 
     auto clearFileFunc = [this](IControl* pCaller) {
+      if (IsDisabled() || pCaller->IsDisabled())
+        return;
       pCaller->GetDelegate()->SendArbitraryMsgFromUI(mClearMsgTag);
       mFileNameControl->SetLabelAndTooltip(mDefaultLabelStr.Get());
       SetBrowserState(NAMBrowserState::Empty);
-      // FIXME disabling output mode...
-      //      pCaller->GetUI()->GetControlWithTag(kCtrlTagOutputMode)->SetDisabled(false);
     };
 
     auto chooseFileFunc = [this, loadFileFunc](IControl* pCaller) {
+      if (IsDisabled() || pCaller->IsDisabled())
+        return;
       if (std::string_view(pCaller->As<IVButtonControl>()->GetLabelStr()) == mDefaultLabelStr.Get())
       {
         loadFileFunc(pCaller);
@@ -1393,7 +1405,6 @@ public:
     switch (msgTag)
     {
       case kMsgTagLoadFailed:
-        // Honestly, not sure why I made a big stink of it before. Why not just say it failed and move on? :)
         {
           std::string label(std::string("(FAILED) ") + std::string(mFileNameControl->GetLabelStr()));
           mFileNameControl->SetLabelAndTooltip(label.c_str());
@@ -1467,6 +1478,9 @@ private:
           mGetButton->Hide(true);
           break;
       }
+      SetDirty(false);
+      if (GetUI())
+        GetUI()->SetAllControlsDirty();
     }
   }
 
