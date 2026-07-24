@@ -353,9 +353,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto modelLeftArea = IRECT(modelArea.L, modelArea.T, modelArea.MW() - 11.0f, modelArea.B);
     const auto modelRightArea = IRECT(modelArea.MW() + 11.0f, modelArea.T, modelArea.R, modelArea.B);
 
-    // FILTERS & MIX button to the right of modelArea (NAM field), shifted another 2px to left (R - 2.0f)
+    // FILTERS & MIX button to the right of modelArea (NAM field), shifted 4px to left total (R - 4.0f)
     const auto cutFiltersButtonArea =
-      IRECT(modelArea.R - 2.0f, modelArea.MH() - 14.0f, modelArea.R - 2.0f + 56.0f, modelArea.MH() + 14.0f);
+      IRECT(modelArea.R - 4.0f, modelArea.MH() - 14.0f, modelArea.R - 4.0f + 56.0f, modelArea.MH() + 14.0f);
     
     // Request 3: NAM bypass icon 2px lower (Y + 2)
     const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 2).GetCentredInside(30.f, 14.f);
@@ -367,9 +367,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
     
-    // Mono/Stereo button to the right of irArea (IR field), shifted another 2px to left (R - 2.0f)
+    // Mono/Stereo button to the right of irArea (IR field), shifted 4px to left total (R - 4.0f)
     const auto channelModeArea =
-      IRECT(irArea.R - 2.0f, irArea.MH() - 14.0f, irArea.R - 2.0f + 56.0f, irArea.MH() + 14.0f);
+      IRECT(irArea.R - 4.0f, irArea.MH() - 14.0f, irArea.R - 4.0f + 56.0f, irArea.MH() + 14.0f);
 
     // Areas for meters
     const auto inputMeterArea = contentArea.GetFromLeft(30).GetHShifted(-20).GetMidVPadded(100).GetVShifted(-25);

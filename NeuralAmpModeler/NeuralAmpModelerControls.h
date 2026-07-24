@@ -441,11 +441,11 @@ public:
 
   void DrawWidget(IGraphics& g) override
   {
-    float widgetRadius = GetRadius() * 0.88f;
-    auto knobRect = mWidgetBounds.GetScaledAboutCentre(0.68f);
+    float widgetRadius = GetRadius() * 0.73;
+    auto knobRect = mWidgetBounds.GetCentredInside(mWidgetBounds.W(), mWidgetBounds.W());
     const float cx = knobRect.MW(), cy = knobRect.MH();
     const float angle = mAngle1 + (static_cast<float>(GetValue()) * (mAngle2 - mAngle1));
-    DrawIndicatorTrack(g, angle, cx + 0.5f, cy, widgetRadius);
+    DrawIndicatorTrack(g, angle, cx + 0.5, cy, widgetRadius);
     g.DrawFittedBitmap(mBitmap, knobRect);
     float data[2][2];
     RadialPoints(angle, cx, cy, mInnerPointerFrac * widgetRadius, mInnerPointerFrac * widgetRadius, 2, data);
@@ -829,8 +829,8 @@ public:
 
   void DrawWidget(IGraphics& g) override
   {
-    float widgetRadius = GetRadius() * 0.73f;
-    auto knobRect = mWidgetBounds.GetCentredInside(mWidgetBounds.W(), mWidgetBounds.W());
+    float widgetRadius = GetRadius() * 0.86f;
+    auto knobRect = mWidgetBounds.GetCentredInside(mWidgetBounds.W() * 0.72f, mWidgetBounds.W() * 0.72f);
     const float cx = knobRect.MW(), cy = knobRect.MH();
     const float angle = mAngle1 + (static_cast<float>(GetValue()) * (mAngle2 - mAngle1));
 
@@ -1781,37 +1781,34 @@ public:
                                       .GetPadded(-knobsPad)
                                       .GetVShifted(titleHeight + knobsExtraSpaceBelowTitle);
 
-    const auto inputKnobArea = knobsArea.GetGridCell(0, kInputLevel, 1, 6).GetPadded(-singleKnobPad);
-    const auto noiseGateArea = knobsArea.GetGridCell(0, kNoiseGateThreshold, 1, 6).GetPadded(-singleKnobPad);
-    const auto bassKnobArea = knobsArea.GetGridCell(0, kToneBass, 1, 6).GetPadded(-singleKnobPad);
-    const auto midKnobArea = knobsArea.GetGridCell(0, kToneMid, 1, 6).GetPadded(-singleKnobPad);
-    const auto trebleKnobArea = knobsArea.GetGridCell(0, kToneTreble, 1, 6).GetPadded(-singleKnobPad);
-    const auto outputKnobArea = knobsArea.GetGridCell(0, kOutputLevel, 1, 6).GetPadded(-singleKnobPad);
+    auto getColKnobArea = [&](int colIdx) {
+      return knobsArea.GetGridCell(0, colIdx, 1, 6).GetPadded(-singleKnobPad).GetCentredInside(86.0f, 86.0f);
+    };
 
-    // 6 Knobs: exact same class (NAMKnobControl), size, arc track, label and value position as main page knobs
-    mLowCutKnob = AddNamedChildControl(new NAMKnobControl(inputKnobArea, kLowCutFrequency, "", mStyle, mKnobBitmap), "LowCutFrequency");
-    mPanLKnob   = AddNamedChildControl(new NAMKnobControl(noiseGateArea, kPanL, "", mStyle, mKnobBitmap), "PanL");
-    mLevelLKnob = AddNamedChildControl(new NAMKnobControl(bassKnobArea, kLevelL, "", mStyle, mKnobBitmap), "LevelL");
-    mLevelRKnob = AddNamedChildControl(new NAMKnobControl(midKnobArea, kLevelR, "", mStyle, mKnobBitmap), "LevelR");
-    mPanRKnob   = AddNamedChildControl(new NAMKnobControl(trebleKnobArea, kPanR, "", mStyle, mKnobBitmap), "PanR");
-    mHighCutKnob= AddNamedChildControl(new NAMKnobControl(outputKnobArea, kHighCutFrequency, "", mStyle, mKnobBitmap), "HighCutFrequency");
+    // 6 Knobs: round 86x86 knobs with visible red arc track, label and value
+    mLowCutKnob = AddNamedChildControl(new NAMFilterKnobControl(getColKnobArea(0), kLowCutFrequency, "Low Cut", mStyle, mKnobBitmap), "LowCutFrequency");
+    mPanLKnob   = AddNamedChildControl(new NAMFilterKnobControl(getColKnobArea(1), kPanL, "Pan L", mStyle, mKnobBitmap), "PanL");
+    mLevelLKnob = AddNamedChildControl(new NAMFilterKnobControl(getColKnobArea(2), kLevelL, "Level L", mStyle, mKnobBitmap), "LevelL");
+    mLevelRKnob = AddNamedChildControl(new NAMFilterKnobControl(getColKnobArea(3), kLevelR, "Level R", mStyle, mKnobBitmap), "LevelR");
+    mPanRKnob   = AddNamedChildControl(new NAMFilterKnobControl(getColKnobArea(4), kPanR, "Pan R", mStyle, mKnobBitmap), "PanR");
+    mHighCutKnob= AddNamedChildControl(new NAMFilterKnobControl(getColKnobArea(5), kHighCutFrequency, "High Cut", mStyle, mKnobBitmap, true), "HighCutFrequency");
 
     const auto slopeStyle = mRadioButtonStyle.WithColor(kBG, COLOR_BLACK)
                                              .WithColor(kFG, COLOR_BLACK)
                                              .WithColor(kFR, PLUG()->GetThemeColor().WithOpacity(0.40f));
 
     // Slope selectors placed ABOVE Low Cut and High Cut knobs
-    const auto lowSlopeArea = IRECT(inputKnobArea.MW() - 40.0f, inputKnobArea.T - 26.0f, inputKnobArea.MW() + 40.0f, inputKnobArea.T - 2.0f);
-    const auto highSlopeArea = IRECT(outputKnobArea.MW() - 40.0f, outputKnobArea.T - 26.0f, outputKnobArea.MW() + 40.0f, outputKnobArea.T - 2.0f);
+    const auto lowSlopeArea = IRECT(getColKnobArea(0).MW() - 40.0f, getColKnobArea(0).T - 26.0f, getColKnobArea(0).MW() + 40.0f, getColKnobArea(0).T - 2.0f);
+    const auto highSlopeArea = IRECT(getColKnobArea(5).MW() - 40.0f, getColKnobArea(5).T - 26.0f, getColKnobArea(5).MW() + 40.0f, getColKnobArea(5).T - 2.0f);
 
     AddNamedChildControl(new IVMenuButtonControl(lowSlopeArea, kLowCutSlope, "", slopeStyle, EVShape::Rectangle), "LowCutSlope");
     AddNamedChildControl(new IVMenuButtonControl(highSlopeArea, kHighCutSlope, "", slopeStyle, EVShape::Rectangle), "HighCutSlope");
 
     // Switches at exact same vertical height as main page switches
-    const auto lowSwitchArea = inputKnobArea.GetVShifted(inputKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
-    const auto highSwitchArea = outputKnobArea.GetVShifted(outputKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
-    const auto centerSwitchesArea = bassKnobArea.Union(midKnobArea);
-    const auto dcSwitchArea = centerSwitchesArea.GetVShifted(bassKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f).GetCentredInside(90.0f, NAM_SWTICH_HEIGHT);
+    const auto lowSwitchArea = getColKnobArea(0).GetVShifted(getColKnobArea(0).H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
+    const auto highSwitchArea = getColKnobArea(5).GetVShifted(getColKnobArea(5).H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
+    const auto centerSwitchesArea = getColKnobArea(2).Union(getColKnobArea(3));
+    const auto dcSwitchArea = centerSwitchesArea.GetVShifted(getColKnobArea(2).H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f).GetCentredInside(90.0f, NAM_SWTICH_HEIGHT);
 
     auto* lowPosSwitch = AddNamedChildControl(new NAMSwitchControl(lowSwitchArea, kLowCutPostNAM, "Pre/Post", mStyle, mSwitchBitmap), "LowCutPosition");
     lowPosSwitch->SetTooltip("Low cut position: off = pre NAM, on = post IR");
