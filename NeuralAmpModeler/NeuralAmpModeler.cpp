@@ -338,7 +338,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
             toneStackSelectorBaseArea.R + 14.0f, toneStackSelectorBaseArea.B + 1.0f);
     const auto eqPositionArea =
       trebleKnobArea.GetVShifted(trebleKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
-    const auto channelModeArea =
+    // Request 6: Model Size slider area under Output knob
+    const auto slimIconArea =
       outputKnobArea.GetVShifted(outputKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
 
     // Areas for model and IR
@@ -352,9 +353,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto modelLeftArea = IRECT(modelArea.L, modelArea.T, modelArea.MW() - 11.0f, modelArea.B);
     const auto modelRightArea = IRECT(modelArea.MW() + 11.0f, modelArea.T, modelArea.R, modelArea.B);
 
-    const auto slimIconArea =
-      IRECT(modelArea.R + 6.f, modelArea.MH() - 14.f, modelArea.R + 6.f + 2.f * 28.f, modelArea.MH() + 14.f);
-    const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 0).GetCentredInside(30.f, 14.f);
+    // Request 5: Mono/Stereo button to the right of modelArea (NAM field)
+    const auto channelModeArea =
+      IRECT(modelArea.R + 4.0f, modelArea.MH() - 14.0f, modelArea.R + 4.0f + 56.0f, modelArea.MH() + 14.0f);
+    
+    // Request 3: NAM bypass icon 2px lower (Y + 2)
+    const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 2).GetCentredInside(30.f, 14.f);
 
     const auto irArea = modelArea.GetVShifted(irYOffset);
     const auto irLinkArea = IRECT(irArea.MW() - 9.0f, irArea.T + 6.0f, irArea.MW() + 9.0f, irArea.T + 24.0f);
@@ -362,8 +366,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto irRightArea = IRECT(irArea.MW() + 11.0f, irArea.T, irArea.R, irArea.B);
 
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
-    const auto cutFiltersButtonArea = IRECT(irArea.R + 6.0f, irArea.MH() - 14.0f,
-                                           irArea.R + 6.0f + 56.0f, irArea.MH() + 14.0f);
+    
+    // Request 4: FILTERS & MIX button 2px to the left (X + 4.0f instead of X + 6.0f)
+    const auto cutFiltersButtonArea = IRECT(irArea.R + 4.0f, irArea.MH() - 14.0f,
+                                           irArea.R + 4.0f + 56.0f, irArea.MH() + 14.0f);
 
     // Areas for meters
     const auto inputMeterArea = contentArea.GetFromLeft(30).GetHShifted(-20).GetMidVPadded(100).GetVShifted(-25);
@@ -509,9 +515,18 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(new NAMSwitchControl(eqPositionArea, kEQPostNAM, "Pre/Post", style, switchHandleBitmap),
                              kCtrlTagEQPostNAM)
       ->SetTooltip("EQ position: off = pre NAM, on = post NAM");
-    pGraphics->AttachControl(new NAMChannelModeControl(channelModeArea, kChannelMode, "Mono/Stereo", style),
+    pGraphics->AttachControl(new NAMChannelModeControl(channelModeArea, kChannelMode, "", style),
                              kCtrlTagChannelMode)
       ->SetTooltip("Channel mode: mono or stereo");
+
+    const IVStyle slimStyle = style.WithColor(kFG, PluginColors::OFF_WHITE)
+                                 .WithValueText(IText(DEFAULT_TEXT_SIZE, EVAlign::Top, PluginColors::NAM_THEMEFONTCOLOR))
+                                 .WithLabelText(IText(DEFAULT_TEXT_SIZE, COLOR_WHITE))
+                                 .WithLabelOrientation(EOrientation::South);
+
+    pGraphics->AttachControl(
+      new IVSliderControl(slimIconArea, kSlim, "Model Size", slimStyle, true, EDirection::Horizontal, DEFAULT_GEARING, 4.f),
+      kCtrlTagSlimmableIcon);
 
     // The knobs
     pGraphics->AttachControl(new NAMKnobControl(inputKnobArea, kInputLevel, "", style, knobBackgroundBitmap));

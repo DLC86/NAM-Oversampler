@@ -1749,25 +1749,30 @@ public:
 
   void OnAttached() override
   {
-    const auto content = GetRECT().GetPadded(-30.0f);
+    const auto contentArea = GetRECT().GetPadded(-10.0f).GetReducedFromTop(30.0f).GetReducedFromBottom(20.0f);
+    const float knobsAreaHeight = 110.0f;
+    const float knobsPad = 10.0f;
+    const float titleHeight = 50.0f;
+    const float knobsExtraSpaceBelowTitle = 2.0f;
+    const float singleKnobPad = 5.0f;
+
+    const auto titleArea = GetRECT().GetPadded(-30.0f).GetFromTop(40.0f);
     const IVStyle titleStyle = DEFAULT_STYLE.WithValueText(IText(26, COLOR_WHITE, "Michroma-Regular"))
                                  .WithDrawFrame(false)
                                  .WithShadowOffset(2.0f);
 
     AddNamedChildControl(new IBitmapControl(GetRECT(), mBitmap), "Bitmap")->SetIgnoreMouse(true);
-    AddNamedChildControl(new IVLabelControl(content.GetFromTop(40.0f), "FILTERS & MIX", titleStyle), "Title");
+    AddNamedChildControl(new IVLabelControl(titleArea, "FILTERS & MIX", titleStyle), "Title");
 
-    const auto panelArea = content.GetReducedFromTop(45.0f).GetReducedFromBottom(40.0f);
-
-    // Top row: 6 knobs evenly spaced
-    const float knobHeight = NAM_KNOB_HEIGHT + 24.0f;
+    const auto knobsArea = contentArea.GetFromTop(knobsAreaHeight)
+                                      .GetPadded(-knobsPad)
+                                      .GetVShifted(titleHeight + knobsExtraSpaceBelowTitle);
 
     auto getColKnobArea = [&](int colIdx) {
-      IRECT cRect = panelArea.SubRectHorizontal(6, colIdx);
-      return cRect.GetFromTop(knobHeight).GetCentredInside(86.0f, knobHeight);
+      return knobsArea.GetGridCell(0, colIdx, 1, 6).GetPadded(-singleKnobPad);
     };
 
-    // Requirement 6: Order: Low Cut, Pan L, Level L, Level R, Pan R, High cut
+    // Requirement 1: Knobs in top row match exact position of main page controls
     mLowCutKnob = AddNamedChildControl(new NAMFilterKnobControl(getColKnobArea(0), kLowCutFrequency, "Low Cut", mStyle, mKnobBitmap), "LowCutFrequency");
     mPanLKnob   = AddNamedChildControl(new NAMFilterKnobControl(getColKnobArea(1), kPanL, "Pan L", mStyle, mKnobBitmap), "PanL");
     mLevelLKnob = AddNamedChildControl(new NAMFilterKnobControl(getColKnobArea(2), kLevelL, "Level L", mStyle, mKnobBitmap), "LevelL");
@@ -1775,44 +1780,33 @@ public:
     mPanRKnob   = AddNamedChildControl(new NAMFilterKnobControl(getColKnobArea(4), kPanR, "Pan R", mStyle, mKnobBitmap), "PanR");
     mHighCutKnob= AddNamedChildControl(new NAMFilterKnobControl(getColKnobArea(5), kHighCutFrequency, "High Cut", mStyle, mKnobBitmap, true), "HighCutFrequency");
 
-    // Requirement 7: Switches and selectors for Low Cut and High Cut under respective knobs
     const auto slopeStyle = mRadioButtonStyle.WithColor(kBG, COLOR_BLACK)
                                              .WithColor(kFG, COLOR_BLACK)
                                              .WithColor(kFR, PLUG()->GetThemeColor().WithOpacity(0.40f));
 
-    // Low Cut slope & pre/post switch (Column 0 area)
-    IRECT lowColArea = panelArea.SubRectHorizontal(6, 0);
-    const auto lowSlopeArea = lowColArea.GetReducedFromTop(knobHeight + 10.0f).GetFromTop(28.0f).GetCentredInside(80.0f, 26.0f);
-    const auto lowSwitchArea = lowColArea.GetReducedFromTop(knobHeight + 45.0f).GetFromTop(NAM_SWTICH_HEIGHT).GetCentredInside(80.0f, NAM_SWTICH_HEIGHT);
+    // Low Cut slope & pre/post switch (Column 0 area), pre/post shifted 12px lower
+    const auto lowColArea = knobsArea.GetGridCell(0, 0, 1, 6);
+    const auto lowSlopeArea = lowColArea.GetVShifted(lowColArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f).GetCentredInside(80.0f, 26.0f);
+    const auto lowSwitchArea = lowSlopeArea.GetVShifted(NAM_SWTICH_HEIGHT + 12.0f).GetCentredInside(80.0f, NAM_SWTICH_HEIGHT);
 
     AddNamedChildControl(new IVMenuButtonControl(lowSlopeArea, kLowCutSlope, "", slopeStyle, EVShape::Rectangle), "LowCutSlope");
     auto* lowPosSwitch = AddNamedChildControl(new NAMSwitchControl(lowSwitchArea, kLowCutPostNAM, "Pre/Post", mStyle, mSwitchBitmap), "LowCutPosition");
     lowPosSwitch->SetTooltip("Low cut position: off = pre NAM, on = post IR");
 
-    // High Cut slope & pre/post switch (Column 5 area)
-    IRECT highColArea = panelArea.SubRectHorizontal(6, 5);
-    const auto highSlopeArea = highColArea.GetReducedFromTop(knobHeight + 10.0f).GetFromTop(28.0f).GetCentredInside(80.0f, 26.0f);
-    const auto highSwitchArea = highColArea.GetReducedFromTop(knobHeight + 45.0f).GetFromTop(NAM_SWTICH_HEIGHT).GetCentredInside(80.0f, NAM_SWTICH_HEIGHT);
+    // High Cut slope & pre/post switch (Column 5 area), pre/post shifted 12px lower
+    const auto highColArea = knobsArea.GetGridCell(0, 5, 1, 6);
+    const auto highSlopeArea = highColArea.GetVShifted(highColArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f).GetCentredInside(80.0f, 26.0f);
+    const auto highSwitchArea = highSlopeArea.GetVShifted(NAM_SWTICH_HEIGHT + 12.0f).GetCentredInside(80.0f, NAM_SWTICH_HEIGHT);
 
     AddNamedChildControl(new IVMenuButtonControl(highSlopeArea, kHighCutSlope, "", slopeStyle, EVShape::Rectangle), "HighCutSlope");
     auto* highPosSwitch = AddNamedChildControl(new NAMSwitchControl(highSwitchArea, kHighCutPostNAM, "Pre/Post", mStyle, mSwitchBitmap), "HighCutPosition");
     highPosSwitch->SetTooltip("High cut position: off = pre NAM, on = post IR");
 
-    // Requirement 9: Model Size control moved to this page, aligned with pre/post switches and DC Filter
-    // Center area (Columns 1 to 4)
-    IRECT centerRow = panelArea.SubRectHorizontal(6, 1).Union(panelArea.SubRectHorizontal(6, 4)).GetReducedFromTop(knobHeight + 45.0f).GetFromTop(NAM_SWTICH_HEIGHT);
-
-    const auto dcSwitchArea = centerRow.GetFromLeft(centerRow.W() * 0.45f).GetCentredInside(90.0f, NAM_SWTICH_HEIGHT);
-    const auto slimSliderArea = centerRow.GetFromRight(centerRow.W() * 0.50f).GetCentredInside(130.0f, NAM_SWTICH_HEIGHT);
+    // Requirement 7 & 2: DC Filter switch horizontally in the center of the page, shifted 12px lower
+    const auto dcSwitchArea = IRECT(knobsArea.MW() - 45.0f, lowSwitchArea.T, knobsArea.MW() + 45.0f, lowSwitchArea.B);
 
     auto* dcSwitch = AddNamedChildControl(new NAMSwitchControl(dcSwitchArea, kDCBlockerActive, "DC Filter", mStyle, mSwitchBitmap), "DCFilter");
     dcSwitch->SetTooltip("Enable DC offset filter");
-
-    const IVStyle sliderStyle = mStyle.WithColor(kFG, PluginColors::OFF_WHITE)
-                                      .WithValueText(IText(DEFAULT_TEXT_SIZE - 2.f, EVAlign::Bottom, PluginColors::NAM_THEMEFONTCOLOR))
-                                      .WithLabelText(IText(DEFAULT_TEXT_SIZE - 2.f, COLOR_WHITE));
-
-    AddNamedChildControl(new IVSliderControl(slimSliderArea, kSlim, "Model Size", sliderStyle, true, EDirection::Horizontal, DEFAULT_GEARING, 4.f), "ModelSize");
 
     auto closeAction = [&](IControl* pCaller) {
       static_cast<NAMCutFiltersPageControl*>(pCaller->GetParent())->HideAnimated(true);
