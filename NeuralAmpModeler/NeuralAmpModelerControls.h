@@ -1009,45 +1009,25 @@ private:
   }
 };
 
-class NAMCutFiltersButtonControl : public IControl
+class NAMCutFiltersButtonControl : public IButtonControlBase
 {
 public:
   NAMCutFiltersButtonControl(const IRECT& bounds, IActionFunction openAction)
-  : IControl(bounds, openAction)
-  , mOpenAction(openAction)
+  : IButtonControlBase(bounds, openAction)
   {
-  }
-
-  void OnMouseOver(float x, float y, const IMouseMod& mod) override
-  {
-    if (!mMouseIsOver)
-    {
-      mMouseIsOver = true;
-      SetDirty(false);
-    }
-  }
-
-  void OnMouseOut() override
-  {
-    if (mMouseIsOver)
-    {
-      mMouseIsOver = false;
-      SetDirty(false);
-    }
   }
 
   void Draw(IGraphics& g) override
   {
-    const IColor color = mMouseIsOver ? PluginColors::NAM_THEMEFONTCOLOR : PLUG()->GetThemeColor();
-    const float stroke = mMouseIsOver ? 2.2f : 1.6f;
+    const IColor color = PLUG()->GetThemeColor();
+    const float stroke = 1.6f;
     const auto iconBounds = mRECT.GetPadded(-4.0f);
     DrawSlidersIcon(g, iconBounds, color, stroke);
-  }
-
-  void OnMouseDown(float x, float y, const IMouseMod& mod) override
-  {
-    if (mOpenAction)
-      mOpenAction(this);
+    if (mMouseIsOver)
+    {
+      DrawSlidersIcon(g, iconBounds, color, stroke);
+      DrawSlidersIcon(g, iconBounds, color, stroke);
+    }
   }
 
 private:
@@ -1074,8 +1054,6 @@ private:
     g.FillRoundRect(color, IRECT(x2 - handleWidth, yH2 - 1.5f, x2 + handleWidth, yH2 + 1.5f), 1.0f);
     g.FillRoundRect(color, IRECT(x3 - handleWidth, yH3 - 1.5f, x3 + handleWidth, yH3 + 1.5f), 1.0f);
   }
-
-  IActionFunction mOpenAction;
 };
 
 class NAMFileNameControl : public IVButtonControl
