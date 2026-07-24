@@ -1076,20 +1076,48 @@ public:
   NAMFileNameControl(const IRECT& bounds, const char* label, const IVStyle& style, int paramIdx = kNoParameter)
   : IVButtonControl(bounds, DefaultClickActionFunc, label, style)
   , mParamIdx(paramIdx)
-  , mBaseFontSize(style.valueText.mSize)
+  , mBaseFontSize(style.labelText.mSize > 0.0f ? style.labelText.mSize : 14.0f)
   {
   }
 
   void SetStereoFont(bool isStereo)
   {
+    mIsStereoFont = isStereo;
     if (mBaseFontSize <= 0.0f)
-      mBaseFontSize = mText.mSize > 0.0f ? mText.mSize : mStyle.valueText.mSize;
+      mBaseFontSize = mStyle.labelText.mSize > 0.0f ? mStyle.labelText.mSize : 14.0f;
 
     float newSize = isStereo ? (mBaseFontSize - 2.0f) : mBaseFontSize;
     mText.mSize = newSize;
     mStyle.valueText.mSize = newSize;
     mStyle.labelText.mSize = newSize;
     SetDirty(false);
+  }
+
+  void DrawLabel(IGraphics& g) override
+  {
+    if (mLabelBounds.H() && mStyle.showLabel)
+    {
+      IBlend blend = mControl->GetBlend();
+      IText textStyle = mStyle.labelText;
+      float fontSz = mIsStereoFont ? ((mBaseFontSize > 0.0f ? mBaseFontSize : 14.0f) - 2.0f) : (mBaseFontSize > 0.0f ? mBaseFontSize : 14.0f);
+      textStyle.mSize = fontSz;
+      g.DrawText(textStyle, mLabelStr.Get(), mLabelBounds, &blend);
+    }
+  }
+
+  void DrawValue(IGraphics& g, bool mouseOver) override
+  {
+    if (mouseOver)
+      g.FillRect(COLOR_TRANSLUCENT, mValueBounds);
+
+    if (mStyle.showValue)
+    {
+      IBlend blend = mControl->GetBlend();
+      IText textStyle = mText;
+      float fontSz = mIsStereoFont ? ((mBaseFontSize > 0.0f ? mBaseFontSize : 14.0f) - 2.0f) : (mBaseFontSize > 0.0f ? mBaseFontSize : 14.0f);
+      textStyle.mSize = fontSz;
+      g.DrawText(textStyle, mValueStr.Get(), mValueBounds, &blend);
+    }
   }
 
   void Draw(IGraphics& g) override
@@ -1099,12 +1127,15 @@ public:
 
     const bool active = mParamIdx == kNoParameter || GetDelegate()->GetParam(mParamIdx)->Value() > 0.5;
     IColor origColor = mStyle.valueText.mFGColor;
+    IColor origLabelColor = mStyle.labelText.mFGColor;
     if (!active)
     {
       mStyle.valueText.mFGColor = PluginColors::HELP_TEXT.WithOpacity(0.35f);
+      mStyle.labelText.mFGColor = PluginColors::HELP_TEXT.WithOpacity(0.35f);
     }
     IVButtonControl::Draw(g);
     mStyle.valueText.mFGColor = origColor;
+    mStyle.labelText.mFGColor = origLabelColor;
   }
 
   void SetLabelAndTooltip(const char* str)
@@ -1136,7 +1167,8 @@ public:
   }
 private:
   int mParamIdx = kNoParameter;
-  float mBaseFontSize = 0.0f;
+  float mBaseFontSize = 14.0f;
+  bool mIsStereoFont = false;
 };
 
 // URL control for the "Get" models/irs links
