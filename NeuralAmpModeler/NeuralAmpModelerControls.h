@@ -1029,6 +1029,22 @@ private:
   }
 };
 
+class NAMModelSizeSliderControl : public IVSliderControl
+{
+public:
+  using IVSliderControl::IVSliderControl;
+
+  void DrawValue(IGraphics& g, bool mouseOver) override
+  {
+    if (mStyle.showValue && CStringHasContents(mValueStr.Get()))
+    {
+      IBlend blend = GetBlend();
+      IRECT shiftedValueBounds = mValueBounds.GetVShifted(3.0f);
+      g.DrawText(mStyle.valueText, mValueStr.Get(), shiftedValueBounds, &blend);
+    }
+  }
+};
+
 class NAMCutFiltersButtonControl : public IButtonControlBase
 {
 public:
@@ -1828,7 +1844,7 @@ public:
       .WithColor(kBG, COLOR_TRANSPARENT);
     const float labelH = mStyle.labelText.mSize;
     auto addKnobLabel = [&](const IRECT& col, const char* text, const char* name) {
-      const IRECT la = col.GetFromTop(labelH).GetVShifted(-2.0f);
+      const IRECT la = col.GetFromTop(labelH).GetVShifted(-1.0f);
       AddNamedChildControl(new IVLabelControl(la, text, knobLabelStyle), name)->SetIgnoreMouse(true);
     };
     addKnobLabel(col0, "Low Cut",  "LblLowCut");

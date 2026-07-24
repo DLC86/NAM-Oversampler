@@ -520,12 +520,12 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       ->SetTooltip("Channel mode: mono or stereo");
 
     const IVStyle slimStyle = style.WithColor(kFG, PluginColors::OFF_WHITE)
-                                 .WithValueText(IText(DEFAULT_TEXT_SIZE, EVAlign::Middle, PluginColors::NAM_THEMEFONTCOLOR))
+                                 .WithValueText(IText(DEFAULT_TEXT_SIZE, EVAlign::Top, PluginColors::NAM_THEMEFONTCOLOR))
                                  .WithLabelText(style.labelText)
                                  .WithLabelOrientation(EOrientation::South);
 
     pGraphics->AttachControl(
-      new IVSliderControl(slimIconArea, kSlim, "Model Size", slimStyle, true, EDirection::Horizontal, DEFAULT_GEARING, 4.f),
+      new NAMModelSizeSliderControl(slimIconArea, kSlim, "Model Size", slimStyle, true, EDirection::Horizontal, DEFAULT_GEARING, 4.f),
       kCtrlTagSlimmableIcon);
 
     // The knobs
