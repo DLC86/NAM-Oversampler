@@ -478,8 +478,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                 fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl, kNAMToggle),
       kCtrlTagModelRightFileBrowser);
 
-    const auto irSwitchAreaLeft = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetFromTop(15.0f).GetScaledAboutCentre(0.48f);
-    const auto irSwitchAreaRight = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetFromBottom(15.0f).GetScaledAboutCentre(0.48f);
+    const auto irSwitchAreaLeft = irArea.GetFromLeft(15.0f).GetHShifted(-41.0f).GetMidVPadded(18.0f);
+    const auto irSwitchAreaRight = irArea.GetFromLeft(15.0f).GetHShifted(-24.0f).GetMidVPadded(18.0f);
 
     pGraphics->AttachControl(new NAMIconSwitchControl(irSwitchArea, irIconOnSVG, kIRToggle), kCtrlTagIRToggle)
       ->SetTooltip("Bypass IR");
@@ -500,7 +500,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     pGraphics->AttachControl(
       new NAMFileBrowserControl(irRightArea, kMsgTagClearIRRight, defaultIRString.c_str(), "wav", loadIRRightCompletionHandler, style,
                                 fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
-                                "Get IRs", getUrl, kIRToggle),
+                                "Get IRs", getUrl, kIRToggleRight),
       kCtrlTagIRRightFileBrowser);
     pGraphics->AttachControl(new NAMCutFiltersButtonControl(cutFiltersButtonArea,
                                                             [pGraphics](IControl* pCaller) {
@@ -2548,8 +2548,8 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
 
     const bool splitIRButtons = isStereo && !irLink;
     const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
-    const auto irSwitchAreaLeft = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetFromTop(15.0f).GetScaledAboutCentre(0.48f);
-    const auto irSwitchAreaRight = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetFromBottom(15.0f).GetScaledAboutCentre(0.48f);
+    const auto irSwitchAreaLeft = irArea.GetFromLeft(15.0f).GetHShifted(-41.0f).GetMidVPadded(18.0f);
+    const auto irSwitchAreaRight = irArea.GetFromLeft(15.0f).GetHShifted(-24.0f).GetMidVPadded(18.0f);
 
     if (auto* singleIrSwitch = pGraphics->GetControlWithTag(kCtrlTagIRToggle))
     {
