@@ -539,10 +539,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       new NAMKnobControl(trebleKnobArea, kToneTreble, "", style, knobBackgroundBitmap), -1, "EQ_KNOBS");
     pGraphics->AttachControl(new NAMKnobControl(outputKnobArea, kOutputLevel, "", style, knobBackgroundBitmap));
 
-    // The meters
-    pGraphics->AttachControl(new NAMMeterControl(inputMeterArea, meterBackgroundBitmap, style), kCtrlTagInputMeter);
-    pGraphics->AttachControl(new NAMMeterControl(outputMeterArea, meterBackgroundBitmap, style), kCtrlTagOutputMeter);
-
     // Settings/help/about box
     pGraphics->AttachControl(new NAMBitmapButtonControl(
       oversamplingButtonArea,
@@ -594,6 +590,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                                    crossSVG, style, radioButtonStyle),
                       kCtrlTagCutFiltersBox)
       ->Hide(true);
+
+    // The meters (attached after overlay pages so they remain visible on top of FILTERS & MIX page)
+    pGraphics->AttachControl(new NAMMeterControl(inputMeterArea, meterBackgroundBitmap, style), kCtrlTagInputMeter);
+    pGraphics->AttachControl(new NAMMeterControl(outputMeterArea, meterBackgroundBitmap, style), kCtrlTagOutputMeter);
 
     pGraphics->ForAllControlsFunc([](IControl* pControl) {
       pControl->SetMouseEventsWhenDisabled(true);

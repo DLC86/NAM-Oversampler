@@ -1039,7 +1039,7 @@ public:
     if (mStyle.showValue && CStringHasContents(mValueStr.Get()))
     {
       IBlend blend = GetBlend();
-      IRECT shiftedValueBounds = mValueBounds.GetVShifted(3.0f);
+      IRECT shiftedValueBounds = mValueBounds.GetVShifted(4.0f);
       g.DrawText(mStyle.valueText, mValueStr.Get(), shiftedValueBounds, &blend);
     }
   }
