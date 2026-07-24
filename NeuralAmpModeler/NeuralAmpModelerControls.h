@@ -1824,7 +1824,7 @@ public:
       .WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular"))
       .WithDrawFrame(false)
       .WithShadowOffset(2.0f);
-    AddNamedChildControl(new IVLabelControl(titleArea, "FILTERS & MIX", titleStyle), "Title");
+    AddNamedChildControl(new IVLabelControl(titleArea, "MIXER", titleStyle), "Title");
 
     // ── 6 Knobs ───────────────────────────────────────────────────────────────
     // centerAnchor=true → arc radiates from center (Pan/Level)
