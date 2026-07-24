@@ -41,6 +41,8 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
     config["NAM Link"] = 1.0;
   if (!config.contains("IR Link"))
     config["IR Link"] = 1.0;
+  if (!config.contains("Channel Mode"))
+    config["Channel Mode"] = 0.0;
 
   auto getParamByName = [&](std::string& name) {
     // Could use a map but eh

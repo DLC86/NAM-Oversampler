@@ -785,7 +785,6 @@ bool NeuralAmpModeler::_IsInternalPresetParam(int paramIdx) const
     case kOfflineAntiAliasFilterPhase:
     case kPhaseMulticoreEnabled:
     case kPhaseMulticoreThreadCount:
-    case kChannelMode:
     case kMidiChannel:
     case kFollowTrackColor:
       return false;
@@ -1224,6 +1223,7 @@ std::string NeuralAmpModeler::_SerializeInternalPresetState() const
     p["irRightPath"] = preset.irRightPath;
     p["toneStackTypeName"] = preset.toneStackTypeName;
     p["toneStackComponents"] = preset.toneStackComponentState;
+    p["channelMode"] = preset.paramValues[kChannelMode];
     p["params"] = nlohmann::json::array();
     for (int i = 0; i < kNumParams; ++i)
       p["params"].push_back(preset.paramValues[i]);
@@ -1336,6 +1336,16 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
 
           if (!hasCorrectNAMToggle)
             preset.paramValues[kNAMToggle] = 1.0;
+        }
+
+        if (p.contains("channelMode"))
+        {
+          preset.paramValues[kChannelMode] = std::clamp(p["channelMode"].get<double>(), 0.0, 1.0);
+        }
+        else if (oldParamCount < 11)
+        {
+          // For legacy presets saved without channelMode, default to Mono (0.0)
+          preset.paramValues[kChannelMode] = 0.0;
         }
       }
 
