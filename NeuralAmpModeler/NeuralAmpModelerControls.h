@@ -1803,9 +1803,9 @@ public:
     // Background bitmap + title
     AddNamedChildControl(new IBitmapControl(b, mBitmap), "Bitmap")->SetIgnoreMouse(true);
 
-    const auto titleArea = contentArea.GetPadded(-20.0f).GetFromTop(40.0f);
+    const auto titleArea = contentArea.GetFromTop(50.0f);
     const IVStyle titleStyle = DEFAULT_STYLE
-      .WithValueText(IText(26, COLOR_WHITE, "Michroma-Regular"))
+      .WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular"))
       .WithDrawFrame(false)
       .WithShadowOffset(2.0f);
     AddNamedChildControl(new IVLabelControl(titleArea, "FILTERS & MIX", titleStyle), "Title");
@@ -1826,9 +1826,9 @@ public:
       .WithDrawShadows(false)
       .WithDrawFrame(false)
       .WithColor(kBG, COLOR_TRANSPARENT);
-    const float labelH = mStyle.labelText.mSize + 4.0f;
+    const float labelH = mStyle.labelText.mSize;
     auto addKnobLabel = [&](const IRECT& col, const char* text, const char* name) {
-      const IRECT la = col.GetFromTop(labelH);
+      const IRECT la = col.GetFromTop(labelH).GetVShifted(-2.0f);
       AddNamedChildControl(new IVLabelControl(la, text, knobLabelStyle), name)->SetIgnoreMouse(true);
     };
     addKnobLabel(col0, "Low Cut",  "LblLowCut");
