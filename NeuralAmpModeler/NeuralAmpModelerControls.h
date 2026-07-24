@@ -781,7 +781,7 @@ public:
   // Labels are drawn as separate IVLabelControl children in OnAttached (same as main page).
   NAMFilterKnobControl(const IRECT& bounds, int paramIdx, const IVStyle& style, IBitmap bitmap,
                        bool reverseTrack = false, bool centerAnchor = false)
-  : IVKnobControl(bounds, paramIdx, "", style, true)
+  : IVKnobControl(bounds, paramIdx, "", style.WithShowLabel(false), true)
   , IBitmapBase(bitmap)
   , mReverseTrack(reverseTrack)
   , mCenterAnchor(centerAnchor)
@@ -1820,12 +1820,15 @@ public:
     mPanRKnob    = AddNamedChildControl(new NAMFilterKnobControl(col4, kPanR,             mStyle, mKnobBitmap, false, true),  "PanR");
     mHighCutKnob = AddNamedChildControl(new NAMFilterKnobControl(col5, kHighCutFrequency, mStyle, mKnobBitmap, true,  false), "HighCutFrequency");
 
-    // ── Per-knob labels (same mechanism as main page: separate IVLabelControl) ─
+    // ── Per-knob labels (using mStyle.labelText font, size, white color, no shadow) ──
     const IVStyle knobLabelStyle = DEFAULT_STYLE
-      .WithLabelText(mStyle.labelText)
-      .WithDrawFrame(false);
+      .WithValueText(IText(mStyle.labelText.mSize, COLOR_WHITE, mStyle.labelText.mFont, EAlign::Center, EVAlign::Middle))
+      .WithDrawShadows(false)
+      .WithDrawFrame(false)
+      .WithColor(kBG, COLOR_TRANSPARENT);
+    const float labelH = mStyle.labelText.mSize + 4.0f;
     auto addKnobLabel = [&](const IRECT& col, const char* text, const char* name) {
-      const IRECT la = col.GetFromTop(mStyle.labelText.mSize + 4.0f);
+      const IRECT la = col.GetFromTop(labelH);
       AddNamedChildControl(new IVLabelControl(la, text, knobLabelStyle), name)->SetIgnoreMouse(true);
     };
     addKnobLabel(col0, "Low Cut",  "LblLowCut");
@@ -1845,27 +1848,23 @@ public:
     auto* dcSwitch = AddNamedChildControl(new NAMSwitchControl(dcSwitchArea, kDCBlockerActive, "DC Filter", mStyle, mSwitchBitmap), "DCFilter");
     dcSwitch->SetTooltip("Enable DC offset filter");
 
-    // ── Slope selectors BELOW the Pre/Post switches (with extra gap) ──────────
+    // ── Slope selectors BELOW the Pre/Post switches ───────────────────────────
     const auto slopeStyle = mRadioButtonStyle
       .WithColor(kBG, COLOR_BLACK)
       .WithColor(kFG, COLOR_BLACK)
       .WithColor(kFR, PLUG()->GetThemeColor().WithOpacity(0.40f));
 
-    const auto lowSlopeArea  = switchRow(col0).GetVShifted(NAM_SWTICH_HEIGHT + 16.0f).GetCentredInside(80.0f, 24.0f);
-    const auto highSlopeArea = switchRow(col5).GetVShifted(NAM_SWTICH_HEIGHT + 16.0f).GetCentredInside(80.0f, 24.0f);
+    const auto lowSlopeArea  = switchRow(col0).GetVShifted(NAM_SWTICH_HEIGHT + 18.0f).GetCentredInside(80.0f, 22.0f);
+    const auto highSlopeArea = switchRow(col5).GetVShifted(NAM_SWTICH_HEIGHT + 18.0f).GetCentredInside(80.0f, 22.0f);
 
     AddNamedChildControl(new IVMenuButtonControl(lowSlopeArea,  kLowCutSlope,  "", slopeStyle, EVShape::Rectangle), "LowCutSlope");
     AddNamedChildControl(new IVMenuButtonControl(highSlopeArea, kHighCutSlope, "", slopeStyle, EVShape::Rectangle), "HighCutSlope");
 
-    // "Slope" labels below each selector — same font as knob labels
-    const IVStyle slopeLabelStyle = DEFAULT_STYLE
-      .WithLabelText(mStyle.labelText)
-      .WithDrawFrame(false);
-    const float slopeLabelH = mStyle.labelText.mSize + 4.0f;
-    const auto lowSlopeLabelArea  = lowSlopeArea.GetVShifted(lowSlopeArea.H() + 2.0f).GetCentredInside(60.0f, slopeLabelH);
-    const auto highSlopeLabelArea = highSlopeArea.GetVShifted(highSlopeArea.H() + 2.0f).GetCentredInside(60.0f, slopeLabelH);
-    AddNamedChildControl(new IVLabelControl(lowSlopeLabelArea,  "Slope", slopeLabelStyle), "LowSlopeLabel") ->SetIgnoreMouse(true);
-    AddNamedChildControl(new IVLabelControl(highSlopeLabelArea, "Slope", slopeLabelStyle), "HighSlopeLabel")->SetIgnoreMouse(true);
+    // "Slope" labels below each selector — exact same style as knob labels
+    const auto lowSlopeLabelArea  = lowSlopeArea.GetVShifted(lowSlopeArea.H() + 3.0f).GetCentredInside(60.0f, labelH);
+    const auto highSlopeLabelArea = highSlopeArea.GetVShifted(highSlopeArea.H() + 3.0f).GetCentredInside(60.0f, labelH);
+    AddNamedChildControl(new IVLabelControl(lowSlopeLabelArea,  "Slope", knobLabelStyle), "LowSlopeLabel") ->SetIgnoreMouse(true);
+    AddNamedChildControl(new IVLabelControl(highSlopeLabelArea, "Slope", knobLabelStyle), "HighSlopeLabel")->SetIgnoreMouse(true);
 
     // ── Close button ─────────────────────────────────────────────────────────
     auto closeAction = [&](IControl* pCaller) {
