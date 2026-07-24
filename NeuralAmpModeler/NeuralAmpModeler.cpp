@@ -250,6 +250,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kDCBlockerActive)->InitBool("DC Filter", true);
   GetParam(kNAMLink)->InitBool("NAM Link", true);
   GetParam(kIRLink)->InitBool("IR Link", true);
+  GetParam(kPanL)->InitDouble("Pan L", -100.0, -100.0, 100.0, 1.0, "%");
+  GetParam(kPanR)->InitDouble("Pan R", 100.0, -100.0, 100.0, 1.0, "%");
+  GetParam(kLevelL)->InitDouble("Level L", 0.0, -20.0, 20.0, 0.1, "dB");
+  GetParam(kLevelR)->InitDouble("Level R", 0.0, -20.0, 20.0, 0.1, "dB");
   NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
   MakeDefaultPreset("Default");
   _LoadGlobalInternalPresetBank();
@@ -466,16 +470,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                 loadModelRightCompletionHandler, style, fileSVG, crossSVG, leftArrowSVG, rightArrowSVG,
                                 fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl, kNAMToggle),
       kCtrlTagModelRightFileBrowser);
-
-    pGraphics
-      ->AttachControl(new IVSliderControl(slimIconArea, kSlim, "Model Size",
-                                          style.WithColor(kFG, PluginColors::OFF_WHITE)
-                                            .WithValueText(IText(DEFAULT_TEXT_SIZE - 1.f, EVAlign::Bottom,
-                                                                 PluginColors::NAM_THEMEFONTCOLOR))
-                                            .WithLabelText(IText(DEFAULT_TEXT_SIZE - 1.f, COLOR_WHITE)),
-                                          true, EDirection::Horizontal, DEFAULT_GEARING, 4.f),
-                      kCtrlTagSlimmableIcon)
-      ->Hide(true);
 
     pGraphics->AttachControl(new NAMIconSwitchControl(irSwitchArea, irIconOnSVG, kIRToggle));
     pGraphics->AttachControl(
@@ -814,6 +808,10 @@ bool NeuralAmpModeler::IsMidiAssignableParam(int paramIdx) const
     case kInputBoost:
     case kLowCutFrequency:
     case kHighCutFrequency:
+    case kPanL:
+    case kPanR:
+    case kLevelL:
+    case kLevelR:
       return true;
     default:
       return false;
@@ -1740,8 +1738,41 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
     }
   }
 
+  sample** postMixPointers = irPointers;
+  if (numChannelsInternal == kNumChannelsStereo)
+  {
+    const double levelLdB = GetParam(kLevelL)->Value();
+    const double levelRdB = GetParam(kLevelR)->Value();
+    const double gainL = std::pow(10.0, levelLdB / 20.0);
+    const double gainR = std::pow(10.0, levelRdB / 20.0);
+
+    const double panL = GetParam(kPanL)->Value();
+    const double panR = GetParam(kPanR)->Value();
+    const double xL = (panL + 100.0) / 200.0;
+    const double xR = (panR + 100.0) / 200.0;
+
+    const double leftPanGainL = 1.0 - xL;
+    const double rightPanGainL = xL;
+    const double leftPanGainR = 1.0 - xR;
+    const double rightPanGainR = xR;
+
+    sample* pInL = irPointers[0];
+    sample* pInR = irPointers[1];
+    sample* pOutL = mMixPointers[0];
+    sample* pOutR = mMixPointers[1];
+
+    for (size_t f = 0; f < numFrames; ++f)
+    {
+      const sample sL = pInL[f] * gainL;
+      const sample sR = pInR[f] * gainR;
+      pOutL[f] = static_cast<sample>(sL * leftPanGainL + sR * leftPanGainR);
+      pOutR[f] = static_cast<sample>(sL * rightPanGainL + sR * rightPanGainR);
+    }
+    postMixPointers = mMixPointers;
+  }
+
   // And the HPF for DC offset (Issue 271)
-  sample** postCutPointers = _ProcessCutFilters(irPointers, numChannelsInternal, numFrames, true);
+  sample** postCutPointers = _ProcessCutFilters(postMixPointers, numChannelsInternal, numFrames, true);
 
   const double highPassCutoffFreq = kDCBlockerFrequency;
   // const double lowPassCutoffFreq = 20000.0;
@@ -2449,6 +2480,13 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
       irLinkCtrl->Hide(!isStereo);
       irLinkCtrl->SetDirty(false);
     }
+    if (auto* filtersPage = pGraphics->GetControlWithTag(kCtrlTagCutFiltersBox))
+    {
+      if (auto* cutFiltersPage = dynamic_cast<NAMCutFiltersPageControl*>(filtersPage))
+      {
+        cutFiltersPage->SetMonoState(!isStereo);
+      }
+    }
   }
 
   mUpdatingLinkAndBrowserAvailability = false;
@@ -2598,6 +2636,11 @@ void NeuralAmpModeler::_AllocateIOPointers(const size_t nChans)
   mOutputPointers = new sample*[nChans];
   if (mOutputPointers == nullptr)
     throw std::runtime_error("Failed to allocate pointer to output buffer!\n");
+  if (mMixPointers != nullptr)
+    throw std::runtime_error("Tried to re-allocate mMixPointers without freeing");
+  mMixPointers = new sample*[nChans];
+  if (mMixPointers == nullptr)
+    throw std::runtime_error("Failed to allocate pointer to mix buffer!\n");
 }
 
 void NeuralAmpModeler::_ApplyDSPStaging()
@@ -2695,15 +2738,16 @@ void NeuralAmpModeler::_DeallocateIOPointers()
     delete[] mInputPointers;
     mInputPointers = nullptr;
   }
-  if (mInputPointers != nullptr)
-    throw std::runtime_error("Failed to deallocate pointer to input buffer!\n");
   if (mOutputPointers != nullptr)
   {
     delete[] mOutputPointers;
     mOutputPointers = nullptr;
   }
-  if (mOutputPointers != nullptr)
-    throw std::runtime_error("Failed to deallocate pointer to output buffer!\n");
+  if (mMixPointers != nullptr)
+  {
+    delete[] mMixPointers;
+    mMixPointers = nullptr;
+  }
 }
 
 void NeuralAmpModeler::_FallbackDSP(iplug::sample** inputs, iplug::sample** outputs, const size_t numChannels,
@@ -3629,14 +3673,13 @@ void NeuralAmpModeler::_PrepareBuffers(const size_t numChannels, const size_t nu
 {
   const bool updateChannels = numChannels != _GetBufferNumChannels();
   const bool updateFrames = updateChannels || (_GetBufferNumFrames() != numFrames);
-  //  if (!updateChannels && !updateFrames)  // Could we do this?
-  //    return;
 
   if (updateChannels)
   {
     _PrepareIOPointers(numChannels);
     mInputArray.resize(numChannels);
     mOutputArray.resize(numChannels);
+    mMixArray.resize(numChannels);
   }
   if (updateFrames)
   {
@@ -3650,12 +3693,18 @@ void NeuralAmpModeler::_PrepareBuffers(const size_t numChannels, const size_t nu
       mOutputArray[c].resize(numFrames);
       std::fill(mOutputArray[c].begin(), mOutputArray[c].end(), 0.0);
     }
+    for (auto c = 0; c < mMixArray.size(); c++)
+    {
+      mMixArray[c].resize(numFrames);
+      std::fill(mMixArray[c].begin(), mMixArray[c].end(), 0.0);
+    }
   }
-  // Would these ever get changed by something?
   for (auto c = 0; c < mInputArray.size(); c++)
     mInputPointers[c] = mInputArray[c].data();
   for (auto c = 0; c < mOutputArray.size(); c++)
     mOutputPointers[c] = mOutputArray[c].data();
+  for (auto c = 0; c < mMixArray.size(); c++)
+    mMixPointers[c] = mMixArray[c].data();
 }
 
 void NeuralAmpModeler::_PrepareIOPointers(const size_t numChannels)

@@ -126,6 +126,10 @@ enum EParams
   kDCBlockerActive,
   kNAMLink,
   kIRLink,
+  kPanL,
+  kPanR,
+  kLevelL,
+  kLevelR,
   kNumParams
 };
 
@@ -1709,9 +1713,12 @@ private:
   std::vector<std::vector<iplug::sample>> mInputArray;
   // Output from NAM
   std::vector<std::vector<iplug::sample>> mOutputArray;
+  // Mix array for post-IR pan/level
+  std::vector<std::vector<iplug::sample>> mMixArray;
   // Pointer versions
   iplug::sample** mInputPointers = nullptr;
   iplug::sample** mOutputPointers = nullptr;
+  iplug::sample** mMixPointers = nullptr;
 
   // Input and output gain
   double mInputGain = 1.0;
