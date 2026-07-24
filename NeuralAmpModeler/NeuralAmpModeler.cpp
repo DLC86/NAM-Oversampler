@@ -575,6 +575,18 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       },
       gearSVG));
 
+    // CutFilters / MIXER page (attached BEFORE meters so meters draw on top of MIXER page)
+    pGraphics
+      ->AttachControl(new NAMCutFiltersPageControl(b, backgroundBitmap, knobBackgroundBitmap, switchHandleBitmap,
+                                                   crossSVG, style, radioButtonStyle),
+                      kCtrlTagCutFiltersBox)
+      ->Hide(true);
+
+    // The meters
+    pGraphics->AttachControl(new NAMMeterControl(inputMeterArea, meterBackgroundBitmap, style), kCtrlTagInputMeter);
+    pGraphics->AttachControl(new NAMMeterControl(outputMeterArea, meterBackgroundBitmap, style), kCtrlTagOutputMeter);
+
+    // Overlay pages (attached AFTER meters so their background bitmaps naturally cover meters instantly without delay)
     pGraphics
       ->AttachControl(new NAMSettingsPageControl(b, backgroundBitmap, inputLevelBackgroundBitmap, switchHandleBitmap,
                                                  crossSVG, style, radioButtonStyle),
@@ -595,16 +607,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       ->AttachControl(new NAMToneStackPageControl(b, backgroundBitmap, crossSVG, style, radioButtonStyle),
                       kCtrlTagToneStackBox)
       ->Hide(true);
-
-    pGraphics
-      ->AttachControl(new NAMCutFiltersPageControl(b, backgroundBitmap, knobBackgroundBitmap, switchHandleBitmap,
-                                                   crossSVG, style, radioButtonStyle),
-                      kCtrlTagCutFiltersBox)
-      ->Hide(true);
-
-    // The meters (attached after overlay pages so they remain visible on top of FILTERS & MIX page)
-    pGraphics->AttachControl(new NAMMeterControl(inputMeterArea, meterBackgroundBitmap, style), kCtrlTagInputMeter);
-    pGraphics->AttachControl(new NAMMeterControl(outputMeterArea, meterBackgroundBitmap, style), kCtrlTagOutputMeter);
 
     pGraphics->ForAllControlsFunc([](IControl* pControl) {
       pControl->SetMouseEventsWhenDisabled(true);
