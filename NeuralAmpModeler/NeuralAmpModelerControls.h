@@ -781,7 +781,7 @@ public:
   // Labels are drawn as separate IVLabelControl children in OnAttached (same as main page).
   NAMFilterKnobControl(const IRECT& bounds, int paramIdx, const IVStyle& style, IBitmap bitmap,
                        bool reverseTrack = false, bool centerAnchor = false)
-  : IVKnobControl(bounds, paramIdx, "", style.WithShowLabel(false), true)
+  : IVKnobControl(bounds, paramIdx, " ", style, true)
   , IBitmapBase(bitmap)
   , mReverseTrack(reverseTrack)
   , mCenterAnchor(centerAnchor)
