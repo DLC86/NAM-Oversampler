@@ -2474,6 +2474,31 @@ private:
   int mComponent = 0;
 };
 
+inline void SetOverlayMeterVisibility(IGraphics* pUI, bool hide)
+{
+  if (!pUI) return;
+  if (hide)
+  {
+    if (auto* m1 = pUI->GetControlWithTag(kCtrlTagInputMeter)) m1->Hide(true);
+    if (auto* m2 = pUI->GetControlWithTag(kCtrlTagOutputMeter)) m2->Hide(true);
+  }
+  else
+  {
+    auto isHiddenOrNull = [&](int tag) {
+      auto* c = pUI->GetControlWithTag(tag);
+      return !c || c->IsHidden();
+    };
+    if (isHiddenOrNull(kCtrlTagSettingsBox) &&
+        isHiddenOrNull(kCtrlTagOversamplingBox) &&
+        isHiddenOrNull(kCtrlTagTunerBox) &&
+        isHiddenOrNull(kCtrlTagToneStackBox))
+    {
+      if (auto* m1 = pUI->GetControlWithTag(kCtrlTagInputMeter)) m1->Hide(false);
+      if (auto* m2 = pUI->GetControlWithTag(kCtrlTagOutputMeter)) m2->Hide(false);
+    }
+  }
+}
+
 class NAMToneStackPageControl : public IContainerBaseWithNamedChildren
 {
 public:
@@ -2502,9 +2527,15 @@ public:
   {
     mWillHide = hide;
     if (!hide)
+    {
       mHide = false;
+      SetOverlayMeterVisibility(GetUI(), true);
+    }
     else
+    {
       ForAllChildrenFunc([hide](int childIdx, IControl* pChild) { pChild->Hide(hide); });
+      SetOverlayMeterVisibility(GetUI(), false);
+    }
 
     SetAnimation(
       [&](IControl* pCaller) {
@@ -2621,9 +2652,15 @@ public:
   {
     mWillHide = hide;
     if (!hide)
+    {
       mHide = false;
+      SetOverlayMeterVisibility(GetUI(), true);
+    }
     else
+    {
       ForAllChildrenFunc([hide](int childIdx, IControl* pChild) { pChild->Hide(hide); });
+      SetOverlayMeterVisibility(GetUI(), false);
+    }
 
     SetAnimation(
       [&](IControl* pCaller) {
@@ -2922,9 +2959,15 @@ public:
     PLUG()->SetTunerActive(!hide);
     mWillHide = hide;
     if (!hide)
+    {
       mHide = false;
+      SetOverlayMeterVisibility(GetUI(), true);
+    }
     else
+    {
       ForAllChildrenFunc([hide](int childIdx, IControl* pChild) { pChild->Hide(hide); });
+      SetOverlayMeterVisibility(GetUI(), false);
+    }
 
     SetAnimation(
       [&](IControl* pCaller) {
@@ -3015,10 +3058,12 @@ public:
     if (hide == false)
     {
       mHide = false;
+      SetOverlayMeterVisibility(GetUI(), true);
     }
     else // hide subcontrols immediately
     {
       ForAllChildrenFunc([hide](int childIdx, IControl* pChild) { pChild->Hide(hide); });
+      SetOverlayMeterVisibility(GetUI(), false);
     }
 
     SetAnimation(
