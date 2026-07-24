@@ -441,11 +441,11 @@ public:
 
   void DrawWidget(IGraphics& g) override
   {
-    float widgetRadius = GetRadius() * 0.73;
-    auto knobRect = mWidgetBounds.GetCentredInside(mWidgetBounds.W(), mWidgetBounds.W());
+    float widgetRadius = GetRadius() * 0.88f;
+    auto knobRect = mWidgetBounds.GetScaledAboutCentre(0.68f);
     const float cx = knobRect.MW(), cy = knobRect.MH();
     const float angle = mAngle1 + (static_cast<float>(GetValue()) * (mAngle2 - mAngle1));
-    DrawIndicatorTrack(g, angle, cx + 0.5, cy, widgetRadius);
+    DrawIndicatorTrack(g, angle, cx + 0.5f, cy, widgetRadius);
     g.DrawFittedBitmap(mBitmap, knobRect);
     float data[2][2];
     RadialPoints(angle, cx, cy, mInnerPointerFrac * widgetRadius, mInnerPointerFrac * widgetRadius, 2, data);
@@ -1018,17 +1018,30 @@ public:
   {
   }
 
-  void Draw(IGraphics& g) override
+  void OnMouseOver(float x, float y, const IMouseMod& mod) override
   {
-    const IColor color = PLUG()->GetThemeColor();
-    const float stroke = 1.6f;
-    const auto iconBounds = mRECT.GetPadded(-4.0f);
-    DrawSlidersIcon(g, iconBounds, color, stroke);
+    if (!mMouseIsOver)
+    {
+      mMouseIsOver = true;
+      SetDirty(false);
+    }
+  }
+
+  void OnMouseOut() override
+  {
     if (mMouseIsOver)
     {
-      DrawSlidersIcon(g, iconBounds, color, stroke);
-      DrawSlidersIcon(g, iconBounds, color, stroke);
+      mMouseIsOver = false;
+      SetDirty(false);
     }
+  }
+
+  void Draw(IGraphics& g) override
+  {
+    const IColor color = mMouseIsOver ? PluginColors::NAM_THEMEFONTCOLOR : PLUG()->GetThemeColor();
+    const float stroke = mMouseIsOver ? 2.2f : 1.6f;
+    const auto iconBounds = mRECT.GetPadded(-4.0f);
+    DrawSlidersIcon(g, iconBounds, color, stroke);
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
@@ -1788,8 +1801,8 @@ public:
                                              .WithColor(kFR, PLUG()->GetThemeColor().WithOpacity(0.40f));
 
     // Slope selectors placed ABOVE Low Cut and High Cut knobs
-    const auto lowSlopeArea = inputKnobArea.GetVShifted(-28.0f).GetCentredInside(80.0f, 24.0f);
-    const auto highSlopeArea = outputKnobArea.GetVShifted(-28.0f).GetCentredInside(80.0f, 24.0f);
+    const auto lowSlopeArea = IRECT(inputKnobArea.MW() - 40.0f, inputKnobArea.T - 26.0f, inputKnobArea.MW() + 40.0f, inputKnobArea.T - 2.0f);
+    const auto highSlopeArea = IRECT(outputKnobArea.MW() - 40.0f, outputKnobArea.T - 26.0f, outputKnobArea.MW() + 40.0f, outputKnobArea.T - 2.0f);
 
     AddNamedChildControl(new IVMenuButtonControl(lowSlopeArea, kLowCutSlope, "", slopeStyle, EVShape::Rectangle), "LowCutSlope");
     AddNamedChildControl(new IVMenuButtonControl(highSlopeArea, kHighCutSlope, "", slopeStyle, EVShape::Rectangle), "HighCutSlope");
@@ -1797,7 +1810,8 @@ public:
     // Switches at exact same vertical height as main page switches
     const auto lowSwitchArea = inputKnobArea.GetVShifted(inputKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
     const auto highSwitchArea = outputKnobArea.GetVShifted(outputKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
-    const auto dcSwitchArea = midKnobArea.GetVShifted(midKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f).GetCentredInside(90.0f, NAM_SWTICH_HEIGHT);
+    const auto centerSwitchesArea = bassKnobArea.Union(midKnobArea);
+    const auto dcSwitchArea = centerSwitchesArea.GetVShifted(bassKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f).GetCentredInside(90.0f, NAM_SWTICH_HEIGHT);
 
     auto* lowPosSwitch = AddNamedChildControl(new NAMSwitchControl(lowSwitchArea, kLowCutPostNAM, "Pre/Post", mStyle, mSwitchBitmap), "LowCutPosition");
     lowPosSwitch->SetTooltip("Low cut position: off = pre NAM, on = post IR");
