@@ -1076,7 +1076,17 @@ public:
   NAMFileNameControl(const IRECT& bounds, const char* label, const IVStyle& style, int paramIdx = kNoParameter)
   : IVButtonControl(bounds, DefaultClickActionFunc, label, style)
   , mParamIdx(paramIdx)
+  , mBaseFontSize(style.valueText.mSize)
   {
+  }
+
+  void SetStereoFont(bool isStereo)
+  {
+    if (mBaseFontSize <= 0.0f)
+      mBaseFontSize = mStyle.valueText.mSize;
+
+    mStyle.valueText.mSize = isStereo ? (mBaseFontSize - 2.0f) : mBaseFontSize;
+    SetDirty(false);
   }
 
   void Draw(IGraphics& g) override
@@ -1123,6 +1133,7 @@ public:
   }
 private:
   int mParamIdx = kNoParameter;
+  float mBaseFontSize = 0.0f;
 };
 
 // URL control for the "Get" models/irs links
@@ -1192,11 +1203,12 @@ public:
 
   void SetStereoMode(bool isStereo)
   {
-    if (mIsStereoMode != isStereo)
+    mIsStereoMode = isStereo;
+    if (mFileNameControl != nullptr)
     {
-      mIsStereoMode = isStereo;
-      OnResize();
+      mFileNameControl->SetStereoFont(mIsStereoMode);
     }
+    OnResize();
   }
 
   void SetDefaultLabelStr(const char* labelStr)
@@ -1211,6 +1223,10 @@ public:
   void OnResize() override
   {
     IDirBrowseControlBase::OnResize();
+    if (mFileNameControl != nullptr)
+    {
+      mFileNameControl->SetStereoFont(mIsStereoMode);
+    }
     if (NChildren() >= 6)
     {
       // Ensure main elements (Load button and Text control) are unhidden when container is active
@@ -1263,15 +1279,15 @@ public:
         GetChild(4)->SetTargetAndDrawRECTs(clearAndGetButtonBounds);
         GetChild(5)->SetTargetAndDrawRECTs(clearAndGetButtonBounds);
 
-        if (mBrowserState == NAMBrowserState::Empty)
-        {
-          GetChild(4)->Hide(true);
-          GetChild(5)->Hide(false);
-        }
-        else
+        if (mBrowserState == NAMBrowserState::Loaded)
         {
           GetChild(4)->Hide(false);
           GetChild(5)->Hide(true);
+        }
+        else
+        {
+          GetChild(4)->Hide(true);
+          GetChild(5)->Hide(false);
         }
 
         const auto fileNameButtonBounds = padded;
@@ -1506,13 +1522,14 @@ private:
       {
         case NAMBrowserState::Empty:
           mClearButton->Hide(true);
-          mGetButton->Hide(mIsStereoMode ? true : false);
+          mGetButton->Hide(false);
           break;
         case NAMBrowserState::Loaded:
           mClearButton->Hide(false);
           mGetButton->Hide(true);
           break;
       }
+      OnResize();
       SetDirty(false);
       if (GetUI())
         GetUI()->SetAllControlsDirty();
