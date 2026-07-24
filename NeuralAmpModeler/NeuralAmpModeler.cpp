@@ -3476,6 +3476,7 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
 
     bool isStereo = _IsStereoRequested();
     bool linkNAM = GetParam(kNAMLink)->Bool();
+    bool linkIR = GetParam(kIRLink)->Bool();
 
     if (isStereo)
     {
@@ -3558,12 +3559,26 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
         GetParam(kIRToggle)->Set(false);
         OnParamChange(kIRToggle);
         SendParameterValueFromDelegate(kIRToggle, GetParam(kIRToggle)->GetNormalized(), true);
+
+        if (linkNAM || linkIR || !isStereo)
+        {
+          GetParam(kIRToggleRight)->Set(false);
+          OnParamChange(kIRToggleRight);
+          SendParameterValueFromDelegate(kIRToggleRight, GetParam(kIRToggleRight)->GetNormalized(), true);
+        }
       }
       else if (gearType == "amp" || gearType == "pedal_amp")
       {
         GetParam(kIRToggle)->Set(true);
         OnParamChange(kIRToggle);
         SendParameterValueFromDelegate(kIRToggle, GetParam(kIRToggle)->GetNormalized(), true);
+
+        if (linkNAM || linkIR || !isStereo)
+        {
+          GetParam(kIRToggleRight)->Set(true);
+          OnParamChange(kIRToggleRight);
+          SendParameterValueFromDelegate(kIRToggleRight, GetParam(kIRToggleRight)->GetNormalized(), true);
+        }
       }
     }
     _MarkCurrentInternalPresetDirty();
@@ -3616,6 +3631,10 @@ std::string NeuralAmpModeler::_StageModelRight(const WDL_String& modelPath)
       gearType = returnedConfig.metadata["gear_type"].get<std::string>();
       std::transform(gearType.begin(), gearType.end(), gearType.begin(), ::tolower);
     }
+    const bool linkNAM = GetParam(kNAMLink)->Bool();
+    const bool linkIR = GetParam(kIRLink)->Bool();
+    const bool isStereo = _IsStereoRequested();
+
     if (!mApplyingInternalPreset.load())
     {
       if (gearType == "amp_cab" || gearType == "amp_pedal_cab" ||
@@ -3624,12 +3643,26 @@ std::string NeuralAmpModeler::_StageModelRight(const WDL_String& modelPath)
         GetParam(kIRToggleRight)->Set(false);
         OnParamChange(kIRToggleRight);
         SendParameterValueFromDelegate(kIRToggleRight, GetParam(kIRToggleRight)->GetNormalized(), true);
+
+        if (linkNAM || linkIR || !isStereo)
+        {
+          GetParam(kIRToggle)->Set(false);
+          OnParamChange(kIRToggle);
+          SendParameterValueFromDelegate(kIRToggle, GetParam(kIRToggle)->GetNormalized(), true);
+        }
       }
       else if (gearType == "amp" || gearType == "pedal_amp")
       {
         GetParam(kIRToggleRight)->Set(true);
         OnParamChange(kIRToggleRight);
         SendParameterValueFromDelegate(kIRToggleRight, GetParam(kIRToggleRight)->GetNormalized(), true);
+
+        if (linkNAM || linkIR || !isStereo)
+        {
+          GetParam(kIRToggle)->Set(true);
+          OnParamChange(kIRToggle);
+          SendParameterValueFromDelegate(kIRToggle, GetParam(kIRToggle)->GetNormalized(), true);
+        }
       }
     }
 
