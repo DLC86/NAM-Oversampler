@@ -1248,6 +1248,7 @@ std::string NeuralAmpModeler::_SerializeInternalPresetState() const
     p["toneStackTypeName"] = preset.toneStackTypeName;
     p["toneStackComponents"] = preset.toneStackComponentState;
     p["channelMode"] = preset.paramValues[kChannelMode];
+    p["irToggleRight"] = preset.paramValues[kIRToggleRight];
     p["params"] = nlohmann::json::array();
     for (int i = 0; i < kNumParams; ++i)
       p["params"].push_back(preset.paramValues[i]);
@@ -1370,6 +1371,16 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
         {
           // For legacy presets saved without channelMode, default to Mono (0.0)
           preset.paramValues[kChannelMode] = 0.0;
+        }
+
+        if (p.contains("irToggleRight"))
+        {
+          preset.paramValues[kIRToggleRight] = std::clamp(p["irToggleRight"].get<double>(), 0.0, 1.0);
+        }
+        else if (oldParamCount < (int)kNumParams)
+        {
+          // For legacy presets saved before 2.3.0 without irToggleRight, copy irToggle value
+          preset.paramValues[kIRToggleRight] = preset.paramValues[kIRToggle];
         }
       }
 
