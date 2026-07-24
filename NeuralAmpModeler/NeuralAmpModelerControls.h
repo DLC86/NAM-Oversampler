@@ -1241,10 +1241,9 @@ public:
 
       if (mIsStereoMode)
       {
-        // Stereo mode: hide left/right arrows and globe button
+        // Stereo mode: hide left/right arrows
         GetChild(1)->Hide(true);
         GetChild(2)->Hide(true);
-        GetChild(5)->Hide(true);
 
         const auto loadFileButtonBounds = padded.ReduceFromLeft(buttonWidth);
         GetChild(0)->SetTargetAndDrawRECTs(loadFileButtonBounds);
@@ -1256,10 +1255,12 @@ public:
         if (mBrowserState == NAMBrowserState::Loaded)
         {
           GetChild(4)->Hide(false);
+          GetChild(5)->Hide(true);
         }
         else
         {
           GetChild(4)->Hide(true);
+          GetChild(5)->Hide(false);
         }
 
         const auto fileNameButtonBounds = padded;
