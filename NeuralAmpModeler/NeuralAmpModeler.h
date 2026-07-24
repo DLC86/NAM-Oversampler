@@ -1826,6 +1826,10 @@ private:
   std::atomic<int> mCurrentInternalPreset {-1};
   std::atomic<int> mMidiLearnParam {-1};
   std::atomic<int> mPendingInternalPresetFileRecall {-1};
+  std::atomic<int> mPendingMidiPresetStep {0};
+  std::atomic<int> mPendingMidiLearnAssignParam {-1};
+  std::atomic<int> mPendingMidiLearnAssignCC {-1};
+  std::array<std::atomic<bool>, kNumParams> mPendingMidiParamUpdates {};
   std::atomic<bool> mInternalPresetUIDirty {false};
   std::atomic<bool> mInternalPresetParamUIDirty {false};
   std::atomic<bool> mCurrentInternalPresetDirty {true};

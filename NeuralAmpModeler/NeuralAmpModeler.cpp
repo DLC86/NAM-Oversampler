@@ -1541,7 +1541,11 @@ void NeuralAmpModeler::_ApplyParamNormalizedFromMidi(int paramIdx, double normal
     normalizedValue = normalizedValue >= (64.0 / 127.0) ? 1.0 : 0.0;
   GetParam(paramIdx)->SetNormalized(normalizedValue);
   OnParamChange(paramIdx);
-  SendParameterValueFromDelegate(paramIdx, normalizedValue, true);
+
+  if (paramIdx >= 0 && paramIdx < kNumParams)
+  {
+    mPendingMidiParamUpdates[paramIdx].store(true, std::memory_order_release);
+  }
 }
 
 bool NeuralAmpModeler::_MidiMessageMatchesSelectedChannel(const IMidiMsg& msg) const
@@ -1561,7 +1565,6 @@ void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
   if (msg.StatusMsg() == IMidiMsg::kProgramChange)
   {
     const int program = std::clamp(msg.Program(), 0, kNumInternalPresets - 1);
-    _RecallInternalPreset(program, false);
     mPendingInternalPresetFileRecall.store(program, std::memory_order_release);
     return;
   }
@@ -1572,9 +1575,8 @@ void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
     const int learnParam = mMidiLearnParam.exchange(-1, std::memory_order_acq_rel);
     if (cc >= 0 && cc < 128 && IsMidiAssignableParam(learnParam))
     {
-      mMidiCCToParam[cc] = learnParam;
-      _SaveGlobalInternalPresetBank();
-      _MarkInternalPresetUIDirty();
+      mPendingMidiLearnAssignParam.store(learnParam, std::memory_order_release);
+      mPendingMidiLearnAssignCC.store(cc, std::memory_order_release);
       return;
     }
 
@@ -1582,11 +1584,17 @@ void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
     {
       const int paramIdx = mMidiCCToParam[cc];
       if (paramIdx == kMidiActionPreviousPreset && msg.mData2 >= 64)
-        SelectAdjacentInternalPreset(-1);
+      {
+        mPendingMidiPresetStep.fetch_add(-1, std::memory_order_release);
+      }
       else if (paramIdx == kMidiActionNextPreset && msg.mData2 >= 64)
-        SelectAdjacentInternalPreset(1);
+      {
+        mPendingMidiPresetStep.fetch_add(1, std::memory_order_release);
+      }
       else if (IsMidiAssignableParam(paramIdx))
+      {
         _ApplyParamNormalizedFromMidi(paramIdx, msg.mData2 / 127.0);
+      }
     }
   }
 }
@@ -2184,37 +2192,44 @@ void NeuralAmpModeler::OnIdle()
       mNewModelLoadedInDSP = false;
     }
   }
+  // Handle MIDI CC Learn assignment on main thread
+  const int pendingLearnCC = mPendingMidiLearnAssignCC.exchange(-1, std::memory_order_acq_rel);
+  const int pendingLearnParam = mPendingMidiLearnAssignParam.exchange(-1, std::memory_order_acq_rel);
+  if (pendingLearnCC >= 0 && pendingLearnCC < 128 && IsMidiAssignableParam(pendingLearnParam))
+  {
+    AssignMidiCCToParam(pendingLearnParam, pendingLearnCC);
+    _SaveGlobalInternalPresetBank();
+    _MarkInternalPresetUIDirty();
+  }
+
+  // Handle MIDI CC parameter UI/DAW updates on main thread
+  bool midiParamsUpdated = false;
+  for (int p = 0; p < kNumParams; ++p)
+  {
+    if (mPendingMidiParamUpdates[p].exchange(false, std::memory_order_acq_rel))
+    {
+      SendParameterValueFromDelegate(p, GetParam(p)->GetNormalized(), false);
+      midiParamsUpdated = true;
+    }
+  }
+  if (midiParamsUpdated)
+  {
+    if (auto* pGraphics = GetUI())
+      pGraphics->SetAllControlsDirty();
+  }
+
+  // Handle MIDI CC Preset Up/Down step on main thread
+  const int pendingMidiStep = mPendingMidiPresetStep.exchange(0, std::memory_order_acq_rel);
+  if (pendingMidiStep != 0)
+  {
+    SelectAdjacentInternalPreset(pendingMidiStep);
+  }
+
+  // Handle MIDI Program Change or Preset recall on main thread
   const int pendingPresetFileRecall = mPendingInternalPresetFileRecall.exchange(-1, std::memory_order_acq_rel);
   if (pendingPresetFileRecall >= 0 && pendingPresetFileRecall < kNumInternalPresets)
   {
-    const auto& preset = mInternalPresets[pendingPresetFileRecall];
-    if (preset.saved)
-    {
-      mApplyingInternalPreset.store(true, std::memory_order_release);
-      if (preset.namPath.empty())
-      {
-        OnMessage(kMsgTagClearModel, kCtrlTagModelFileBrowser, 0, nullptr);
-        SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, 0, "");
-      }
-      else if (_NeedsStereoModelRestageForPath(preset.namPath))
-      {
-        WDL_String path(preset.namPath.c_str());
-        _StageModel(path);
-      }
-
-      if (preset.irPath.empty())
-      {
-        OnMessage(kMsgTagClearIR, kCtrlTagIRFileBrowser, 0, nullptr);
-        SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, 0, "");
-      }
-      else if (_NeedsStereoIRRestageForPath(preset.irPath))
-      {
-        WDL_String path(preset.irPath.c_str());
-        _StageIR(path);
-      }
-      mApplyingInternalPreset.store(false, std::memory_order_release);
-      mCurrentInternalPresetDirty.store(false, std::memory_order_release);
-    }
+    SelectInternalPreset(pendingPresetFileRecall);
   }
   if (mInternalPresetUIDirty.exchange(false, std::memory_order_acq_rel))
   {
