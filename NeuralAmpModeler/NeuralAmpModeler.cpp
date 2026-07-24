@@ -214,6 +214,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kEQActive)->InitBool("ToneStack", true);
   GetParam(kOutputMode)->InitEnum("OutputMode", 3, {"Raw", "Normalized", "Calibrated", "Auto"}); // TODO DRY w/ control
   GetParam(kIRToggle)->InitBool("IRToggle", true);
+  GetParam(kIRToggleRight)->InitBool("IRToggleRight", true);
   GetParam(kNAMToggle)->InitBool("NAMToggle", true);
   GetParam(kCalibrateInput)->InitBool(kCalibrateInputParamName.c_str(), kDefaultCalibrateInput);
   GetParam(kInputCalibrationLevel)
@@ -477,7 +478,16 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                 fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl, kNAMToggle),
       kCtrlTagModelRightFileBrowser);
 
-    pGraphics->AttachControl(new NAMIconSwitchControl(irSwitchArea, irIconOnSVG, kIRToggle));
+    const auto irSwitchAreaLeft = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetFromTop(15.0f).GetScaledAboutCentre(0.48f);
+    const auto irSwitchAreaRight = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetFromBottom(15.0f).GetScaledAboutCentre(0.48f);
+
+    pGraphics->AttachControl(new NAMIconSwitchControl(irSwitchArea, irIconOnSVG, kIRToggle), kCtrlTagIRToggle)
+      ->SetTooltip("Bypass IR");
+    pGraphics->AttachControl(new NAMIconSwitchControl(irSwitchAreaLeft, irIconOnSVG, kIRToggle), kCtrlTagIRToggleLeft)
+      ->SetTooltip("Bypass Left IR");
+    pGraphics->AttachControl(new NAMIconSwitchControl(irSwitchAreaRight, irIconOnSVG, kIRToggleRight), kCtrlTagIRToggleRight)
+      ->SetTooltip("Bypass Right IR");
+
     pGraphics->AttachControl(
       new NAMFileBrowserControl(irLeftArea, kMsgTagClearIR, defaultIRString.c_str(), "wav", loadIRCompletionHandler, style,
                                 fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
@@ -818,6 +828,7 @@ bool NeuralAmpModeler::IsMidiAssignableParam(int paramIdx) const
     case kNoiseGateActive:
     case kEQActive:
     case kIRToggle:
+    case kIRToggleRight:
     case kNAMToggle:
     case kEQPostNAM:
     case kInputBoost:
@@ -1737,17 +1748,44 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
                                     : gateGainOutput;
 
   sample** irPointers = toneStackOutPointers;
-  if (mIR != nullptr && GetParam(kIRToggle)->Value())
+  const bool linkIR = GetParam(kIRLink)->Bool();
+  const bool irActiveL = GetParam(kIRToggle)->Bool();
+  const bool irActiveR = (linkIR || numChannelsInternal != kNumChannelsStereo) ? irActiveL : GetParam(kIRToggleRight)->Bool();
+
+  if (numChannelsInternal == kNumChannelsStereo)
   {
-    if (numChannelsInternal == kNumChannelsStereo && mIRRight != nullptr)
+    const bool hasIRL = (mIR != nullptr) && irActiveL;
+    const bool hasIRR = (mIRRight != nullptr ? mIRRight != nullptr : mIR != nullptr) && irActiveR;
+
+    if (hasIRL || hasIRR)
     {
       sample* irInputLeft[1] = {toneStackOutPointers[0]};
       sample* irInputRight[1] = {toneStackOutPointers[1]};
-      mStereoIRPointers[0] = mIR->Process(irInputLeft, kNumChannelsMono, numFrames)[0];
-      mStereoIRPointers[1] = mIRRight->Process(irInputRight, kNumChannelsMono, numFrames)[0];
+
+      if (hasIRL && mIR != nullptr)
+        mStereoIRPointers[0] = mIR->Process(irInputLeft, kNumChannelsMono, numFrames)[0];
+      else
+        mStereoIRPointers[0] = toneStackOutPointers[0];
+
+      if (hasIRR)
+      {
+        auto* rightIR = mIRRight != nullptr ? mIRRight.get() : mIR.get();
+        if (rightIR != nullptr)
+          mStereoIRPointers[1] = rightIR->Process(irInputRight, kNumChannelsMono, numFrames)[0];
+        else
+          mStereoIRPointers[1] = toneStackOutPointers[1];
+      }
+      else
+      {
+        mStereoIRPointers[1] = toneStackOutPointers[1];
+      }
+
       irPointers = mStereoIRPointers;
     }
-    else
+  }
+  else
+  {
+    if (mIR != nullptr && irActiveL)
     {
       irPointers = mIR->Process(toneStackOutPointers, numChannelsInternal, numFrames);
     }
@@ -2474,6 +2512,7 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
       leftIrCtrl->SetDisabled(!irActive);
       leftIrCtrl->SetDirty(false);
     }
+    const bool irActiveRight = (irLink || !isStereo) ? irActive : GetParam(kIRToggleRight)->Bool();
     if (auto* rightIrCtrl = dynamic_cast<NAMFileBrowserControl*>(pGraphics->GetControlWithTag(kCtrlTagIRRightFileBrowser)))
     {
       rightIrCtrl->SetStereoMode(isStereo);
@@ -2483,7 +2522,7 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
       rightIrCtrl->SetDefaultLabelStr("Select right IR...");
 #endif
       rightIrCtrl->SetTargetAndDrawRECTs(irRightArea);
-      bool rightIrDisabled = !irActive || !isStereo || irLink;
+      bool rightIrDisabled = !irActiveRight || !isStereo || irLink;
       rightIrCtrl->SetDisabled(rightIrDisabled);
       rightIrCtrl->Hide(!isStereo);
       rightIrCtrl->SetDirty(false);
@@ -2494,6 +2533,30 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
       irLinkCtrl->SetDisabled(!isStereo);
       irLinkCtrl->Hide(!isStereo);
       irLinkCtrl->SetDirty(false);
+    }
+
+    const bool splitIRButtons = isStereo && !irLink;
+    const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
+    const auto irSwitchAreaLeft = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetFromTop(15.0f).GetScaledAboutCentre(0.48f);
+    const auto irSwitchAreaRight = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetFromBottom(15.0f).GetScaledAboutCentre(0.48f);
+
+    if (auto* singleIrSwitch = pGraphics->GetControlWithTag(kCtrlTagIRToggle))
+    {
+      singleIrSwitch->SetTargetAndDrawRECTs(irSwitchArea);
+      singleIrSwitch->Hide(splitIRButtons);
+      singleIrSwitch->SetDirty(false);
+    }
+    if (auto* leftIrSwitch = pGraphics->GetControlWithTag(kCtrlTagIRToggleLeft))
+    {
+      leftIrSwitch->SetTargetAndDrawRECTs(irSwitchAreaLeft);
+      leftIrSwitch->Hide(!splitIRButtons);
+      leftIrSwitch->SetDirty(false);
+    }
+    if (auto* rightIrSwitch = pGraphics->GetControlWithTag(kCtrlTagIRToggleRight))
+    {
+      rightIrSwitch->SetTargetAndDrawRECTs(irSwitchAreaRight);
+      rightIrSwitch->Hide(!splitIRButtons);
+      rightIrSwitch->SetDirty(false);
     }
     if (auto* filtersPage = pGraphics->GetControlWithTag(kCtrlTagCutFiltersBox))
     {
@@ -2547,9 +2610,40 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
         pGraphics->SetAllControlsDirty();
         break;
       case kIRToggle:
+        if (GetParam(kIRLink)->Bool() || !_IsStereoRequested())
+        {
+          if (GetParam(kIRToggleRight)->Value() != GetParam(kIRToggle)->Value())
+          {
+            GetParam(kIRToggleRight)->Set(GetParam(kIRToggle)->Value());
+            SendParameterValueFromDelegate(kIRToggleRight, GetParam(kIRToggleRight)->GetNormalized(), true);
+          }
+        }
+        _UpdateLinkAndBrowserAvailability();
+        break;
+      case kIRToggleRight:
+        if (GetParam(kIRLink)->Bool() || !_IsStereoRequested())
+        {
+          if (GetParam(kIRToggle)->Value() != GetParam(kIRToggleRight)->Value())
+          {
+            GetParam(kIRToggle)->Set(GetParam(kIRToggleRight)->Value());
+            SendParameterValueFromDelegate(kIRToggle, GetParam(kIRToggle)->GetNormalized(), true);
+          }
+        }
+        _UpdateLinkAndBrowserAvailability();
+        break;
+      case kIRLink:
+        if (GetParam(kIRLink)->Bool())
+        {
+          if (GetParam(kIRToggleRight)->Value() != GetParam(kIRToggle)->Value())
+          {
+            GetParam(kIRToggleRight)->Set(GetParam(kIRToggle)->Value());
+            SendParameterValueFromDelegate(kIRToggleRight, GetParam(kIRToggleRight)->GetNormalized(), true);
+          }
+        }
+        _UpdateLinkAndBrowserAvailability();
+        break;
       case kNAMToggle:
       case kNAMLink:
-      case kIRLink:
       case kChannelMode:
         _UpdateLinkAndBrowserAvailability();
         break;
@@ -3502,6 +3596,29 @@ std::string NeuralAmpModeler::_StageModelRight(const WDL_String& modelPath)
       mStagedModelRightPath = modelPath.Get();
       mNAMRightPath = modelPath;
       loadedNAMRightPath = mNAMRightPath;
+    }
+
+    std::string gearType = "";
+    if (returnedConfig.metadata.contains("gear_type"))
+    {
+      gearType = returnedConfig.metadata["gear_type"].get<std::string>();
+      std::transform(gearType.begin(), gearType.end(), gearType.begin(), ::tolower);
+    }
+    if (!mApplyingInternalPreset.load())
+    {
+      if (gearType == "amp_cab" || gearType == "amp_pedal_cab" ||
+          gearType == "pedal" || gearType == "preamp" || gearType == "studio")
+      {
+        GetParam(kIRToggleRight)->Set(false);
+        OnParamChange(kIRToggleRight);
+        SendParameterValueFromDelegate(kIRToggleRight, GetParam(kIRToggleRight)->GetNormalized(), true);
+      }
+      else if (gearType == "amp" || gearType == "pedal_amp")
+      {
+        GetParam(kIRToggleRight)->Set(true);
+        OnParamChange(kIRToggleRight);
+        SendParameterValueFromDelegate(kIRToggleRight, GetParam(kIRToggleRight)->GetNormalized(), true);
+      }
     }
 
     _MarkCurrentInternalPresetDirty();

@@ -130,6 +130,7 @@ enum EParams
   kPanR,
   kLevelL,
   kLevelR,
+  kIRToggleRight,
   kNumParams
 };
 
@@ -143,6 +144,9 @@ enum ECtrlTags
   kCtrlTagIRRightFileBrowser,
   kCtrlTagNAMLink,
   kCtrlTagIRLink,
+  kCtrlTagIRToggle,
+  kCtrlTagIRToggleLeft,
+  kCtrlTagIRToggleRight,
   kCtrlTagInputMeter,
   kCtrlTagOutputMeter,
   kCtrlTagSettingsBox,
