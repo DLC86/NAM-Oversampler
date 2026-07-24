@@ -1083,9 +1083,12 @@ public:
   void SetStereoFont(bool isStereo)
   {
     if (mBaseFontSize <= 0.0f)
-      mBaseFontSize = mStyle.valueText.mSize;
+      mBaseFontSize = mText.mSize > 0.0f ? mText.mSize : mStyle.valueText.mSize;
 
-    mStyle.valueText.mSize = isStereo ? (mBaseFontSize - 2.0f) : mBaseFontSize;
+    float newSize = isStereo ? (mBaseFontSize - 2.0f) : mBaseFontSize;
+    mText.mSize = newSize;
+    mStyle.valueText.mSize = newSize;
+    mStyle.labelText.mSize = newSize;
     SetDirty(false);
   }
 
