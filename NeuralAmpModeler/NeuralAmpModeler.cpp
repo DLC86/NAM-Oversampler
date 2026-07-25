@@ -3359,7 +3359,7 @@ bool NeuralAmpModeler::_IsStereoRequested() const
 
 bool NeuralAmpModeler::_CanProcessStereo(const size_t nChansIn, const size_t nChansOut) const
 {
-  if (!mStereoProcessing.load() || nChansIn < kNumChannelsStereo || nChansOut < kNumChannelsStereo)
+  if (!mStereoProcessing.load() || nChansIn < 1 || nChansOut < kNumChannelsStereo)
     return false;
 
   if (mModel != nullptr && mModelRight == nullptr)
@@ -3987,9 +3987,21 @@ void NeuralAmpModeler::_ProcessInput(iplug::sample** inputs, const size_t nFrame
 
   if (nChansOut == kNumChannelsStereo)
   {
-    for (size_t c = 0; c < nChansOut; c++)
+    if (nChansIn == 1)
+    {
       for (size_t s = 0; s < nFrames; s++)
-        mInputArray[c][s] = c < nChansIn ? inputs[c][s] : 0.0;
+      {
+        const sample val = inputs[0][s];
+        mInputArray[0][s] = val;
+        mInputArray[1][s] = val;
+      }
+    }
+    else
+    {
+      for (size_t c = 0; c < nChansOut; c++)
+        for (size_t s = 0; s < nFrames; s++)
+          mInputArray[c][s] = c < nChansIn ? inputs[c][s] : 0.0;
+    }
     return;
   }
 
