@@ -1030,6 +1030,18 @@ class NAMModelSizeSliderControl : public IVSliderControl
 public:
   using IVSliderControl::IVSliderControl;
 
+  void DrawTrack(IGraphics& g, const IRECT& filledArea) override
+  {
+    IBlend blend = GetBlend();
+    const float cr = GetRoundedCornerRadius(mTrackBounds);
+
+    g.FillRoundRect(COLOR_BLACK, mTrackBounds, cr, &blend);
+    g.FillRoundRect(GetColor(kX1), filledArea, cr, &blend);
+
+    if (mStyle.drawFrame)
+      g.DrawRoundRect(GetColor(kFR), mTrackBounds, cr, &blend, mStyle.frameThickness);
+  }
+
   void DrawHandle(IGraphics& g, const IRECT& bounds) override
   {
     IBlend blend = GetBlend();
@@ -1059,6 +1071,34 @@ public:
     mValueBounds = mRECT.GetFromTop(16.0f);
     mLabelBounds = mRECT.GetFromBottom(labelH);
     mTrackBounds = IRECT(mRECT.L, mValueBounds.B + 4.0f, mRECT.R, mLabelBounds.T - 4.0f);
+  }
+
+  void DrawTrack(IGraphics& g, const IRECT& filledArea) override
+  {
+    IBlend blend = GetBlend();
+    const float cr = GetRoundedCornerRadius(mTrackBounds);
+
+    g.FillRoundRect(COLOR_BLACK, mTrackBounds, cr, &blend);
+
+    const float normVal = static_cast<float>(GetValue());
+    const float midX = mTrackBounds.MW();
+    const float handleX = mTrackBounds.L + normVal * mTrackBounds.W();
+
+    const IColor redColor = PluginColors::NAM_THEMECOLOR;
+
+    if (normVal < 0.499f)
+    {
+      const IRECT redFill = IRECT(handleX, mTrackBounds.T, midX, mTrackBounds.B);
+      g.FillRoundRect(redColor, redFill, cr, &blend);
+    }
+    else if (normVal > 0.501f)
+    {
+      const IRECT redFill = IRECT(midX, mTrackBounds.T, handleX, mTrackBounds.B);
+      g.FillRoundRect(redColor, redFill, cr, &blend);
+    }
+
+    if (mStyle.drawFrame)
+      g.DrawRoundRect(GetColor(kFR), mTrackBounds, cr, &blend, mStyle.frameThickness);
   }
 
   void DrawHandle(IGraphics& g, const IRECT& bounds) override
