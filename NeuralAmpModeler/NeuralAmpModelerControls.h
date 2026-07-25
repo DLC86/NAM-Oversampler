@@ -1041,6 +1041,24 @@ public:
   }
 };
 
+class NAMTimeAlignSliderControl : public IVSliderControl
+{
+public:
+  NAMTimeAlignSliderControl(const IRECT& bounds, int paramIdx, const char* label, const IVStyle& style)
+  : IVSliderControl(bounds, paramIdx, label, style, false, EDirection::Horizontal, DEFAULT_GEARING, 6.0f)
+  {
+  }
+
+  void DrawValue(IGraphics& g, bool mouseOver) override
+  {
+    if (mStyle.showValue && CStringHasContents(mValueStr.Get()))
+    {
+      IBlend blend = GetBlend();
+      g.DrawText(mStyle.valueText, mValueStr.Get(), mValueBounds, &blend);
+    }
+  }
+};
+
 class NAMCutFiltersButtonControl : public IButtonControlBase
 {
 public:
@@ -1747,6 +1765,7 @@ public:
     if (mLevelRKnob) mLevelRKnob->SetDisabled(isMono);
     if (mPanLinkCtrl) mPanLinkCtrl->SetDisabled(isMono);
     if (mLevelLinkCtrl) mLevelLinkCtrl->SetDisabled(isMono);
+    if (mTimeAlignSlider) mTimeAlignSlider->SetDisabled(isMono);
     SetDirty(false);
   }
 
@@ -1890,6 +1909,27 @@ public:
     AddNamedChildControl(new IVLabelControl(lowSlopeLabelArea,  "Slope", knobLabelStyle), "LowSlopeLabel") ->SetIgnoreMouse(true);
     AddNamedChildControl(new IVLabelControl(highSlopeLabelArea, "Slope", knobLabelStyle), "HighSlopeLabel")->SetIgnoreMouse(true);
 
+    // ── Time Alignment Slider (centered in bottom row, vertically aligned with Slope controls) ──
+    const auto timeAlignStyle = mRadioButtonStyle
+      .WithColor(kBG, COLOR_BLACK)
+      .WithColor(kFG, PLUG()->GetThemeColor())
+      .WithColor(kFR, PLUG()->GetThemeColor().WithOpacity(0.40f))
+      .WithValueText(IText(12.0f, COLOR_WHITE, "Roboto-Regular", EAlign::Center, EVAlign::Middle))
+      .WithShowValue(true)
+      .WithShowLabel(false);
+
+    const auto timeAlignArea = switchRow(col2).Union(switchRow(col3))
+                                              .GetVShifted(NAM_SWTICH_HEIGHT + 18.0f)
+                                              .GetCentredInside(180.0f, 22.0f);
+
+    mTimeAlignSlider = AddNamedChildControl(
+      new NAMTimeAlignSliderControl(timeAlignArea, kTimeAlign, "Time Alignment", timeAlignStyle),
+      "TimeAlign", kCtrlTagTimeAlign);
+    mTimeAlignSlider->SetTooltip("Time Alignment: -100 (right channel delayed 100 samples) to +100 (left channel delayed 100 samples)");
+
+    const auto timeAlignLabelArea = timeAlignArea.GetVShifted(timeAlignArea.H() + 3.0f).GetCentredInside(120.0f, labelH);
+    AddNamedChildControl(new IVLabelControl(timeAlignLabelArea, "Time Alignment", knobLabelStyle), "TimeAlignLabel")->SetIgnoreMouse(true);
+
     // ── Close button ─────────────────────────────────────────────────────────
     auto closeAction = [&](IControl* pCaller) {
       static_cast<NAMCutFiltersPageControl*>(pCaller->GetParent())->HideAnimated(true);
@@ -1918,6 +1958,7 @@ private:
   IControl* mHighCutKnob = nullptr;
   IControl* mPanLinkCtrl = nullptr;
   IControl* mLevelLinkCtrl = nullptr;
+  IControl* mTimeAlignSlider = nullptr;
 };
 
 struct PossiblyKnownParameter

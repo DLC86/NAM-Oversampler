@@ -133,6 +133,7 @@ enum EParams
   kIRToggleRight,
   kPanLink,
   kLevelLink,
+  kTimeAlign,
   kNumParams
 };
 
@@ -148,6 +149,7 @@ enum ECtrlTags
   kCtrlTagIRLink,
   kCtrlTagPanLink,
   kCtrlTagLevelLink,
+  kCtrlTagTimeAlign,
   kCtrlTagIRToggle,
   kCtrlTagIRToggleLeft,
   kCtrlTagIRToggleRight,
@@ -1641,6 +1643,7 @@ private:
   // :param nChansIn: In from external
   // :param nChansOut: Out to the internal of the DSP routine
   void _ProcessInput(iplug::sample** inputs, const size_t nFrames, const size_t nChansIn, const size_t nChansOut);
+  void _ProcessTimeAlignment(iplug::sample* pL, iplug::sample* pR, const size_t nFrames, double delayL, double delayR);
   void _ApplyInputGain(iplug::sample** inputs, const size_t nFrames, const size_t nChans);
   // Copy the output to the output buffer, applying output level.
   // :param nChansIn: In from internal
@@ -1775,6 +1778,10 @@ private:
   NAMCutFilter mHighCutPre;
   NAMCutFilter mLowCutPost;
   NAMCutFilter mHighCutPost;
+
+  std::vector<iplug::sample> mTimeAlignBufferL;
+  std::vector<iplug::sample> mTimeAlignBufferR;
+  size_t mTimeAlignWritePos = 0;
 
   // Oversampling factor (1, 2, 4, 8, 16, 32)
   std::atomic<int> mOversamplingFactor = 1;

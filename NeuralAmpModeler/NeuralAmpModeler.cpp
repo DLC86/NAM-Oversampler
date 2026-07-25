@@ -257,6 +257,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kLevelR)->InitDouble("Level R", 0.0, -20.0, 20.0, 0.1, "dB");
   GetParam(kPanLink)->InitBool("Pan Link", false);
   GetParam(kLevelLink)->InitBool("Level Link", false);
+  GetParam(kTimeAlign)->InitDouble("Time Align", 0.0, -100.0, 100.0, 1.0, "smp");
+  GetParam(kTimeAlign)->SetDisplayFunc([](double val, WDL_String& str) {
+    int v = static_cast<int>(std::round(val));
+    if (v == 0)
+      str.Set("0 smp");
+    else
+      str.SetFormatted(32, "%+d smp", v);
+  });
   NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
   MakeDefaultPreset("Default");
   _LoadGlobalInternalPresetBank();
@@ -843,6 +851,7 @@ bool NeuralAmpModeler::IsMidiAssignableParam(int paramIdx) const
     case kPanR:
     case kLevelL:
     case kLevelR:
+    case kTimeAlign:
       return true;
     default:
       return false;
@@ -1848,6 +1857,12 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
     sample* pOutL = mMixPointers[0];
     sample* pOutR = mMixPointers[1];
 
+    const double timeAlignVal = GetParam(kTimeAlign)->Value();
+    const double delayL = timeAlignVal > 0.0 ? timeAlignVal : 0.0;
+    const double delayR = timeAlignVal < 0.0 ? -timeAlignVal : 0.0;
+
+    _ProcessTimeAlignment(pInL, pInR, numFrames, delayL, delayR);
+
     for (size_t f = 0; f < numFrames; ++f)
     {
       const sample sL = pInL[f] * gainL;
@@ -1926,6 +1941,9 @@ void NeuralAmpModeler::OnReset()
   mHighCutPre.Reset(sampleRate, maxBlockSize);
   mLowCutPost.Reset(sampleRate, maxBlockSize);
   mHighCutPost.Reset(sampleRate, maxBlockSize);
+  mTimeAlignBufferL.assign(1024, 0.0);
+  mTimeAlignBufferR.assign(1024, 0.0);
+  mTimeAlignWritePos = 0;
 
   // This must be called after the selected filter has been applied, otherwise the host can see stale PDC.
   _UpdateLatency();
@@ -4034,6 +4052,47 @@ void NeuralAmpModeler::_ProcessInput(iplug::sample** inputs, const size_t nFrame
         mInputArray[0][s] = gain * inputs[c][s];
       else
         mInputArray[0][s] += gain * inputs[c][s];
+}
+
+void NeuralAmpModeler::_ProcessTimeAlignment(sample* pL, sample* pR, const size_t numFrames, double delayL, double delayR)
+{
+  if (mTimeAlignBufferL.empty())
+  {
+    mTimeAlignBufferL.assign(1024, 0.0);
+    mTimeAlignBufferR.assign(1024, 0.0);
+    mTimeAlignWritePos = 0;
+  }
+
+  const size_t bufSize = mTimeAlignBufferL.size();
+
+  for (size_t f = 0; f < numFrames; ++f)
+  {
+    const sample inL = pL[f];
+    const sample inR = pR[f];
+
+    mTimeAlignBufferL[mTimeAlignWritePos] = inL;
+    mTimeAlignBufferR[mTimeAlignWritePos] = inR;
+
+    if (delayL > 0.0001)
+    {
+      const int dInt = static_cast<int>(std::floor(delayL));
+      const double frac = delayL - dInt;
+      const size_t idx0 = (mTimeAlignWritePos + bufSize - dInt) % bufSize;
+      const size_t idx1 = (mTimeAlignWritePos + bufSize - dInt - 1) % bufSize;
+      pL[f] = static_cast<sample>((1.0 - frac) * mTimeAlignBufferL[idx0] + frac * mTimeAlignBufferL[idx1]);
+    }
+
+    if (delayR > 0.0001)
+    {
+      const int dInt = static_cast<int>(std::floor(delayR));
+      const double frac = delayR - dInt;
+      const size_t idx0 = (mTimeAlignWritePos + bufSize - dInt) % bufSize;
+      const size_t idx1 = (mTimeAlignWritePos + bufSize - dInt - 1) % bufSize;
+      pR[f] = static_cast<sample>((1.0 - frac) * mTimeAlignBufferR[idx0] + frac * mTimeAlignBufferR[idx1]);
+    }
+
+    mTimeAlignWritePos = (mTimeAlignWritePos + 1) % bufSize;
+  }
 }
 
 void NeuralAmpModeler::_ApplyInputGain(iplug::sample** inputs, const size_t nFrames, const size_t nChans)
