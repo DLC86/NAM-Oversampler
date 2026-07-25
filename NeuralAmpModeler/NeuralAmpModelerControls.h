@@ -90,9 +90,9 @@ public:
     const bool active = GetValue() > 0.5;
     IColor color;
     if (IsDisabled())
-      color = IColor(100, 60, 60, 60);
+      color = IColor(220, 85, 85, 85);
     else
-      color = active ? PLUG()->GetThemeColor() : IColor(255, 100, 100, 100);
+      color = active ? PLUG()->GetThemeColor() : IColor(255, 180, 180, 180);
 
     g.DrawSVG(mSVG, mRECT, &mBlend, &color, &color);
 
@@ -1854,8 +1854,8 @@ public:
     addKnobLabel(col4, "Level R",  "LblLevelR");
     addKnobLabel(col5, "High Cut", "LblHighCut");
 
-    // ── Link Buttons (positioned 10px above knob center Y) ──────────────────
-    const float linkYCenter = col1.MH() - 10.0f;
+    // ── Link Buttons (positioned 20px above knob center Y) ──────────────────
+    const float linkYCenter = col1.MH() - 20.0f;
     const float midX_Pan = (col1.R + col2.L) * 0.5f;
     const auto panLinkArea = IRECT(midX_Pan - 7.0f, linkYCenter - 7.0f, midX_Pan + 7.0f, linkYCenter + 7.0f);
     mPanLinkCtrl = AddNamedChildControl(new NAMIconSwitchControl(panLinkArea, mLinkSVG, kPanLink), "PanLink", kCtrlTagPanLink);
