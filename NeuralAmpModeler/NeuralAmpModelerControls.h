@@ -1718,13 +1718,14 @@ class NAMCutFiltersPageControl : public IContainerBaseWithNamedChildren
 {
 public:
   NAMCutFiltersPageControl(const IRECT& bounds, const IBitmap& bitmap, const IBitmap& knobBitmap,
-                           const IBitmap& switchBitmap, ISVG closeSVG, const IVStyle& style,
+                           const IBitmap& switchBitmap, ISVG closeSVG, ISVG linkSVG, const IVStyle& style,
                            const IVStyle& radioButtonStyle)
   : IContainerBaseWithNamedChildren(bounds)
   , mBitmap(bitmap)
   , mKnobBitmap(knobBitmap)
   , mSwitchBitmap(switchBitmap)
   , mCloseSVG(closeSVG)
+  , mLinkSVG(linkSVG)
   , mStyle(style)
   , mRadioButtonStyle(radioButtonStyle)
   {
@@ -1745,9 +1746,11 @@ public:
   {
     mIsMono = isMono;
     if (mPanLKnob) mPanLKnob->SetDisabled(isMono);
+    if (mPanRKnob) mPanRKnob->SetDisabled(isMono);
     if (mLevelLKnob) mLevelLKnob->SetDisabled(isMono);
     if (mLevelRKnob) mLevelRKnob->SetDisabled(isMono);
-    if (mPanRKnob) mPanRKnob->SetDisabled(isMono);
+    if (mPanLinkCtrl) mPanLinkCtrl->SetDisabled(isMono);
+    if (mLevelLinkCtrl) mLevelLinkCtrl->SetDisabled(isMono);
     SetDirty(false);
   }
 
@@ -1805,7 +1808,6 @@ public:
     const auto col5 = knobsArea.GetGridCell(0, 5, 1, numKnobs).GetPadded(-singleKnobPad);
 
     // Switch-row rects — identical to main page formula
-    // (ngToggleArea uses col1, inputBoostArea uses col0, etc.)
     auto switchRow = [](const IRECT& knob) {
       return knob.GetVShifted(knob.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
     };
@@ -1826,17 +1828,15 @@ public:
       .WithShadowOffset(2.0f);
     AddNamedChildControl(new IVLabelControl(titleArea, "MIXER", titleStyle), "Title");
 
-    // ── 6 Knobs ───────────────────────────────────────────────────────────────
-    // centerAnchor=true → arc radiates from center (Pan/Level)
-    // reverseTrack=true → arc from angle to max (High Cut)
+    // ── 6 Knobs in Order: Low Cut, Pan L, Pan R, Level L, Level R, High Cut ──
     mLowCutKnob  = AddNamedChildControl(new NAMFilterKnobControl(col0, kLowCutFrequency,  mStyle, mKnobBitmap, false, false), "LowCutFrequency");
     mPanLKnob    = AddNamedChildControl(new NAMFilterKnobControl(col1, kPanL,             mStyle, mKnobBitmap, false, true),  "PanL");
-    mLevelLKnob  = AddNamedChildControl(new NAMFilterKnobControl(col2, kLevelL,           mStyle, mKnobBitmap, false, true),  "LevelL");
-    mLevelRKnob  = AddNamedChildControl(new NAMFilterKnobControl(col3, kLevelR,           mStyle, mKnobBitmap, false, true),  "LevelR");
-    mPanRKnob    = AddNamedChildControl(new NAMFilterKnobControl(col4, kPanR,             mStyle, mKnobBitmap, false, true),  "PanR");
+    mPanRKnob    = AddNamedChildControl(new NAMFilterKnobControl(col2, kPanR,             mStyle, mKnobBitmap, false, true),  "PanR");
+    mLevelLKnob  = AddNamedChildControl(new NAMFilterKnobControl(col3, kLevelL,           mStyle, mKnobBitmap, false, true),  "LevelL");
+    mLevelRKnob  = AddNamedChildControl(new NAMFilterKnobControl(col4, kLevelR,           mStyle, mKnobBitmap, false, true),  "LevelR");
     mHighCutKnob = AddNamedChildControl(new NAMFilterKnobControl(col5, kHighCutFrequency, mStyle, mKnobBitmap, true,  false), "HighCutFrequency");
 
-    // ── Per-knob labels (using mStyle.labelText font, size, white color, no shadow) ──
+    // ── Per-knob labels ───────────────────────────────────────────────────────
     const IVStyle knobLabelStyle = DEFAULT_STYLE
       .WithValueText(IText(mStyle.labelText.mSize, COLOR_WHITE, mStyle.labelText.mFont, EAlign::Center, EVAlign::Middle))
       .WithDrawShadows(false)
@@ -1849,10 +1849,21 @@ public:
     };
     addKnobLabel(col0, "Low Cut",  "LblLowCut");
     addKnobLabel(col1, "Pan L",    "LblPanL");
-    addKnobLabel(col2, "Level L",  "LblLevelL");
-    addKnobLabel(col3, "Level R",  "LblLevelR");
-    addKnobLabel(col4, "Pan R",    "LblPanR");
+    addKnobLabel(col2, "Pan R",    "LblPanR");
+    addKnobLabel(col3, "Level L",  "LblLevelL");
+    addKnobLabel(col4, "Level R",  "LblLevelR");
     addKnobLabel(col5, "High Cut", "LblHighCut");
+
+    // ── Link Buttons ─────────────────────────────────────────────────────────
+    const float midX_Pan = (col1.R + col2.L) * 0.5f;
+    const auto panLinkArea = IRECT(midX_Pan - 7.0f, col1.MH() - 7.0f, midX_Pan + 7.0f, col1.MH() + 7.0f);
+    mPanLinkCtrl = AddNamedChildControl(new NAMIconSwitchControl(panLinkArea, mLinkSVG, kPanLink), "PanLink", kCtrlTagPanLink);
+    mPanLinkCtrl->SetTooltip("Link Pan controls in opposite directions");
+
+    const float midX_Level = (col3.R + col4.L) * 0.5f;
+    const auto levelLinkArea = IRECT(midX_Level - 7.0f, col3.MH() - 7.0f, midX_Level + 7.0f, col3.MH() + 7.0f);
+    mLevelLinkCtrl = AddNamedChildControl(new NAMIconSwitchControl(levelLinkArea, mLinkSVG, kLevelLink), "LevelLink", kCtrlTagLevelLink);
+    mLevelLinkCtrl->SetTooltip("Link Level controls in opposite directions (maintains dB offset)");
 
     // ── Switches ──────────────────────────────────────────────────────────────
     auto* lowPosSwitch  = AddNamedChildControl(new NAMSwitchControl(lowSwitchArea,  kLowCutPostNAM,  "Pre/Post",  mStyle, mSwitchBitmap), "LowCutPosition");
@@ -1896,6 +1907,7 @@ private:
   IBitmap mKnobBitmap;
   IBitmap mSwitchBitmap;
   ISVG mCloseSVG;
+  ISVG mLinkSVG;
   IVStyle mStyle;
   IVStyle mRadioButtonStyle;
   bool mWillHide = false;
@@ -1903,10 +1915,12 @@ private:
 
   IControl* mLowCutKnob = nullptr;
   IControl* mPanLKnob = nullptr;
+  IControl* mPanRKnob = nullptr;
   IControl* mLevelLKnob = nullptr;
   IControl* mLevelRKnob = nullptr;
-  IControl* mPanRKnob = nullptr;
   IControl* mHighCutKnob = nullptr;
+  IControl* mPanLinkCtrl = nullptr;
+  IControl* mLevelLinkCtrl = nullptr;
 };
 
 struct PossiblyKnownParameter

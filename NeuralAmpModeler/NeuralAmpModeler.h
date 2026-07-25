@@ -131,6 +131,8 @@ enum EParams
   kLevelL,
   kLevelR,
   kIRToggleRight,
+  kPanLink,
+  kLevelLink,
   kNumParams
 };
 
@@ -144,6 +146,8 @@ enum ECtrlTags
   kCtrlTagIRRightFileBrowser,
   kCtrlTagNAMLink,
   kCtrlTagIRLink,
+  kCtrlTagPanLink,
+  kCtrlTagLevelLink,
   kCtrlTagIRToggle,
   kCtrlTagIRToggleLeft,
   kCtrlTagIRToggleRight,
@@ -1838,4 +1842,5 @@ private:
   bool mUpdateCheckConsumed = false;
   bool mUpdateNotificationShown = false;
   std::future<std::string> mUpdateCheckFuture;
+  double mLevelLinkSum = 0.0;
 };

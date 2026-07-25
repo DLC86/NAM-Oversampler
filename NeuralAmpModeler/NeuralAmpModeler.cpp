@@ -255,6 +255,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kPanR)->InitDouble("Pan R", 100.0, -100.0, 100.0, 1.0, "%");
   GetParam(kLevelL)->InitDouble("Level L", 0.0, -20.0, 20.0, 0.1, "dB");
   GetParam(kLevelR)->InitDouble("Level R", 0.0, -20.0, 20.0, 0.1, "dB");
+  GetParam(kPanLink)->InitBool("Pan Link", false);
+  GetParam(kLevelLink)->InitBool("Level Link", false);
   NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
   MakeDefaultPreset("Default");
   _LoadGlobalInternalPresetBank();
@@ -578,7 +580,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     // CutFilters / MIXER page (attached BEFORE meters so meters draw on top of MIXER page)
     pGraphics
       ->AttachControl(new NAMCutFiltersPageControl(b, backgroundBitmap, knobBackgroundBitmap, switchHandleBitmap,
-                                                   crossSVG, style, radioButtonStyle),
+                                                   crossSVG, linkSVG, style, radioButtonStyle),
                       kCtrlTagCutFiltersBox)
       ->Hide(true);
 
@@ -1192,7 +1194,7 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
   if (allowFileStaging && (paramsChanged || toneStackComponentsChanged))
     OnParamReset(iplug::EParamSource::kPresetRecall);
   mApplyingInternalPreset.store(false, std::memory_order_release);
-  mCurrentInternalPresetDirty.store(false, std::memory_order_release);
+  mLevelLinkSum = GetParam(kLevelL)->Value() + GetParam(kLevelR)->Value();
 #if PLUG_HAS_UI
   if (allowFileStaging && (paramsChanged || toneStackComponentsChanged))
     SendCurrentParamValuesFromDelegate();
@@ -2676,7 +2678,73 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
       case kChannelMode:
         _UpdateLinkAndBrowserAvailability();
         break;
-       case kFollowTrackColor:
+      case kPanLink:
+        if (GetParam(kPanLink)->Bool())
+        {
+          const double targetR = std::clamp(-GetParam(kPanL)->Value(), -100.0, 100.0);
+          if (std::abs(GetParam(kPanR)->Value() - targetR) > 1.0e-5)
+          {
+            GetParam(kPanR)->Set(targetR);
+            OnParamChange(kPanR);
+            SendParameterValueFromDelegate(kPanR, GetParam(kPanR)->GetNormalized(), true);
+          }
+        }
+        break;
+      case kLevelLink:
+        if (GetParam(kLevelLink)->Bool())
+        {
+          mLevelLinkSum = GetParam(kLevelL)->Value() + GetParam(kLevelR)->Value();
+        }
+        break;
+      case kPanL:
+        if (GetParam(kPanLink)->Bool())
+        {
+          const double targetR = std::clamp(-GetParam(kPanL)->Value(), -100.0, 100.0);
+          if (std::abs(GetParam(kPanR)->Value() - targetR) > 1.0e-5)
+          {
+            GetParam(kPanR)->Set(targetR);
+            OnParamChange(kPanR);
+            SendParameterValueFromDelegate(kPanR, GetParam(kPanR)->GetNormalized(), true);
+          }
+        }
+        break;
+      case kPanR:
+        if (GetParam(kPanLink)->Bool())
+        {
+          const double targetL = std::clamp(-GetParam(kPanR)->Value(), -100.0, 100.0);
+          if (std::abs(GetParam(kPanL)->Value() - targetL) > 1.0e-5)
+          {
+            GetParam(kPanL)->Set(targetL);
+            OnParamChange(kPanL);
+            SendParameterValueFromDelegate(kPanL, GetParam(kPanL)->GetNormalized(), true);
+          }
+        }
+        break;
+      case kLevelL:
+        if (GetParam(kLevelLink)->Bool())
+        {
+          const double targetR = std::clamp(mLevelLinkSum - GetParam(kLevelL)->Value(), -20.0, 20.0);
+          if (std::abs(GetParam(kLevelR)->Value() - targetR) > 1.0e-5)
+          {
+            GetParam(kLevelR)->Set(targetR);
+            OnParamChange(kLevelR);
+            SendParameterValueFromDelegate(kLevelR, GetParam(kLevelR)->GetNormalized(), true);
+          }
+        }
+        break;
+      case kLevelR:
+        if (GetParam(kLevelLink)->Bool())
+        {
+          const double targetL = std::clamp(mLevelLinkSum - GetParam(kLevelR)->Value(), -20.0, 20.0);
+          if (std::abs(GetParam(kLevelL)->Value() - targetL) > 1.0e-5)
+          {
+            GetParam(kLevelL)->Set(targetL);
+            OnParamChange(kLevelL);
+            SendParameterValueFromDelegate(kLevelL, GetParam(kLevelL)->GetNormalized(), true);
+          }
+        }
+        break;
+      case kFollowTrackColor:
         _ApplyThemeColorToUI(true);
         break;
      default: break;
