@@ -134,6 +134,8 @@ enum EParams
   kPanLink,
   kLevelLink,
   kTimeAlign,
+  kPhaseInvertL,
+  kPhaseInvertR,
   kNumParams
 };
 
@@ -150,6 +152,8 @@ enum ECtrlTags
   kCtrlTagPanLink,
   kCtrlTagLevelLink,
   kCtrlTagTimeAlign,
+  kCtrlTagPhaseInvertL,
+  kCtrlTagPhaseInvertR,
   kCtrlTagIRToggle,
   kCtrlTagIRToggleLeft,
   kCtrlTagIRToggleRight,

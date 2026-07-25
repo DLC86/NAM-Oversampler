@@ -257,7 +257,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kLevelR)->InitDouble("Level R", 0.0, -20.0, 20.0, 0.1, "dB");
   GetParam(kPanLink)->InitBool("Pan Link", false);
   GetParam(kLevelLink)->InitBool("Level Link", false);
-  GetParam(kTimeAlign)->InitDouble("Time Align", 0.0, -100.0, 100.0, 1.0, "");
+  GetParam(kTimeAlign)->InitDouble("Time Alignment", 0.0, -100.0, 100.0, 1.0, "");
   GetParam(kTimeAlign)->SetDisplayFunc([](double val, WDL_String& str) {
     int v = static_cast<int>(std::round(val));
     if (v == 0)
@@ -265,6 +265,8 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     else
       str.SetFormatted(32, "%+d smp", v);
   });
+  GetParam(kPhaseInvertL)->InitBool("Phase Invert L", false);
+  GetParam(kPhaseInvertR)->InitBool("Phase Invert R", false);
   NAMSetPhaseMulticoreRuntimeSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load(), 4);
   MakeDefaultPreset("Default");
   _LoadGlobalInternalPresetBank();
@@ -852,6 +854,8 @@ bool NeuralAmpModeler::IsMidiAssignableParam(int paramIdx) const
     case kLevelL:
     case kLevelR:
     case kTimeAlign:
+    case kPhaseInvertL:
+    case kPhaseInvertR:
       return true;
     default:
       return false;
@@ -1862,6 +1866,19 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
     const double delayR = timeAlignVal < 0.0 ? -timeAlignVal : 0.0;
 
     _ProcessTimeAlignment(pInL, pInR, numFrames, delayL, delayR);
+
+    const bool phaseInvertL = GetParam(kPhaseInvertL)->Bool();
+    const bool phaseInvertR = GetParam(kPhaseInvertR)->Bool();
+    if (phaseInvertL)
+    {
+      for (size_t f = 0; f < numFrames; ++f)
+        pInL[f] = -pInL[f];
+    }
+    if (phaseInvertR)
+    {
+      for (size_t f = 0; f < numFrames; ++f)
+        pInR[f] = -pInR[f];
+    }
 
     for (size_t f = 0; f < numFrames; ++f)
     {

@@ -1030,6 +1030,12 @@ class NAMModelSizeSliderControl : public IVSliderControl
 public:
   using IVSliderControl::IVSliderControl;
 
+  void DrawHandle(IGraphics& g, const IRECT& bounds) override
+  {
+    IBlend blend = GetBlend();
+    g.FillEllipse(COLOR_WHITE, bounds, &blend);
+  }
+
   void DrawValue(IGraphics& g, bool mouseOver) override
   {
     if (mStyle.showValue && CStringHasContents(mValueStr.Get()))
@@ -1053,6 +1059,12 @@ public:
     mValueBounds = mRECT.GetFromTop(16.0f);
     mLabelBounds = mRECT.GetFromBottom(labelH);
     mTrackBounds = IRECT(mRECT.L, mValueBounds.B + 4.0f, mRECT.R, mLabelBounds.T - 4.0f);
+  }
+
+  void DrawHandle(IGraphics& g, const IRECT& bounds) override
+  {
+    IBlend blend = GetBlend();
+    g.FillEllipse(COLOR_WHITE, bounds, &blend);
   }
 
   void DrawValue(IGraphics& g, bool mouseOver) override
@@ -1772,6 +1784,8 @@ public:
     if (mPanLinkCtrl) mPanLinkCtrl->SetDisabled(isMono);
     if (mLevelLinkCtrl) mLevelLinkCtrl->SetDisabled(isMono);
     if (mTimeAlignSlider) mTimeAlignSlider->SetDisabled(isMono);
+    if (mPhaseInvertLCtrl) mPhaseInvertLCtrl->SetDisabled(isMono);
+    if (mPhaseInvertRCtrl) mPhaseInvertRCtrl->SetDisabled(isMono);
     SetDirty(false);
   }
 
@@ -1915,7 +1929,14 @@ public:
     AddNamedChildControl(new IVLabelControl(lowSlopeLabelArea,  "Slope", knobLabelStyle), "LowSlopeLabel") ->SetIgnoreMouse(true);
     AddNamedChildControl(new IVLabelControl(highSlopeLabelArea, "Slope", knobLabelStyle), "HighSlopeLabel")->SetIgnoreMouse(true);
 
-    // ── Time Alignment Slider (matching Model Size layout: value top, slider center, label bottom, no black frame) ──
+    // ── Time Alignment Slider & Phase Invert Controls ──
+    static const char* kPhaseInvertSVGStr = R"(<svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="12" cy="12" r="7.5" fill="none" stroke="#FFFFFF" stroke-width="2"/>
+      <line x1="5" y1="19" x2="19" y2="5" stroke="#FFFFFF" stroke-width="2"/>
+    </svg>)";
+
+    const ISVG phaseSVG = GetUI()->LoadSVG("phase_invert.svg", static_cast<const void*>(kPhaseInvertSVGStr), static_cast<int>(strlen(kPhaseInvertSVGStr)));
+
     const IText alignText = IText(mStyle.labelText.mSize, COLOR_WHITE, mStyle.labelText.mFont, EAlign::Center, EVAlign::Middle);
 
     const IVStyle timeAlignStyle = mStyle
@@ -1930,14 +1951,26 @@ public:
 
     const float alignTop = lowSlopeArea.T;
     const float alignBottom = lowSlopeLabelArea.B;
-    const auto timeAlignArea = switchRow(col2).Union(switchRow(col3))
-                                              .GetCentredInside(180.0f, alignBottom - alignTop)
-                                              .GetVShifted(alignTop - switchRow(col2).Union(switchRow(col3)).T);
+    const float centerX = switchRow(col2).Union(switchRow(col3)).MW();
+
+    const auto timeAlignArea = IRECT(centerX - 58.0f, alignTop, centerX + 58.0f, alignBottom);
 
     mTimeAlignSlider = AddNamedChildControl(
-      new NAMTimeAlignSliderControl(timeAlignArea, kTimeAlign, "Time Align", timeAlignStyle, true, EDirection::Horizontal, DEFAULT_GEARING, 4.0f),
+      new NAMTimeAlignSliderControl(timeAlignArea, kTimeAlign, "Time Alignment", timeAlignStyle, true, EDirection::Horizontal, DEFAULT_GEARING, 4.0f),
       "TimeAlign", kCtrlTagTimeAlign);
     mTimeAlignSlider->SetTooltip("Time Alignment: -100 (right channel delayed 100 samples) to +100 (left channel delayed 100 samples)");
+
+    const float buttonYCenter = timeAlignArea.T + 22.0f;
+    const auto phaseLArea = IRECT(timeAlignArea.L - 26.0f, buttonYCenter - 10.0f, timeAlignArea.L - 6.0f, buttonYCenter + 10.0f);
+    const auto phaseRArea = IRECT(timeAlignArea.R + 6.0f, buttonYCenter - 10.0f, timeAlignArea.R + 26.0f, buttonYCenter + 10.0f);
+
+    mPhaseInvertLCtrl = AddNamedChildControl(
+      new NAMIconSwitchControl(phaseLArea, phaseSVG, kPhaseInvertL), "PhaseInvertL", kCtrlTagPhaseInvertL);
+    mPhaseInvertLCtrl->SetTooltip("Invert Left channel phase");
+
+    mPhaseInvertRCtrl = AddNamedChildControl(
+      new NAMIconSwitchControl(phaseRArea, phaseSVG, kPhaseInvertR), "PhaseInvertR", kCtrlTagPhaseInvertR);
+    mPhaseInvertRCtrl->SetTooltip("Invert Right channel phase");
 
     // ── Close button ─────────────────────────────────────────────────────────
     auto closeAction = [&](IControl* pCaller) {
@@ -1968,6 +2001,8 @@ private:
   IControl* mPanLinkCtrl = nullptr;
   IControl* mLevelLinkCtrl = nullptr;
   IControl* mTimeAlignSlider = nullptr;
+  IControl* mPhaseInvertLCtrl = nullptr;
+  IControl* mPhaseInvertRCtrl = nullptr;
 };
 
 struct PossiblyKnownParameter

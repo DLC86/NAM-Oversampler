@@ -45,6 +45,12 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
     config["Channel Mode"] = 0.0;
   if (!config.contains("Time Align"))
     config["Time Align"] = 0.0;
+  if (!config.contains("Time Alignment"))
+    config["Time Alignment"] = 0.0;
+  if (!config.contains("Phase Invert L"))
+    config["Phase Invert L"] = 0.0;
+  if (!config.contains("Phase Invert R"))
+    config["Phase Invert R"] = 0.0;
 
   auto getParamByName = [&](std::string& name) {
     // Could use a map but eh
@@ -864,7 +870,9 @@ int _GetConfigFrom_2_3_1(const iplug::IByteChunk& chunk, int startPos, nlohmann:
                                       "IRToggleRight",
                                       "Pan Link",
                                       "Level Link",
-                                      "Time Align"};
+                                      "Time Align",
+                                      "Phase Invert L",
+                                      "Phase Invert R"};
 
   int pos = _UnserializePathsAndExpectedKeys(chunk, startPos, config, paramNames);
   _UpdateConfigFrom_1_6_0(config);
