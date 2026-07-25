@@ -1744,14 +1744,25 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
 
   if (mModel != nullptr && namActive)
   {
-    if (numChannelsInternal == kNumChannelsStereo && mModelRight != nullptr)
+    if (numChannelsInternal == kNumChannelsStereo)
     {
-      sample* modelInputLeft[1] = {modelInputPointers[0]};
-      sample* modelOutputLeft[1] = {mOutputPointers[0]};
-      sample* modelInputRight[1] = {modelInputPointers[1]};
-      sample* modelOutputRight[1] = {mOutputPointers[1]};
-      mModel->process_stereo(
-        *mModelRight, modelInputLeft, modelOutputLeft, modelInputRight, modelOutputRight, nFrames);
+      if (mModelRight != nullptr)
+      {
+        sample* modelInputLeft[1] = {modelInputPointers[0]};
+        sample* modelOutputLeft[1] = {mOutputPointers[0]};
+        sample* modelInputRight[1] = {modelInputPointers[1]};
+        sample* modelOutputRight[1] = {mOutputPointers[1]};
+        mModel->process_stereo(
+          *mModelRight, modelInputLeft, modelOutputLeft, modelInputRight, modelOutputRight, nFrames);
+      }
+      else
+      {
+        sample* modelInputLeft[1] = {modelInputPointers[0]};
+        sample* modelOutputLeft[1] = {mOutputPointers[0]};
+        mModel->process(modelInputLeft, modelOutputLeft, nFrames);
+        for (size_t f = 0; f < nFrames; ++f)
+          mOutputPointers[1][f] = mOutputPointers[0][f];
+      }
     }
     else
     {
@@ -1779,9 +1790,8 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
   if (numChannelsInternal == kNumChannelsStereo)
   {
     const bool hasIRL = (mIR != nullptr) && irActiveL;
-    const bool hasIRR = (mIRRight != nullptr ? mIRRight != nullptr : mIR != nullptr) && irActiveR;
 
-    if (hasIRL || hasIRR)
+    if (hasIRL || (mIRRight != nullptr && irActiveR))
     {
       sample* irInputLeft[1] = {toneStackOutPointers[0]};
       sample* irInputRight[1] = {toneStackOutPointers[1]};
@@ -1791,13 +1801,13 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
       else
         mStereoIRPointers[0] = toneStackOutPointers[0];
 
-      if (hasIRR)
+      if (mIRRight != nullptr && irActiveR)
       {
-        auto* rightIR = mIRRight != nullptr ? mIRRight.get() : mIR.get();
-        if (rightIR != nullptr)
-          mStereoIRPointers[1] = rightIR->Process(irInputRight, kNumChannelsMono, numFrames)[0];
-        else
-          mStereoIRPointers[1] = toneStackOutPointers[1];
+        mStereoIRPointers[1] = mIRRight->Process(irInputRight, kNumChannelsMono, numFrames)[0];
+      }
+      else if (hasIRL && irActiveR)
+      {
+        mStereoIRPointers[1] = mStereoIRPointers[0];
       }
       else
       {
