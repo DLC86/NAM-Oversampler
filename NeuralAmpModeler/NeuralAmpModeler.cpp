@@ -3995,9 +3995,11 @@ void NeuralAmpModeler::_ProcessInput(iplug::sample** inputs, const size_t nFrame
     throw std::runtime_error(ss.str());
   }
 
+  const bool linkNAM = GetParam(kNAMLink)->Bool();
+
   if (nChansOut == kNumChannelsStereo)
   {
-    if (nChansIn == 1)
+    if (linkNAM || nChansIn <= 1)
     {
       for (size_t s = 0; s < nFrames; s++)
       {
