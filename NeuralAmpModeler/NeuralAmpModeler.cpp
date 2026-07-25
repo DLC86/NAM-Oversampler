@@ -1692,7 +1692,7 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
     numChannelsConnectedOut, std::min((size_t)MaxNChannels(ERoute::kOutput), (size_t)kNumChannelsStereo));
   const bool processStereo = _CanProcessStereo(numChannelsAvailableIn, numChannelsAvailableOut);
   const size_t numChannelsInternal = processStereo ? kNumChannelsStereo : kNumChannelsMono;
-  const size_t numChannelsExternalIn = processStereo ? kNumChannelsStereo : numChannelsConnectedIn;
+  const size_t numChannelsExternalIn = numChannelsConnectedIn;
   const size_t numChannelsExternalOut = processStereo ? kNumChannelsStereo : numChannelsConnectedOut;
   const size_t numFrames = (size_t)nFrames;
   const double sampleRate = GetSampleRate();
