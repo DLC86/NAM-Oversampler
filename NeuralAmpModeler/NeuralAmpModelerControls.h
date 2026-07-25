@@ -1046,13 +1046,21 @@ class NAMTimeAlignSliderControl : public IVSliderControl
 public:
   using IVSliderControl::IVSliderControl;
 
+  void OnResize() override
+  {
+    IVSliderControl::OnResize();
+    const float labelH = mStyle.labelText.mSize > 0.0f ? mStyle.labelText.mSize : 14.0f;
+    mValueBounds = mRECT.GetFromTop(16.0f);
+    mLabelBounds = mRECT.GetFromBottom(labelH);
+    mTrackBounds = IRECT(mRECT.L, mValueBounds.B + 4.0f, mRECT.R, mLabelBounds.T - 4.0f);
+  }
+
   void DrawValue(IGraphics& g, bool mouseOver) override
   {
     if (mStyle.showValue && CStringHasContents(mValueStr.Get()))
     {
       IBlend blend = GetBlend();
-      IRECT shiftedValueBounds = mValueBounds.GetVShifted(2.0f);
-      g.DrawText(mStyle.valueText, mValueStr.Get(), shiftedValueBounds, &blend);
+      g.DrawText(mStyle.valueText, mValueStr.Get(), mValueBounds, &blend);
     }
   }
 };
@@ -1908,19 +1916,23 @@ public:
     AddNamedChildControl(new IVLabelControl(highSlopeLabelArea, "Slope", knobLabelStyle), "HighSlopeLabel")->SetIgnoreMouse(true);
 
     // ── Time Alignment Slider (matching Model Size layout: value top, slider center, label bottom, no black frame) ──
+    const IText alignText = IText(mStyle.labelText.mSize, COLOR_WHITE, mStyle.labelText.mFont, EAlign::Center, EVAlign::Middle);
+
     const IVStyle timeAlignStyle = mStyle
       .WithColor(kFG, PLUG()->GetThemeColor())
       .WithColor(kBG, COLOR_TRANSPARENT)
       .WithColor(kFR, COLOR_TRANSPARENT)
-      .WithValueText(IText(mStyle.labelText.mSize, COLOR_WHITE, mStyle.labelText.mFont, EAlign::Center, EVAlign::Top))
-      .WithLabelText(knobLabelStyle.labelText)
+      .WithValueText(alignText)
+      .WithLabelText(alignText)
       .WithLabelOrientation(EOrientation::South)
       .WithShowValue(true)
       .WithShowLabel(true);
 
+    const float alignTop = lowSlopeArea.T;
+    const float alignBottom = lowSlopeLabelArea.B;
     const auto timeAlignArea = switchRow(col2).Union(switchRow(col3))
-                                              .GetVShifted(NAM_SWTICH_HEIGHT + 10.0f)
-                                              .GetCentredInside(180.0f, 44.0f);
+                                              .GetCentredInside(180.0f, alignBottom - alignTop)
+                                              .GetVShifted(alignTop - switchRow(col2).Union(switchRow(col3)).T);
 
     mTimeAlignSlider = AddNamedChildControl(
       new NAMTimeAlignSliderControl(timeAlignArea, kTimeAlign, "Time Align", timeAlignStyle, true, EDirection::Horizontal, DEFAULT_GEARING, 4.0f),
