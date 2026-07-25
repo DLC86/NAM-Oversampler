@@ -1210,16 +1210,16 @@ void NeuralAmpModeler::SelectInternalPreset(int index)
 
 void NeuralAmpModeler::SelectAdjacentInternalPreset(int delta)
 {
-  const int step = delta >= 0 ? 1 : -1;
+  if (delta == 0) return;
   int index = GetCurrentInternalPresetIndex();
   if (index < 0)
-    index = step > 0 ? 0 : kNumInternalPresets - 1;
+    index = delta > 0 ? 0 : kNumInternalPresets - 1;
   else
   {
-    index += step;
-    while (index < 0)
-      index += kNumInternalPresets;
+    index += delta;
     index %= kNumInternalPresets;
+    if (index < 0)
+      index += kNumInternalPresets;
   }
 
   SelectInternalPreset(index);
@@ -1533,19 +1533,17 @@ void NeuralAmpModeler::_SaveGlobalInternalPresetBank() const
 
 void NeuralAmpModeler::_ApplyParamNormalizedFromMidi(int paramIdx, double normalizedValue)
 {
-  if (!IsMidiAssignableParam(paramIdx))
+  if (paramIdx < 0 || paramIdx >= kNumParams || !IsMidiAssignableParam(paramIdx))
     return;
 
   normalizedValue = std::clamp(normalizedValue, 0.0, 1.0);
   if (GetParam(paramIdx)->Type() == IParam::kTypeBool)
     normalizedValue = normalizedValue >= (64.0 / 127.0) ? 1.0 : 0.0;
+
   GetParam(paramIdx)->SetNormalized(normalizedValue);
   OnParamChange(paramIdx);
 
-  if (paramIdx >= 0 && paramIdx < kNumParams)
-  {
-    mPendingMidiParamUpdates[paramIdx].store(true, std::memory_order_release);
-  }
+  mPendingMidiParamUpdates[paramIdx].store(true, std::memory_order_release);
 }
 
 bool NeuralAmpModeler::_MidiMessageMatchesSelectedChannel(const IMidiMsg& msg) const
@@ -1583,15 +1581,17 @@ void NeuralAmpModeler::ProcessMidiMsg(const IMidiMsg& msg)
     if (cc >= 0 && cc < 128)
     {
       const int paramIdx = mMidiCCToParam[cc];
-      if (paramIdx == kMidiActionPreviousPreset && msg.mData2 >= 64)
+      if (paramIdx == kMidiActionPreviousPreset)
       {
-        mPendingMidiPresetStep.fetch_add(-1, std::memory_order_release);
+        if (msg.mData2 >= 64)
+          mPendingMidiPresetStep.fetch_add(-1, std::memory_order_release);
       }
-      else if (paramIdx == kMidiActionNextPreset && msg.mData2 >= 64)
+      else if (paramIdx == kMidiActionNextPreset)
       {
-        mPendingMidiPresetStep.fetch_add(1, std::memory_order_release);
+        if (msg.mData2 >= 64)
+          mPendingMidiPresetStep.fetch_add(1, std::memory_order_release);
       }
-      else if (IsMidiAssignableParam(paramIdx))
+      else if (paramIdx >= 0 && paramIdx < kNumParams && IsMidiAssignableParam(paramIdx))
       {
         _ApplyParamNormalizedFromMidi(paramIdx, msg.mData2 / 127.0);
       }
