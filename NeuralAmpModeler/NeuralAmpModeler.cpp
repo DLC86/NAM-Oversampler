@@ -257,7 +257,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kLevelR)->InitDouble("Level R", 0.0, -20.0, 20.0, 0.1, "dB");
   GetParam(kPanLink)->InitBool("Pan Link", false);
   GetParam(kLevelLink)->InitBool("Level Link", false);
-  GetParam(kTimeAlign)->InitDouble("Time Align", 0.0, -100.0, 100.0, 1.0, "smp");
+  GetParam(kTimeAlign)->InitDouble("Time Align", 0.0, -100.0, 100.0, 1.0, "");
   GetParam(kTimeAlign)->SetDisplayFunc([](double val, WDL_String& str) {
     int v = static_cast<int>(std::round(val));
     if (v == 0)
