@@ -1854,14 +1854,15 @@ public:
     addKnobLabel(col4, "Level R",  "LblLevelR");
     addKnobLabel(col5, "High Cut", "LblHighCut");
 
-    // ── Link Buttons ─────────────────────────────────────────────────────────
+    // ── Link Buttons (positioned 10px above knob center Y) ──────────────────
+    const float linkYCenter = col1.MH() - 10.0f;
     const float midX_Pan = (col1.R + col2.L) * 0.5f;
-    const auto panLinkArea = IRECT(midX_Pan - 7.0f, col1.MH() - 7.0f, midX_Pan + 7.0f, col1.MH() + 7.0f);
+    const auto panLinkArea = IRECT(midX_Pan - 7.0f, linkYCenter - 7.0f, midX_Pan + 7.0f, linkYCenter + 7.0f);
     mPanLinkCtrl = AddNamedChildControl(new NAMIconSwitchControl(panLinkArea, mLinkSVG, kPanLink), "PanLink", kCtrlTagPanLink);
     mPanLinkCtrl->SetTooltip("Link Pan controls in opposite directions");
 
     const float midX_Level = (col3.R + col4.L) * 0.5f;
-    const auto levelLinkArea = IRECT(midX_Level - 7.0f, col3.MH() - 7.0f, midX_Level + 7.0f, col3.MH() + 7.0f);
+    const auto levelLinkArea = IRECT(midX_Level - 7.0f, linkYCenter - 7.0f, midX_Level + 7.0f, linkYCenter + 7.0f);
     mLevelLinkCtrl = AddNamedChildControl(new NAMIconSwitchControl(levelLinkArea, mLinkSVG, kLevelLink), "LevelLink", kCtrlTagLevelLink);
     mLevelLinkCtrl->SetTooltip("Link Level controls in opposite directions (maintains dB offset)");
 
