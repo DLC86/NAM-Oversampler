@@ -90,7 +90,7 @@ public:
     const bool active = GetValue() > 0.5;
     IColor color;
     if (IsDisabled())
-      color = IColor(220, 85, 85, 85);
+      color = active ? PLUG()->GetThemeColor().WithOpacity(0.35f) : IColor(220, 85, 85, 85);
     else
       color = active ? PLUG()->GetThemeColor() : IColor(255, 180, 180, 180);
 
