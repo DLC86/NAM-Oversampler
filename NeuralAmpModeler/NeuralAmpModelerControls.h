@@ -271,7 +271,7 @@ protected:
 
     const int assignedCC = plug->GetMidiCCForParam(paramIdx);
 
-    contextMenu.AddItem(new IPopupMenu::Item("MIDI CC Learn", kMidiCCLearnTag));
+    contextMenu.AddItem(new IPopupMenu::Item("MIDI CC Learn", IPopupMenu::Item::kNoFlags, kMidiCCLearnTag));
     contextMenu.AddItem(new IPopupMenu::Item("MIDI CC None", assignedCC < 0 ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags, kMidiCCNoneTag));
     contextMenu.AddSeparator();
 
@@ -336,7 +336,7 @@ protected:
     mMidiCCMenu.Clear();
 
     const int assignedCC = plug->GetMidiCCForParam(paramIdx);
-    mMidiCCMenu.AddItem(new IPopupMenu::Item("Learn", kMidiCCLearnTag));
+    mMidiCCMenu.AddItem(new IPopupMenu::Item("Learn", IPopupMenu::Item::kNoFlags, kMidiCCLearnTag));
     mMidiCCMenu.AddItem(new IPopupMenu::Item("None", assignedCC < 0 ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags, kMidiCCNoneTag));
     mMidiCCMenu.AddSeparator();
 
