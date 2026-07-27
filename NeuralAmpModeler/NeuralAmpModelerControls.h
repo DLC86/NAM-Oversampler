@@ -261,13 +261,15 @@ protected:
     if (owner == nullptr || plug == nullptr || !plug->IsMidiAssignableParam(paramIdx))
     {
       mMidiCCContextMenuParamIdx = -1;
+      mMidiCCContextMenuStartIdx = -1;
       return;
     }
 
-    mMidiCCContextMenuParamIdx = paramIdx;
-
     if (contextMenu.NItems() > 0)
       contextMenu.AddSeparator();
+
+    mMidiCCContextMenuParamIdx = paramIdx;
+    mMidiCCContextMenuStartIdx = contextMenu.NItems();
 
     const int assignedCC = plug->GetMidiCCForParam(paramIdx);
 
@@ -293,33 +295,50 @@ protected:
     }
   }
 
-  bool HandleMidiCCContextSelection(int itemSelected, IControl* owner)
+  bool HandleMidiCCContextSelection(int itemSelected, IControl* owner, IPopupMenu* pSelectedMenu = nullptr)
   {
-    if (mMidiCCContextMenuParamIdx < 0)
+    if (mMidiCCContextMenuParamIdx < 0 || owner == nullptr)
       return false;
 
-    auto* plug = owner != nullptr ? static_cast<NeuralAmpModeler*>(owner->GetDelegate()) : nullptr;
+    auto* plug = static_cast<NeuralAmpModeler*>(owner->GetDelegate());
     if (plug == nullptr)
       return false;
 
-    const int tag = itemSelected;
+    int tag = -1;
+    if (pSelectedMenu && pSelectedMenu->GetChosenItem())
+    {
+      tag = pSelectedMenu->GetChosenItem()->GetTag();
+    }
 
+    if (tag < 0 && itemSelected >= 0 && mMidiCCContextMenuStartIdx >= 0 && itemSelected >= mMidiCCContextMenuStartIdx)
+    {
+      const int localIndex = itemSelected - mMidiCCContextMenuStartIdx;
+      if (localIndex == 0)
+        tag = kMidiCCLearnTag;
+      else if (localIndex == 1)
+        tag = kMidiCCNoneTag;
+    }
+
+    const int paramIdx = mMidiCCContextMenuParamIdx;
     if (tag == kMidiCCLearnTag)
     {
-      plug->StartMidiLearnForParam(mMidiCCContextMenuParamIdx);
       mMidiCCContextMenuParamIdx = -1;
+      mMidiCCContextMenuStartIdx = -1;
+      plug->StartMidiLearnForParam(paramIdx);
       return true;
     }
     if (tag == kMidiCCNoneTag)
     {
-      plug->ClearMidiCCForParam(mMidiCCContextMenuParamIdx);
       mMidiCCContextMenuParamIdx = -1;
+      mMidiCCContextMenuStartIdx = -1;
+      plug->ClearMidiCCForParam(paramIdx);
       return true;
     }
     if (tag >= kMidiCCBaseTag && tag <= kMidiCCBaseTag + 127)
     {
-      plug->AssignMidiCCToParam(mMidiCCContextMenuParamIdx, tag - kMidiCCBaseTag);
       mMidiCCContextMenuParamIdx = -1;
+      mMidiCCContextMenuStartIdx = -1;
+      plug->AssignMidiCCToParam(paramIdx, tag - kMidiCCBaseTag);
       return true;
     }
 
@@ -361,30 +380,41 @@ protected:
 
   bool HandleMidiCCMenuSelection(IPopupMenu* pSelectedMenu, IControl* owner)
   {
-    if (mMidiCCMenuParamIdx < 0 || pSelectedMenu == nullptr || pSelectedMenu->GetChosenItem() == nullptr)
+    if (owner == nullptr)
       return false;
 
-    auto* plug = owner != nullptr ? static_cast<NeuralAmpModeler*>(owner->GetDelegate()) : nullptr;
+    auto* plug = static_cast<NeuralAmpModeler*>(owner->GetDelegate());
     if (plug == nullptr)
       return false;
 
+    if (mMidiCCContextMenuParamIdx >= 0)
+    {
+      const int chosenIdx = pSelectedMenu ? pSelectedMenu->GetChosenItemIdx() : -1;
+      if (HandleMidiCCContextSelection(chosenIdx, owner, pSelectedMenu))
+        return true;
+    }
+
+    if (mMidiCCMenuParamIdx < 0 || pSelectedMenu == nullptr || pSelectedMenu->GetChosenItem() == nullptr)
+      return false;
+
     const int tag = pSelectedMenu->GetChosenItem()->GetTag();
+    const int paramIdx = mMidiCCMenuParamIdx;
     if (tag == kMidiCCLearnTag)
     {
-      plug->StartMidiLearnForParam(mMidiCCMenuParamIdx);
       mMidiCCMenuParamIdx = -1;
+      plug->StartMidiLearnForParam(paramIdx);
       return true;
     }
     if (tag == kMidiCCNoneTag)
     {
-      plug->ClearMidiCCForParam(mMidiCCMenuParamIdx);
       mMidiCCMenuParamIdx = -1;
+      plug->ClearMidiCCForParam(paramIdx);
       return true;
     }
     if (tag >= kMidiCCBaseTag && tag <= kMidiCCBaseTag + 127)
     {
-      plug->AssignMidiCCToParam(mMidiCCMenuParamIdx, tag - kMidiCCBaseTag);
       mMidiCCMenuParamIdx = -1;
+      plug->AssignMidiCCToParam(paramIdx, tag - kMidiCCBaseTag);
       return true;
     }
 
@@ -427,6 +457,7 @@ private:
   IPopupMenu mMidiCCMenu {"MIDI CC"};
   int mMidiCCMenuParamIdx = -1;
   int mMidiCCContextMenuParamIdx = -1;
+  int mMidiCCContextMenuStartIdx = -1;
 };
 
 class NAMKnobControl : public IVKnobControl, public IBitmapBase, public NAMMidiCCMenuMixin
