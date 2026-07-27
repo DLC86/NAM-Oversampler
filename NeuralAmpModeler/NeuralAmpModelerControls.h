@@ -251,56 +251,82 @@ private:
 class NAMMidiCCMenuMixin
 {
 protected:
+  static constexpr int kMidiCCLearnTag = 9900;
+  static constexpr int kMidiCCNoneTag = 9901;
+  static constexpr int kMidiCCBaseTag = 10000;
+
   void AddMidiCCContextMenuItems(IControl* owner, IPopupMenu& contextMenu, int paramIdx)
   {
     auto* plug = owner != nullptr ? static_cast<NeuralAmpModeler*>(owner->GetDelegate()) : nullptr;
     if (owner == nullptr || plug == nullptr || !plug->IsMidiAssignableParam(paramIdx))
     {
       mMidiCCContextMenuParamIdx = -1;
-      mMidiCCContextMenuStartIdx = -1;
       return;
     }
+
+    mMidiCCContextMenuParamIdx = paramIdx;
 
     if (contextMenu.NItems() > 0)
       contextMenu.AddSeparator();
 
-    mMidiCCContextMenuParamIdx = paramIdx;
-    mMidiCCContextMenuStartIdx = contextMenu.NItems();
-    contextMenu.AddItem("MIDI CC Learn");
     const int assignedCC = plug->GetMidiCCForParam(paramIdx);
-    contextMenu.AddItem("MIDI CC None", -1,
-                        assignedCC < 0 ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
-    for (int cc = 0; cc < 128; ++cc)
+
+    IPopupMenu* pMidiSubMenu = new IPopupMenu("MIDI CC");
+    pMidiSubMenu->AddItem(new IPopupMenu::Item("Learn", kMidiCCLearnTag));
+    pMidiSubMenu->AddItem(new IPopupMenu::Item("None", assignedCC < 0 ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags, kMidiCCNoneTag));
+    pMidiSubMenu->AddSeparator();
+
+    for (int group = 0; group < 4; ++group)
     {
-      WDL_String item;
-      item.SetFormatted(32, "MIDI CC %03d", cc);
-      contextMenu.AddItem(item.Get(), -1, cc == assignedCC ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
+      const int startCC = group * 32;
+      const int endCC = startCC + 31;
+      WDL_String rangeTitle;
+      rangeTitle.SetFormatted(32, "CC %03d - %03d", startCC, endCC);
+
+      IPopupMenu* pGroupSubMenu = new IPopupMenu(rangeTitle.Get());
+      for (int cc = startCC; cc <= endCC; ++cc)
+      {
+        WDL_String item;
+        item.SetFormatted(32, "CC %03d", cc);
+        pGroupSubMenu->AddItem(new IPopupMenu::Item(item.Get(), cc == assignedCC ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags, kMidiCCBaseTag + cc));
+      }
+      pMidiSubMenu->AddItem(rangeTitle.Get(), pGroupSubMenu);
     }
+
+    contextMenu.AddItem("MIDI CC", pMidiSubMenu);
   }
 
   bool HandleMidiCCContextSelection(int itemSelected, IControl* owner)
   {
-    if (mMidiCCContextMenuParamIdx < 0 || mMidiCCContextMenuStartIdx < 0 || itemSelected < mMidiCCContextMenuStartIdx)
-      return false;
-
-    const int localIndex = itemSelected - mMidiCCContextMenuStartIdx;
-    if (localIndex < 0 || localIndex > 129)
+    if (mMidiCCContextMenuParamIdx < 0)
       return false;
 
     auto* plug = owner != nullptr ? static_cast<NeuralAmpModeler*>(owner->GetDelegate()) : nullptr;
     if (plug == nullptr)
       return false;
 
-    if (localIndex == 0)
-      plug->StartMidiLearnForParam(mMidiCCContextMenuParamIdx);
-    else if (localIndex == 1)
-      plug->ClearMidiCCForParam(mMidiCCContextMenuParamIdx);
-    else
-      plug->AssignMidiCCToParam(mMidiCCContextMenuParamIdx, localIndex - 2);
+    const int tag = itemSelected;
 
-    mMidiCCContextMenuParamIdx = -1;
-    mMidiCCContextMenuStartIdx = -1;
-    return true;
+    if (tag == kMidiCCLearnTag)
+    {
+      plug->StartMidiLearnForParam(mMidiCCContextMenuParamIdx);
+      mMidiCCContextMenuParamIdx = -1;
+      return true;
+    }
+    if (tag == kMidiCCNoneTag)
+    {
+      plug->ClearMidiCCForParam(mMidiCCContextMenuParamIdx);
+      mMidiCCContextMenuParamIdx = -1;
+      return true;
+    }
+    if (tag >= kMidiCCBaseTag && tag <= kMidiCCBaseTag + 127)
+    {
+      plug->AssignMidiCCToParam(mMidiCCContextMenuParamIdx, tag - kMidiCCBaseTag);
+      mMidiCCContextMenuParamIdx = -1;
+      return true;
+    }
+
+    return false;
   }
 
   void OpenMidiCCMenu(IControl* owner, int paramIdx)
@@ -313,8 +339,8 @@ protected:
     mMidiCCMenu.Clear();
 
     const int assignedCC = plug->GetMidiCCForParam(paramIdx);
-    mMidiCCMenu.AddItem("Learn");
-    mMidiCCMenu.AddItem("None", -1, assignedCC < 0 ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
+    mMidiCCMenu.AddItem(new IPopupMenu::Item("Learn", kMidiCCLearnTag));
+    mMidiCCMenu.AddItem(new IPopupMenu::Item("None", assignedCC < 0 ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags, kMidiCCNoneTag));
     mMidiCCMenu.AddSeparator();
 
     for (int group = 0; group < 4; ++group)
@@ -329,7 +355,7 @@ protected:
       {
         WDL_String item;
         item.SetFormatted(32, "CC %03d", cc);
-        pSubMenu->AddItem(item.Get(), -1, cc == assignedCC ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
+        pSubMenu->AddItem(new IPopupMenu::Item(item.Get(), cc == assignedCC ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags, kMidiCCBaseTag + cc));
       }
       mMidiCCMenu.AddItem(subMenuName.Get(), pSubMenu);
     }
@@ -338,23 +364,34 @@ protected:
 
   bool HandleMidiCCMenuSelection(IPopupMenu* pSelectedMenu, IControl* owner)
   {
-    if (pSelectedMenu != &mMidiCCMenu || mMidiCCMenuParamIdx < 0 || !pSelectedMenu->GetChosenItem())
+    if (mMidiCCMenuParamIdx < 0 || pSelectedMenu == nullptr || pSelectedMenu->GetChosenItem() == nullptr)
       return false;
 
     auto* plug = owner != nullptr ? static_cast<NeuralAmpModeler*>(owner->GetDelegate()) : nullptr;
     if (plug == nullptr)
       return false;
 
-    const int chosen = pSelectedMenu->GetChosenItemIdx();
-    if (chosen == 0)
+    const int tag = pSelectedMenu->GetChosenItem()->GetTag();
+    if (tag == kMidiCCLearnTag)
+    {
       plug->StartMidiLearnForParam(mMidiCCMenuParamIdx);
-    else if (chosen == 1)
+      mMidiCCMenuParamIdx = -1;
+      return true;
+    }
+    if (tag == kMidiCCNoneTag)
+    {
       plug->ClearMidiCCForParam(mMidiCCMenuParamIdx);
-    else if (chosen >= 2 && chosen <= 129)
-      plug->AssignMidiCCToParam(mMidiCCMenuParamIdx, chosen - 2);
+      mMidiCCMenuParamIdx = -1;
+      return true;
+    }
+    if (tag >= kMidiCCBaseTag && tag <= kMidiCCBaseTag + 127)
+    {
+      plug->AssignMidiCCToParam(mMidiCCMenuParamIdx, tag - kMidiCCBaseTag);
+      mMidiCCMenuParamIdx = -1;
+      return true;
+    }
 
-    mMidiCCMenuParamIdx = -1;
-    return true;
+    return false;
   }
 
   bool IsMidiLearnBadgeHit(IControl* owner, const IRECT& r, float x, float y, int paramIdx) const
@@ -393,7 +430,6 @@ private:
   IPopupMenu mMidiCCMenu {"MIDI CC"};
   int mMidiCCMenuParamIdx = -1;
   int mMidiCCContextMenuParamIdx = -1;
-  int mMidiCCContextMenuStartIdx = -1;
 };
 
 class NAMKnobControl : public IVKnobControl, public IBitmapBase, public NAMMidiCCMenuMixin
