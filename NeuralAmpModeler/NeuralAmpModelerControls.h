@@ -3020,15 +3020,18 @@ public:
                                          PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
                          mControlNames.shop);
 
-    const auto donateArea = IRECT(content.R - 135.0f, content.B - 32.0f, content.R - 5.0f, content.B - 6.0f);
-    const IVStyle donateStyle = mStyle.WithColor(kBG, IColor(255, 0, 112, 186))
-                                      .WithColor(kFG, IColor(255, 255, 196, 57))
-                                      .WithLabelText(IText(12, COLOR_WHITE, nullptr, EAlign::Center));
+    const auto githubRow = infoArea.SubRectVertical(5, 2);
+    const float centerY = githubRow.MH();
+    const float btnH = 26.0f;
+    const float btnW = 75.0f;
+    const auto donateArea = IRECT(content.R - btnW - 10.0f, centerY - btnH * 0.5f, content.R - 10.0f, centerY + btnH * 0.5f);
+
+    const IBitmap paypalBitmap = GetUI()->LoadBitmap(PAYPAL_DONATE_FN);
     auto donateAction = [](IControl* pCaller) {
       pCaller->GetUI()->OpenURL("https://www.paypal.com/donate/?hosted_button_id=TERZ92DXECN28");
     };
     auto* donateBtn = AddNamedChildControl(
-      new IVButtonControl(donateArea, donateAction, "PayPal Donate", donateStyle),
+      new NAMBitmapButtonControl(donateArea, donateAction, paypalBitmap),
       mControlNames.donate);
     donateBtn->SetTooltip("Support development via PayPal");
 

@@ -77,6 +77,7 @@
 #define LINK_ICON_FN "Link.svg"
 #define SLIMMABLE_ICON_FN "SlimmableIcon.svg"
 #define TTS_LOGO_FN "TTSLogo.png"
+#define PAYPAL_DONATE_FN "PaypalDonate.png"
 
 #define BACKGROUND_FN "Background.jpg"
 #define BACKGROUND2X_FN "Background@2x.jpg"
