@@ -590,11 +590,15 @@ public:
 
     if (pSelectedMenu && pSelectedMenu->GetChosenItem())
     {
-      const int index = pSelectedMenu->GetChosenItemIdx();
-      if (mMenuMode == MenuMode::SaveTarget)
-        PLUG()->SaveCurrentInternalPresetToSlot(index);
-      else
-        PLUG()->SelectInternalPreset(index);
+      const int tag = pSelectedMenu->GetChosenItem()->GetTag();
+      const int index = tag >= 0 ? tag : pSelectedMenu->GetChosenItemIdx();
+      if (index >= 0 && index < 128)
+      {
+        if (mMenuMode == MenuMode::SaveTarget)
+          PLUG()->SaveCurrentInternalPresetToSlot(index);
+        else
+          PLUG()->SelectInternalPreset(index);
+      }
     }
     SetDirty(false);
   }
@@ -748,17 +752,25 @@ private:
   {
     mMenuMode = saveTarget ? MenuMode::SaveTarget : MenuMode::Recall;
     mMenu.Clear();
-    mMenu.SetNItemsPerColumn(64);
+
     const int current = PLUG()->GetCurrentInternalPresetIndex();
-    for (int i = 0; i < 128; ++i)
+    for (int group = 0; group < 4; ++group)
     {
-      WDL_String item;
-      item.SetFormatted(180, "%03d  %s%s", i + 1, PLUG()->GetInternalPresetName(i),
-                        !saveTarget && i == current && PLUG()->IsCurrentInternalPresetDirty() ? " *" : "");
-      if (!saveTarget && i == current)
-        mMenu.AddItem(item.Get(), -1, IPopupMenu::Item::kChecked);
-      else
-        mMenu.AddItem(item.Get());
+      const int startIdx = group * 32;
+      const int endIdx = startIdx + 31;
+      WDL_String subMenuName;
+      subMenuName.SetFormatted(32, "%03d - %03d", startIdx + 1, endIdx + 1);
+
+      IPopupMenu* pSubMenu = new IPopupMenu(subMenuName.Get());
+      for (int i = startIdx; i <= endIdx; ++i)
+      {
+        WDL_String item;
+        item.SetFormatted(180, "%03d  %s%s", i + 1, PLUG()->GetInternalPresetName(i),
+                          !saveTarget && i == current && PLUG()->IsCurrentInternalPresetDirty() ? " *" : "");
+        const int flags = (!saveTarget && i == current) ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags;
+        pSubMenu->AddItem(new IPopupMenu::Item(item.Get(), flags, i));
+      }
+      mMenu.AddItem(pSubMenu);
     }
     GetUI()->CreatePopupMenu(*this, mMenu, mRECT);
   }
@@ -1616,14 +1628,15 @@ public:
           break;
         }
 
-        WDL_String fileName(pathStr.c_str()), directory(pathStr.c_str());
+        WDL_String fullPath(pathStr.c_str()), fileName(pathStr.c_str()), directory(pathStr.c_str());
+        fileName.get_filepart();
         directory.remove_filepart(true);
 
         ClearPathList();
         AddPath(directory.Get(), "");
         SetupMenu();
-        SetSelectedFile(fileName.Get());
-        mFileNameControl->SetLabelAndTooltipEllipsizing(fileName);
+        SetSelectedFile(fullPath.Get());
+        mFileNameControl->SetLabelAndTooltipEllipsizing(fileName.GetLength() ? fileName.Get() : fullPath.Get());
         SetBrowserState(NAMBrowserState::Loaded);
       }
       break;
