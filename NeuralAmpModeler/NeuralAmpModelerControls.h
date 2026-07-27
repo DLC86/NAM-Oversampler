@@ -3020,6 +3020,18 @@ public:
                                          PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
                          mControlNames.shop);
 
+    const auto donateArea = IRECT(content.R - 135.0f, content.B - 32.0f, content.R - 5.0f, content.B - 6.0f);
+    const IVStyle donateStyle = mStyle.WithColor(kBG, IColor(255, 0, 112, 186))
+                                      .WithColor(kFG, IColor(255, 255, 196, 57))
+                                      .WithLabelText(IText(12, COLOR_WHITE, nullptr, EAlign::Center));
+    auto donateAction = [](IControl* pCaller) {
+      pCaller->GetUI()->OpenURL("https://www.paypal.com/donate/?hosted_button_id=TERZ92DXECN28");
+    };
+    auto* donateBtn = AddNamedChildControl(
+      new IVButtonControl(donateArea, donateAction, "PayPal Donate", donateStyle),
+      mControlNames.donate);
+    donateBtn->SetTooltip("Support development via PayPal");
+
     auto closeAction = [&](IControl* pCaller) {
       static_cast<NAMOversamplingPageControl*>(pCaller->GetParent())->HideAnimated(true);
     };
@@ -3040,6 +3052,7 @@ private:
     const std::string author = "Author";
     const std::string bitmap = "Bitmap";
     const std::string close = "Close";
+    const std::string donate = "Donate";
     const std::string realtimeFilterLabel = "RealtimeFilterLabel";
     const std::string filterPhase = "FilterPhase";
     const std::string github = "GitHub";
