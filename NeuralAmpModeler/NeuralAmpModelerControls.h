@@ -118,6 +118,25 @@ public:
   void Draw(IGraphics& g) override
   {
     if (mMouseIsOver)
+      g.FillRoundRect(IColor(180, 17, 17, 17), mRECT.GetPadded(-3.0f), 2.f);
+    g.DrawFittedBitmap(mBitmap, mRECT);
+  }
+};
+
+class NAMPayPalDonateButtonControl : public IButtonControlBase, public IBitmapBase
+{
+public:
+  NAMPayPalDonateButtonControl(const IRECT& bounds, IActionFunction af, IBitmap bitmap)
+  : IButtonControlBase(bounds, af)
+  , IBitmapBase(bitmap)
+  {
+  }
+
+  void OnRescale() override { mBitmap = GetUI()->GetScaledBitmap(mBitmap); }
+
+  void Draw(IGraphics& g) override
+  {
+    if (mMouseIsOver)
     {
       g.DrawRoundRect(IColor(140, 255, 255, 255), mRECT.GetPadded(1.0f), 10.0f, nullptr, 1.5f);
     }
@@ -3052,7 +3071,7 @@ public:
       pCaller->GetUI()->OpenURL("https://www.paypal.com/donate/?hosted_button_id=TERZ92DXECN28");
     };
     auto* donateBtn = AddNamedChildControl(
-      new NAMBitmapButtonControl(donateArea, donateAction, paypalBitmap),
+      new NAMPayPalDonateButtonControl(donateArea, donateAction, paypalBitmap),
       mControlNames.donate);
     donateBtn->SetTooltip("Support development via PayPal");
 
