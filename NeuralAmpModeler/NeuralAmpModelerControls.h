@@ -1443,61 +1443,17 @@ public:
     IDirBrowseControlBase::SetupMenu();
     const int nItems = mMainMenu.NItems();
     if (nItems <= 33)
+    {
+      mMainMenu.SetNItemsPerColumn(0);
       return;
+    }
 
     int numCols = 2;
     if (nItems > 66)
       numCols = 3;
 
-    const int rowsPerCol = (nItems + numCols - 1) / numCols;
-
-    IPopupMenu copyMenu;
-    for (int col = 0; col < numCols; ++col)
-    {
-      const int startIdx = col * rowsPerCol;
-      const int endIdx = std::min(nItems - 1, startIdx + rowsPerCol - 1);
-      if (startIdx >= nItems)
-        break;
-
-      WDL_String rangeTitle;
-      rangeTitle.SetFormatted(64, "Files %d - %d", startIdx + 1, endIdx + 1);
-
-      IPopupMenu* pSubMenu = new IPopupMenu(rangeTitle.Get());
-      for (int i = startIdx; i <= endIdx; ++i)
-      {
-        IPopupMenu::Item* pItem = mMainMenu.GetItem(i);
-        if (pItem)
-        {
-          if (pItem->GetSubmenu())
-          {
-            pSubMenu->AddItem(pItem->GetText(), pItem->GetSubmenu());
-          }
-          else
-          {
-            const int flags = (pItem->GetEnabled() ? IPopupMenu::Item::kNoFlags : IPopupMenu::Item::kDisabled) |
-                              (pItem->GetChecked() ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
-            pSubMenu->AddItem(new IPopupMenu::Item(pItem->GetText(), flags, pItem->GetTag()));
-          }
-        }
-      }
-      copyMenu.AddItem(rangeTitle.Get(), pSubMenu);
-    }
-
-    mMainMenu.Clear();
-    for (int i = 0; i < copyMenu.NItems(); ++i)
-    {
-      IPopupMenu::Item* item = copyMenu.GetItem(i);
-      if (item->GetSubmenu())
-      {
-        mMainMenu.AddItem(item->GetText(), item->GetSubmenu());
-      }
-      else
-      {
-        const int flags = (item->GetEnabled() ? IPopupMenu::Item::kNoFlags : IPopupMenu::Item::kDisabled) |
-                          (item->GetChecked() ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
-        mMainMenu.AddItem(new IPopupMenu::Item(item->GetText(), flags, item->GetTag()));
-      }
-    }
+    const int itemsPerColumn = (nItems + numCols - 1) / numCols;
+    mMainMenu.SetNItemsPerColumn(itemsPerColumn);
   }
 
   void OnResize() override
