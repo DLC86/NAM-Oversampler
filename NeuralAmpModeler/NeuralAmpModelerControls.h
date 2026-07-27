@@ -118,8 +118,20 @@ public:
   void Draw(IGraphics& g) override
   {
     if (mMouseIsOver)
-      g.FillRoundRect(IColor(180, 17, 17, 17), mRECT.GetPadded(-3.0f), 2.f);
+    {
+      g.DrawRoundRect(IColor(140, 255, 255, 255), mRECT.GetPadded(1.0f), 10.0f, nullptr, 1.5f);
+    }
+
     g.DrawFittedBitmap(mBitmap, mRECT);
+
+    if (GetValue() > 0.5)
+    {
+      g.FillRoundRect(IColor(80, 255, 255, 255), mRECT, 10.0f);
+    }
+    else if (mMouseIsOver)
+    {
+      g.FillRoundRect(IColor(45, 255, 255, 255), mRECT, 10.0f);
+    }
   }
 };
 
@@ -3007,19 +3019,26 @@ public:
     PLUG()->GetPluginVersionStr(verStr);
     oversamplingVersionStr.SetFormatted(100, "NAM On Steroids %s", verStr.Get());
 
-    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 0).GetFromLeft(150.0f), oversamplingVersionStr.Get(), infoStyle),
+    IRECT verB, authB, gitB, ytB, shopB;
+    GetUI()->MeasureText(infoText, oversamplingVersionStr.Get(), verB);
+    GetUI()->MeasureText(infoText, "The Tone Scientist", authB);
+    GetUI()->MeasureText(infoText, "https://github.com/DLC86/NAM-On-Steroids", gitB);
+    GetUI()->MeasureText(infoText, "https://youtube.com/@ToneScientist", ytB);
+    GetUI()->MeasureText(infoText, "https://shop.thetonescientist.com", shopB);
+
+    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 0).GetFromLeft(verB.W()), oversamplingVersionStr.Get(), infoStyle),
                          mControlNames.version);
-    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 1).GetFromLeft(120.0f), "The Tone Scientist", infoStyle),
+    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 1).GetFromLeft(authB.W()), "The Tone Scientist", infoStyle),
                          mControlNames.author);
-    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 2).GetFromLeft(240.0f), "https://github.com/DLC86/NAM-On-Steroids",
+    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 2).GetFromLeft(gitB.W()), "https://github.com/DLC86/NAM-On-Steroids",
                                          "https://github.com/DLC86/NAM-On-Steroids", infoText, COLOR_TRANSPARENT,
                                          PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
                          mControlNames.github);
-    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 3).GetFromLeft(200.0f), "https://youtube.com/@ToneScientist",
+    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 3).GetFromLeft(ytB.W()), "https://youtube.com/@ToneScientist",
                                          "https://youtube.com/@ToneScientist", infoText, COLOR_TRANSPARENT,
                                          PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
                          mControlNames.youtube);
-    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 4).GetFromLeft(190.0f), "https://shop.thetonescientist.com",
+    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 4).GetFromLeft(shopB.W()), "https://shop.thetonescientist.com",
                                          "https://shop.thetonescientist.com", infoText, COLOR_TRANSPARENT,
                                          PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
                          mControlNames.shop);
