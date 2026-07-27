@@ -3041,7 +3041,7 @@ public:
     IRECT verB, authB, gitB, ytB, shopB;
     GetUI()->MeasureText(infoText, oversamplingVersionStr.Get(), verB);
     GetUI()->MeasureText(infoText, "The Tone Scientist", authB);
-    GetUI()->MeasureText(infoText, "https://github.com/DLC86/NAM-On-Steroids", gitB);
+    GetUI()->MeasureText(infoText, "https://github.com/DLC86/NAM-Oversampler", gitB);
     GetUI()->MeasureText(infoText, "https://youtube.com/@ToneScientist", ytB);
     GetUI()->MeasureText(infoText, "https://shop.thetonescientist.com", shopB);
 
@@ -3049,8 +3049,8 @@ public:
                          mControlNames.version);
     AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 1).GetFromLeft(authB.W()), "The Tone Scientist", infoStyle),
                          mControlNames.author);
-    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 2).GetFromLeft(gitB.W()), "https://github.com/DLC86/NAM-On-Steroids",
-                                         "https://github.com/DLC86/NAM-On-Steroids", infoText, COLOR_TRANSPARENT,
+    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 2).GetFromLeft(gitB.W()), "https://github.com/DLC86/NAM-Oversampler",
+                                         "https://github.com/DLC86/NAM-Oversampler", infoText, COLOR_TRANSPARENT,
                                          PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
                          mControlNames.github);
     AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 3).GetFromLeft(ytB.W()), "https://youtube.com/@ToneScientist",
