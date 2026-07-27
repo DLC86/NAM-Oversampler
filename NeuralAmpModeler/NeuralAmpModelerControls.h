@@ -311,7 +311,7 @@ protected:
 
     mMidiCCMenuParamIdx = paramIdx;
     mMidiCCMenu.Clear();
-    mMidiCCMenu.SetNItemsPerColumn(34);
+    mMidiCCMenu.SetNItemsPerColumn(33);
     mMidiCCMenu.AddItem("Learn");
     const int assignedCC = plug->GetMidiCCForParam(paramIdx);
     mMidiCCMenu.AddItem("None", -1, assignedCC < 0 ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
@@ -752,7 +752,7 @@ private:
   {
     mMenuMode = saveTarget ? MenuMode::SaveTarget : MenuMode::Recall;
     mMenu.Clear();
-    mMenu.SetNItemsPerColumn(64);
+    mMenu.SetNItemsPerColumn(32);
     const int current = PLUG()->GetCurrentInternalPresetIndex();
     for (int i = 0; i < 128; ++i)
     {
@@ -1354,6 +1354,37 @@ public:
     }
   }
 
+  void SetupMenu()
+  {
+    IDirBrowseControlBase::SetupMenu();
+    const int nItems = mMainMenu.NItems();
+    if (nItems <= 0)
+    {
+      mMainMenu.SetNItemsPerColumn(0);
+      return;
+    }
+
+    int itemsPerColumn = 0;
+    if (nItems <= 24)
+    {
+      itemsPerColumn = 0; // 1 single column
+    }
+    else if (nItems <= 48)
+    {
+      itemsPerColumn = (nItems + 1) / 2; // 2 columns
+    }
+    else if (nItems <= 72)
+    {
+      itemsPerColumn = (nItems + 2) / 3; // 3 columns
+    }
+    else
+    {
+      itemsPerColumn = std::max(20, (nItems + 3) / 4); // 4 columns (max 4 columns)
+    }
+
+    mMainMenu.SetNItemsPerColumn(itemsPerColumn);
+  }
+
   void OnResize() override
   {
     IDirBrowseControlBase::OnResize();
@@ -1542,6 +1573,7 @@ public:
       else
       {
         CheckSelectedItem();
+        SetupMenu();
 
         if (!mMainMenu.HasSubMenus())
         {
