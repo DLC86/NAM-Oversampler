@@ -3022,9 +3022,9 @@ public:
 
     const auto githubRow = infoArea.SubRectVertical(5, 2);
     const float centerY = githubRow.MH();
-    const float btnH = 26.0f;
-    const float btnW = 87.0f;
-    const auto donateArea = IRECT(content.R - btnW - 10.0f, centerY - btnH * 0.5f, content.R - 10.0f, centerY + btnH * 0.5f);
+    const float btnH = 32.0f;
+    const float btnW = 107.0f;
+    const auto donateArea = IRECT(content.R - btnW - 25.0f, centerY - btnH * 0.5f, content.R - 25.0f, centerY + btnH * 0.5f);
 
     const IBitmap paypalBitmap = GetUI()->LoadBitmap(PAYPAL_DONATE_FN);
     auto donateAction = [](IControl* pCaller) {
