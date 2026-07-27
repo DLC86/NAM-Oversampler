@@ -2938,9 +2938,13 @@ public:
     const auto realtimeThreadsArea = realtimeThreadsRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto offlineRadioArea = offlineOSRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto offlineFilterArea = offlineFilterRow.GetFromRight(rowsArea.W() - rowLabelWidth);
-    const auto infoArea = content.GetFromBottom(72.0f).GetHPadded(-8.0f).GetVShifted(2.0f);
+    const float leftMargin = 25.0f;
+    const float rightMargin = 25.0f;
+    const float btnH = 48.0f; // 1.5x
+    const float btnW = 161.0f; // 1.5x
+    const auto infoArea = IRECT(leftMargin, content.B - 70.0f, page.R - rightMargin - btnW - 15.0f, content.B + 2.0f);
     const float buttonSize = 10.0f;
-    const auto infoText = IText(12, EAlign::Center, PluginColors::HELP_TEXT);
+    const auto infoText = IText(12, EAlign::Near, PluginColors::HELP_TEXT);
     const auto infoStyle = mStyle.WithDrawFrame(false).WithValueText(infoText);
     const auto rowLabelText = IText(13, EAlign::Center, PluginColors::HELP_TEXT);
     const auto rowLabelStyle = mStyle.WithDrawFrame(false).WithValueText(rowLabelText);
@@ -3022,9 +3026,7 @@ public:
 
     const auto githubRow = infoArea.SubRectVertical(5, 2);
     const float centerY = githubRow.MH();
-    const float btnH = 32.0f;
-    const float btnW = 107.0f;
-    const auto donateArea = IRECT(content.R - btnW - 25.0f, centerY - btnH * 0.5f, content.R - 25.0f, centerY + btnH * 0.5f);
+    const auto donateArea = IRECT(page.R - rightMargin - btnW, centerY - btnH * 0.5f, page.R - rightMargin, centerY + btnH * 0.5f);
 
     const IBitmap paypalBitmap = GetUI()->LoadBitmap(PAYPAL_DONATE_FN);
     auto donateAction = [](IControl* pCaller) {
