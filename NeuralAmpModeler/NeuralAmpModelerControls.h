@@ -2939,10 +2939,10 @@ public:
     const auto offlineRadioArea = offlineOSRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto offlineFilterArea = offlineFilterRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const float leftMargin = 40.0f;
-    const float rightMargin = 40.0f;
+    const float rightMargin = 36.0f;
     const float btnH = 48.0f; // 1.5x
     const float btnW = 161.0f; // 1.5x
-    const auto infoArea = IRECT(leftMargin, content.B - 68.0f, page.R - rightMargin - btnW - 15.0f, content.B + 4.0f);
+    const auto infoArea = IRECT(leftMargin, content.B - 68.0f, leftMargin + 250.0f, content.B + 4.0f);
     const float buttonSize = 10.0f;
     const auto infoText = IText(12, EAlign::Near, PluginColors::HELP_TEXT);
     const auto infoStyle = mStyle.WithDrawFrame(false).WithValueText(infoText);
@@ -3007,19 +3007,19 @@ public:
     PLUG()->GetPluginVersionStr(verStr);
     oversamplingVersionStr.SetFormatted(100, "NAM On Steroids %s", verStr.Get());
 
-    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 0), oversamplingVersionStr.Get(), infoStyle),
+    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 0).GetFromLeft(150.0f), oversamplingVersionStr.Get(), infoStyle),
                          mControlNames.version);
-    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 1), "The Tone Scientist", infoStyle),
+    AddNamedChildControl(new IVLabelControl(infoArea.SubRectVertical(5, 1).GetFromLeft(120.0f), "The Tone Scientist", infoStyle),
                          mControlNames.author);
-    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 2), "https://github.com/DLC86/NAM-On-Steroids",
+    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 2).GetFromLeft(240.0f), "https://github.com/DLC86/NAM-On-Steroids",
                                          "https://github.com/DLC86/NAM-On-Steroids", infoText, COLOR_TRANSPARENT,
                                          PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
                          mControlNames.github);
-    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 3), "https://youtube.com/@ToneScientist",
+    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 3).GetFromLeft(200.0f), "https://youtube.com/@ToneScientist",
                                          "https://youtube.com/@ToneScientist", infoText, COLOR_TRANSPARENT,
                                          PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
                          mControlNames.youtube);
-    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 4), "https://shop.thetonescientist.com",
+    AddNamedChildControl(new IURLControl(infoArea.SubRectVertical(5, 4).GetFromLeft(190.0f), "https://shop.thetonescientist.com",
                                          "https://shop.thetonescientist.com", infoText, COLOR_TRANSPARENT,
                                          PluginColors::HELP_TEXT_MO, PluginColors::HELP_TEXT_CLICKED),
                          mControlNames.shop);
