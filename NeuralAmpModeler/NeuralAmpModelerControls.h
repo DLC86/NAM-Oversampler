@@ -770,7 +770,7 @@ private:
         const int flags = (!saveTarget && i == current) ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags;
         pSubMenu->AddItem(new IPopupMenu::Item(item.Get(), flags, i));
       }
-      mMenu.AddItem(pSubMenu);
+      mMenu.AddItem(subMenuName.Get(), pSubMenu);
     }
     GetUI()->CreatePopupMenu(*this, mMenu, mRECT);
   }
@@ -1636,7 +1636,7 @@ public:
         AddPath(directory.Get(), "");
         SetupMenu();
         SetSelectedFile(fullPath.Get());
-        mFileNameControl->SetLabelAndTooltipEllipsizing(fileName.GetLength() ? fileName.Get() : fullPath.Get());
+        mFileNameControl->SetLabelAndTooltipEllipsizing(fileName.GetLength() ? fileName : fullPath);
         SetBrowserState(NAMBrowserState::Loaded);
       }
       break;
