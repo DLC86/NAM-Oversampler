@@ -311,15 +311,27 @@ protected:
 
     mMidiCCMenuParamIdx = paramIdx;
     mMidiCCMenu.Clear();
-    mMidiCCMenu.SetNItemsPerColumn(33);
-    mMidiCCMenu.AddItem("Learn");
+
     const int assignedCC = plug->GetMidiCCForParam(paramIdx);
+    mMidiCCMenu.AddItem("Learn");
     mMidiCCMenu.AddItem("None", -1, assignedCC < 0 ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
-    for (int cc = 0; cc < 128; ++cc)
+    mMidiCCMenu.AddSeparator();
+
+    for (int group = 0; group < 4; ++group)
     {
-      WDL_String item;
-      item.SetFormatted(32, "CC %03d", cc);
-      mMidiCCMenu.AddItem(item.Get(), -1, cc == assignedCC ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
+      const int startCC = group * 32;
+      const int endCC = startCC + 31;
+      WDL_String subMenuName;
+      subMenuName.SetFormatted(32, "CC %03d - %03d", startCC, endCC);
+
+      IPopupMenu* pSubMenu = new IPopupMenu(subMenuName.Get());
+      for (int cc = startCC; cc <= endCC; ++cc)
+      {
+        WDL_String item;
+        item.SetFormatted(32, "CC %03d", cc);
+        pSubMenu->AddItem(item.Get(), -1, cc == assignedCC ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
+      }
+      mMidiCCMenu.AddItem(subMenuName.Get(), pSubMenu);
     }
     owner->GetUI()->CreatePopupMenu(*owner, mMidiCCMenu, owner->GetRECT());
   }
@@ -752,17 +764,25 @@ private:
   {
     mMenuMode = saveTarget ? MenuMode::SaveTarget : MenuMode::Recall;
     mMenu.Clear();
-    mMenu.SetNItemsPerColumn(32);
+
     const int current = PLUG()->GetCurrentInternalPresetIndex();
-    for (int i = 0; i < 128; ++i)
+    for (int group = 0; group < 4; ++group)
     {
-      WDL_String item;
-      item.SetFormatted(180, "%03d  %s%s", i + 1, PLUG()->GetInternalPresetName(i),
-                        !saveTarget && i == current && PLUG()->IsCurrentInternalPresetDirty() ? " *" : "");
-      if (!saveTarget && i == current)
-        mMenu.AddItem(item.Get(), -1, IPopupMenu::Item::kChecked);
-      else
-        mMenu.AddItem(item.Get());
+      const int startIdx = group * 32;
+      const int endIdx = startIdx + 31;
+      WDL_String subMenuName;
+      subMenuName.SetFormatted(32, "%03d - %03d", startIdx + 1, endIdx + 1);
+
+      IPopupMenu* pSubMenu = new IPopupMenu(subMenuName.Get());
+      for (int i = startIdx; i <= endIdx; ++i)
+      {
+        WDL_String item;
+        item.SetFormatted(180, "%03d  %s%s", i + 1, PLUG()->GetInternalPresetName(i),
+                          !saveTarget && i == current && PLUG()->IsCurrentInternalPresetDirty() ? " *" : "");
+        const int flags = (!saveTarget && i == current) ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags;
+        pSubMenu->AddItem(new IPopupMenu::Item(item.Get(), flags, i));
+      }
+      mMenu.AddItem(subMenuName.Get(), pSubMenu);
     }
     GetUI()->CreatePopupMenu(*this, mMenu, mRECT);
   }
@@ -1358,31 +1378,62 @@ public:
   {
     IDirBrowseControlBase::SetupMenu();
     const int nItems = mMainMenu.NItems();
-    if (nItems <= 0)
-    {
-      mMainMenu.SetNItemsPerColumn(0);
+    if (nItems <= 33)
       return;
+
+    int numCols = 2;
+    if (nItems > 66)
+      numCols = 3;
+
+    const int rowsPerCol = (nItems + numCols - 1) / numCols;
+
+    IPopupMenu copyMenu;
+    for (int col = 0; col < numCols; ++col)
+    {
+      const int startIdx = col * rowsPerCol;
+      const int endIdx = std::min(nItems - 1, startIdx + rowsPerCol - 1);
+      if (startIdx >= nItems)
+        break;
+
+      WDL_String rangeTitle;
+      rangeTitle.SetFormatted(64, "Files %d - %d", startIdx + 1, endIdx + 1);
+
+      IPopupMenu* pSubMenu = new IPopupMenu(rangeTitle.Get());
+      for (int i = startIdx; i <= endIdx; ++i)
+      {
+        IPopupMenu::Item* pItem = mMainMenu.GetItem(i);
+        if (pItem)
+        {
+          if (pItem->GetSubmenu())
+          {
+            pSubMenu->AddItem(pItem->GetText(), pItem->GetSubmenu());
+          }
+          else
+          {
+            const int flags = (pItem->GetEnabled() ? IPopupMenu::Item::kNoFlags : IPopupMenu::Item::kDisabled) |
+                              (pItem->GetChecked() ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
+            pSubMenu->AddItem(new IPopupMenu::Item(pItem->GetText(), flags, pItem->GetTag()));
+          }
+        }
+      }
+      copyMenu.AddItem(rangeTitle.Get(), pSubMenu);
     }
 
-    int itemsPerColumn = 0;
-    if (nItems <= 24)
+    mMainMenu.Clear();
+    for (int i = 0; i < copyMenu.NItems(); ++i)
     {
-      itemsPerColumn = 0; // 1 single column
+      IPopupMenu::Item* item = copyMenu.GetItem(i);
+      if (item->GetSubmenu())
+      {
+        mMainMenu.AddItem(item->GetText(), item->GetSubmenu());
+      }
+      else
+      {
+        const int flags = (item->GetEnabled() ? IPopupMenu::Item::kNoFlags : IPopupMenu::Item::kDisabled) |
+                          (item->GetChecked() ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags);
+        mMainMenu.AddItem(new IPopupMenu::Item(item->GetText(), flags, item->GetTag()));
+      }
     }
-    else if (nItems <= 48)
-    {
-      itemsPerColumn = (nItems + 1) / 2; // 2 columns
-    }
-    else if (nItems <= 72)
-    {
-      itemsPerColumn = (nItems + 2) / 3; // 3 columns
-    }
-    else
-    {
-      itemsPerColumn = std::max(20, (nItems + 3) / 4); // 4 columns (max 4 columns)
-    }
-
-    mMainMenu.SetNItemsPerColumn(itemsPerColumn);
   }
 
   void OnResize() override
