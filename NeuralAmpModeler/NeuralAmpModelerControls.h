@@ -271,10 +271,9 @@ protected:
 
     const int assignedCC = plug->GetMidiCCForParam(paramIdx);
 
-    IPopupMenu* pMidiSubMenu = new IPopupMenu("MIDI CC");
-    pMidiSubMenu->AddItem(new IPopupMenu::Item("Learn", kMidiCCLearnTag));
-    pMidiSubMenu->AddItem(new IPopupMenu::Item("None", assignedCC < 0 ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags, kMidiCCNoneTag));
-    pMidiSubMenu->AddSeparator();
+    contextMenu.AddItem(new IPopupMenu::Item("MIDI CC Learn", kMidiCCLearnTag));
+    contextMenu.AddItem(new IPopupMenu::Item("MIDI CC None", assignedCC < 0 ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags, kMidiCCNoneTag));
+    contextMenu.AddSeparator();
 
     for (int group = 0; group < 4; ++group)
     {
@@ -290,10 +289,8 @@ protected:
         item.SetFormatted(32, "CC %03d", cc);
         pGroupSubMenu->AddItem(new IPopupMenu::Item(item.Get(), cc == assignedCC ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags, kMidiCCBaseTag + cc));
       }
-      pMidiSubMenu->AddItem(rangeTitle.Get(), pGroupSubMenu);
+      contextMenu.AddItem(rangeTitle.Get(), pGroupSubMenu);
     }
-
-    contextMenu.AddItem("MIDI CC", pMidiSubMenu);
   }
 
   bool HandleMidiCCContextSelection(int itemSelected, IControl* owner)
