@@ -752,25 +752,17 @@ private:
   {
     mMenuMode = saveTarget ? MenuMode::SaveTarget : MenuMode::Recall;
     mMenu.Clear();
-
+    mMenu.SetNItemsPerColumn(64);
     const int current = PLUG()->GetCurrentInternalPresetIndex();
-    for (int group = 0; group < 4; ++group)
+    for (int i = 0; i < 128; ++i)
     {
-      const int startIdx = group * 32;
-      const int endIdx = startIdx + 31;
-      WDL_String subMenuName;
-      subMenuName.SetFormatted(32, "%03d - %03d", startIdx + 1, endIdx + 1);
-
-      IPopupMenu* pSubMenu = new IPopupMenu(subMenuName.Get());
-      for (int i = startIdx; i <= endIdx; ++i)
-      {
-        WDL_String item;
-        item.SetFormatted(180, "%03d  %s%s", i + 1, PLUG()->GetInternalPresetName(i),
-                          !saveTarget && i == current && PLUG()->IsCurrentInternalPresetDirty() ? " *" : "");
-        const int flags = (!saveTarget && i == current) ? IPopupMenu::Item::kChecked : IPopupMenu::Item::kNoFlags;
-        pSubMenu->AddItem(new IPopupMenu::Item(item.Get(), flags, i));
-      }
-      mMenu.AddItem(subMenuName.Get(), pSubMenu);
+      WDL_String item;
+      item.SetFormatted(180, "%03d  %s%s", i + 1, PLUG()->GetInternalPresetName(i),
+                        !saveTarget && i == current && PLUG()->IsCurrentInternalPresetDirty() ? " *" : "");
+      if (!saveTarget && i == current)
+        mMenu.AddItem(item.Get(), -1, IPopupMenu::Item::kChecked);
+      else
+        mMenu.AddItem(item.Get());
     }
     GetUI()->CreatePopupMenu(*this, mMenu, mRECT);
   }
@@ -1332,13 +1324,14 @@ public:
   void Hide(bool hide) override
   {
     IControl::Hide(hide);
+    IDirBrowseControlBase::Hide(hide);
+    for (int c = 0; c < NChildren(); c++)
+    {
+      GetChild(c)->Hide(hide);
+    }
     if (!hide)
     {
       OnResize();
-    }
-    else
-    {
-      IDirBrowseControlBase::Hide(hide);
     }
   }
 
@@ -1364,13 +1357,21 @@ public:
   void OnResize() override
   {
     IDirBrowseControlBase::OnResize();
+    if (IsHidden())
+    {
+      for (int c = 0; c < NChildren(); c++)
+      {
+        GetChild(c)->Hide(true);
+      }
+      return;
+    }
     if (mFileNameControl != nullptr)
     {
       mFileNameControl->SetStereoFont(mIsStereoMode);
     }
     if (NChildren() >= 6)
     {
-      // Ensure main elements (Load button and Text control) are unhidden when container is active
+      // Ensure main elements (Load button and Text control) are unhidden ONLY when container is active
       GetChild(0)->Hide(false);
       GetChild(3)->Hide(false);
 

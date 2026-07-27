@@ -288,6 +288,14 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   mLayoutFunc = [&](IGraphics* pGraphics) {
     pGraphics->AttachCornerResizer(EUIResizerMode::Scale, false);
     pGraphics->AttachTextEntryControl();
+    pGraphics->AttachPopupMenuControl(IText(13.0f, COLOR_WHITE, "Roboto-Regular"));
+    if (auto* pPopup = pGraphics->GetPopupMenuControl())
+    {
+      pPopup->SetPanelColor(IColor(240, 20, 20, 20));
+      pPopup->SetCellBackgroundColor(PluginColors::NAM_THEMECOLOR);
+      pPopup->SetItemColor(COLOR_WHITE);
+      pPopup->SetItemMouseoverColor(COLOR_WHITE);
+    }
     pGraphics->EnableMouseOver(true);
     pGraphics->EnableTooltips(true);
     pGraphics->EnableMultiTouch(true);
