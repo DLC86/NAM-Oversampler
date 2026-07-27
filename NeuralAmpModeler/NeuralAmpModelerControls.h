@@ -2938,11 +2938,11 @@ public:
     const auto realtimeThreadsArea = realtimeThreadsRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto offlineRadioArea = offlineOSRow.GetFromRight(rowsArea.W() - rowLabelWidth);
     const auto offlineFilterArea = offlineFilterRow.GetFromRight(rowsArea.W() - rowLabelWidth);
-    const float leftMargin = 25.0f;
-    const float rightMargin = 25.0f;
+    const float leftMargin = 40.0f;
+    const float rightMargin = 40.0f;
     const float btnH = 48.0f; // 1.5x
     const float btnW = 161.0f; // 1.5x
-    const auto infoArea = IRECT(leftMargin, content.B - 70.0f, page.R - rightMargin - btnW - 15.0f, content.B + 2.0f);
+    const auto infoArea = IRECT(leftMargin, content.B - 68.0f, page.R - rightMargin - btnW - 15.0f, content.B + 4.0f);
     const float buttonSize = 10.0f;
     const auto infoText = IText(12, EAlign::Near, PluginColors::HELP_TEXT);
     const auto infoStyle = mStyle.WithDrawFrame(false).WithValueText(infoText);
