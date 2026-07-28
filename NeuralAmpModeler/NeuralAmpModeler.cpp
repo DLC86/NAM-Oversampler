@@ -257,7 +257,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   GetParam(kLevelR)->InitDouble("Level R", 0.0, -20.0, 20.0, 0.1, "dB");
   GetParam(kPanLink)->InitBool("Pan Link", false);
   GetParam(kLevelLink)->InitBool("Level Link", false);
-  GetParam(kTimeAlign)->InitDouble("Time Alignment", 0.0, -100.0, 100.0, 1.0, "");
+  GetParam(kTimeAlign)->InitDouble("Time Alignment", 0.0, -1000.0, 1000.0, 1.0, "");
   GetParam(kTimeAlign)->SetDisplayFunc([](double val, WDL_String& str) {
     int v = static_cast<int>(std::round(val));
     if (v == 0)
@@ -1865,6 +1865,11 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
     const double delayL = timeAlignVal > 0.0 ? timeAlignVal : 0.0;
     const double delayR = timeAlignVal < 0.0 ? -timeAlignVal : 0.0;
 
+    if (mAutoAlignState.load() != EAutoAlignState::Idle)
+    {
+      _ProcessAutoAlignmentCapture(pInL, pInR, numFrames, sampleRate);
+    }
+
     _ProcessTimeAlignment(pInL, pInR, numFrames, delayL, delayR);
 
     const bool phaseInvertL = GetParam(kPhaseInvertL)->Bool();
@@ -1958,8 +1963,8 @@ void NeuralAmpModeler::OnReset()
   mHighCutPre.Reset(sampleRate, maxBlockSize);
   mLowCutPost.Reset(sampleRate, maxBlockSize);
   mHighCutPost.Reset(sampleRate, maxBlockSize);
-  mTimeAlignBufferL.assign(1024, 0.0);
-  mTimeAlignBufferR.assign(1024, 0.0);
+  mTimeAlignBufferL.assign(4096, 0.0);
+  mTimeAlignBufferR.assign(4096, 0.0);
   mTimeAlignWritePos = 0;
 
   // This must be called after the selected filter has been applied, otherwise the host can see stale PDC.
@@ -4075,8 +4080,8 @@ void NeuralAmpModeler::_ProcessTimeAlignment(sample* pL, sample* pR, const size_
 {
   if (mTimeAlignBufferL.empty())
   {
-    mTimeAlignBufferL.assign(1024, 0.0);
-    mTimeAlignBufferR.assign(1024, 0.0);
+    mTimeAlignBufferL.assign(4096, 0.0);
+    mTimeAlignBufferR.assign(4096, 0.0);
     mTimeAlignWritePos = 0;
   }
 
@@ -4110,6 +4115,173 @@ void NeuralAmpModeler::_ProcessTimeAlignment(sample* pL, sample* pR, const size_
 
     mTimeAlignWritePos = (mTimeAlignWritePos + 1) % bufSize;
   }
+}
+
+void NeuralAmpModeler::ToggleAutoAlignment()
+{
+  if (!_IsStereoRequested())
+  {
+    mAutoAlignState.store(EAutoAlignState::Idle);
+    mAutoAlignBufferL.clear();
+    mAutoAlignBufferR.clear();
+    return;
+  }
+
+  if (mAutoAlignState.load() == EAutoAlignState::Idle)
+  {
+    mAutoAlignBufferL.clear();
+    mAutoAlignBufferR.clear();
+    mAutoAlignState.store(EAutoAlignState::WaitingForSignal);
+  }
+  else
+  {
+    mAutoAlignState.store(EAutoAlignState::Idle);
+    mAutoAlignBufferL.clear();
+    mAutoAlignBufferR.clear();
+  }
+}
+
+void NeuralAmpModeler::_ProcessAutoAlignmentCapture(const sample* pL, const sample* pR, const size_t numFrames, const double sampleRate)
+{
+  EAutoAlignState currentState = mAutoAlignState.load();
+  if (currentState == EAutoAlignState::Idle || currentState == EAutoAlignState::Processing)
+    return;
+
+  if (currentState == EAutoAlignState::WaitingForSignal)
+  {
+    // Calculate RMS of incoming block (sum of L^2 + R^2)
+    double sumSq = 0.0;
+    for (size_t f = 0; f < numFrames; ++f)
+    {
+      const double lVal = static_cast<double>(pL[f]);
+      const double rVal = static_cast<double>(pR[f]);
+      sumSq += lVal * lVal + rVal * rVal;
+    }
+    const double rms = std::sqrt(sumSq / static_cast<double>(numFrames * 2));
+
+    // Threshold: -40 dB RMS => 10^(-40/20) = 0.01
+    const double thresholdRMS = 0.01;
+    if (rms >= thresholdRMS)
+    {
+      mAutoAlignBufferL.clear();
+      mAutoAlignBufferR.clear();
+      mAutoAlignTargetSamples = static_cast<size_t>((sampleRate > 0.0 ? sampleRate : 48000.0) * 1.0);
+      if (mAutoAlignTargetSamples < 8192) mAutoAlignTargetSamples = 44100;
+      mAutoAlignBufferL.reserve(mAutoAlignTargetSamples);
+      mAutoAlignBufferR.reserve(mAutoAlignTargetSamples);
+      mAutoAlignState.store(EAutoAlignState::Listening);
+      currentState = EAutoAlignState::Listening;
+    }
+  }
+
+  if (currentState == EAutoAlignState::Listening)
+  {
+    for (size_t f = 0; f < numFrames; ++f)
+    {
+      mAutoAlignBufferL.push_back(pL[f]);
+      mAutoAlignBufferR.push_back(pR[f]);
+      if (mAutoAlignBufferL.size() >= mAutoAlignTargetSamples)
+      {
+        mAutoAlignState.store(EAutoAlignState::Processing);
+        _PerformAutoAlignment();
+        break;
+      }
+    }
+  }
+}
+
+void NeuralAmpModeler::_PerformAutoAlignment()
+{
+  const size_t N = mAutoAlignBufferL.size();
+  if (N < 4096)
+  {
+    mAutoAlignState.store(EAutoAlignState::Idle);
+    return;
+  }
+
+  // 1. Bandpass pre-filter (150 Hz - 5000 Hz) using a 1st-order IIR HPF + LPF
+  const double sr = GetSampleRate() > 0.0 ? GetSampleRate() : 48000.0;
+  const double piConst = 3.14159265358979323846;
+  const double hpFc = 150.0;
+  const double lpFc = 5000.0;
+  const double alphaHP = 1.0 / (1.0 + 2.0 * piConst * hpFc / sr);
+  const double alphaLP = (2.0 * piConst * lpFc / sr) / (1.0 + 2.0 * piConst * lpFc / sr);
+
+  std::vector<double> filtL(N, 0.0), filtR(N, 0.0);
+  double prevInL = 0.0, prevOutHP_L = 0.0, prevOutLP_L = 0.0;
+  double prevInR = 0.0, prevOutHP_R = 0.0, prevOutLP_R = 0.0;
+
+  for (size_t i = 0; i < N; ++i)
+  {
+    // HPF + LPF for L
+    double inL = mAutoAlignBufferL[i];
+    double outHP_L = alphaHP * (prevOutHP_L + inL - prevInL);
+    prevInL = inL; prevOutHP_L = outHP_L;
+    double outLP_L = prevOutLP_L + alphaLP * (outHP_L - prevOutLP_L);
+    prevOutLP_L = outLP_L;
+    filtL[i] = outLP_L;
+
+    // HPF + LPF for R
+    double inR = mAutoAlignBufferR[i];
+    double outHP_R = alphaHP * (prevOutHP_R + inR - prevInR);
+    prevInR = inR; prevOutHP_R = outHP_R;
+    double outLP_R = prevOutLP_R + alphaLP * (outHP_R - prevOutLP_R);
+    prevOutLP_R = outLP_R;
+    filtR[i] = outLP_R;
+  }
+
+  // 2. Cross-correlation over delay range \tau \in [-1000, +1000]
+  const int maxDelay = 1000;
+  double maxCorrAbs = 0.0;
+  double maxCorrRaw = 0.0;
+  int bestDelay = 0;
+
+  const size_t startIdx = maxDelay;
+  const size_t endIdx = N - maxDelay;
+
+  for (int delay = -maxDelay; delay <= maxDelay; ++delay)
+  {
+    double sumCorr = 0.0;
+    size_t count = 0;
+
+    for (size_t i = startIdx; i < endIdx; ++i)
+    {
+      sumCorr += filtL[i] * filtR[i - delay];
+      count++;
+    }
+
+    if (count > 0)
+    {
+      sumCorr /= static_cast<double>(count);
+    }
+
+    if (std::abs(sumCorr) > maxCorrAbs)
+    {
+      maxCorrAbs = std::abs(sumCorr);
+      maxCorrRaw = sumCorr;
+      bestDelay = delay;
+    }
+  }
+
+  // Phase inversion check: if raw cross-correlation peak is negative, phase is inverted
+  const bool invertPhaseR = (maxCorrRaw < 0.0);
+
+  // Set parameters & update DAW / GUI
+  GetParam(kTimeAlign)->Set(static_cast<double>(bestDelay));
+  GetParam(kPhaseInvertR)->Set(invertPhaseR ? 1.0 : 0.0);
+  GetParam(kPhaseInvertL)->Set(0.0);
+
+  OnParamChange(kTimeAlign);
+  OnParamChange(kPhaseInvertR);
+  OnParamChange(kPhaseInvertL);
+
+  SendParameterValueFromDelegate(kTimeAlign, GetParam(kTimeAlign)->GetNormalized(), true);
+  SendParameterValueFromDelegate(kPhaseInvertR, GetParam(kPhaseInvertR)->GetNormalized(), true);
+  SendParameterValueFromDelegate(kPhaseInvertL, GetParam(kPhaseInvertL)->GetNormalized(), true);
+
+  mAutoAlignBufferL.clear();
+  mAutoAlignBufferR.clear();
+  mAutoAlignState.store(EAutoAlignState::Idle);
 }
 
 void NeuralAmpModeler::_ApplyInputGain(iplug::sample** inputs, const size_t nFrames, const size_t nChans)

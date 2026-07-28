@@ -154,6 +154,7 @@ enum ECtrlTags
   kCtrlTagTimeAlign,
   kCtrlTagPhaseInvertL,
   kCtrlTagPhaseInvertR,
+  kCtrlTagAutoAlign,
   kCtrlTagIRToggle,
   kCtrlTagIRToggleLeft,
   kCtrlTagIRToggleRight,
@@ -1550,6 +1551,19 @@ public:
   void OnParamChange(int paramIdx) override;
   void OnParamChangeUI(int paramIdx, iplug::EParamSource source) override;
   bool OnMessage(int msgTag, int ctrlTag, int dataSize, const void* pData) override;
+
+  // Auto-Alignment public interface
+  enum class EAutoAlignState
+  {
+    Idle = 0,
+    WaitingForSignal,
+    Listening,
+    Processing
+  };
+
+  void ToggleAutoAlignment();
+  EAutoAlignState GetAutoAlignState() const { return mAutoAlignState.load(); }
+
   void SetTunerActive(bool active)
   {
     if (active)
@@ -1648,6 +1662,10 @@ private:
   // :param nChansOut: Out to the internal of the DSP routine
   void _ProcessInput(iplug::sample** inputs, const size_t nFrames, const size_t nChansIn, const size_t nChansOut);
   void _ProcessTimeAlignment(iplug::sample* pL, iplug::sample* pR, const size_t nFrames, double delayL, double delayR);
+  
+  // Auto-Alignment internal methods
+  void _ProcessAutoAlignmentCapture(const iplug::sample* pL, const iplug::sample* pR, const size_t numFrames, const double sampleRate);
+  void _PerformAutoAlignment();
   void _ApplyInputGain(iplug::sample** inputs, const size_t nFrames, const size_t nChans);
   // Copy the output to the output buffer, applying output level.
   // :param nChansIn: In from internal
@@ -1786,6 +1804,11 @@ private:
   std::vector<iplug::sample> mTimeAlignBufferL;
   std::vector<iplug::sample> mTimeAlignBufferR;
   size_t mTimeAlignWritePos = 0;
+
+  std::atomic<EAutoAlignState> mAutoAlignState{EAutoAlignState::Idle};
+  std::vector<iplug::sample> mAutoAlignBufferL;
+  std::vector<iplug::sample> mAutoAlignBufferR;
+  size_t mAutoAlignTargetSamples = 48000;
 
   // Oversampling factor (1, 2, 4, 8, 16, 32)
   std::atomic<int> mOversamplingFactor = 1;
