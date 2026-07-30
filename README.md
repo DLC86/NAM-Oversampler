@@ -2,6 +2,8 @@
 
 NAM On Steroids is a fork of the Neural Amp Modeler plugin focused on adding experimental oversampling support for NAM models and improving/expanding its features.
 
+<img width="597" height="396" alt="17c62cd4-441d-400f-837a-2a744bd61cba (1)" src="https://github.com/user-attachments/assets/c3ac4c9f-a38c-44c6-a1db-17ac0c6589e5" />
+
 ## Oversampling approach
 
 This fork does not use only conventional plugin-level oversampling. Instead, it combines host-rate resampling with time-scaled processing inside NAM models where possible.
@@ -22,7 +24,11 @@ https://arxiv.org/abs/2505.04082
 
 ### How to use oversampling
 
-Click on the logo in the upper-left corner, the Oversampling menu will appear and provide these options, for both realtime usage and offliine rendering:
+Click on the logo in the upper-left corner, the Oversampling page will open:
+
+<img width="596" height="394" alt="300cfd09-bd46-4c83-9ee9-7c86d3557b22" src="https://github.com/user-attachments/assets/16c7b13e-d193-4355-a3c4-29dcd46b2b24" />
+
+It provides these options, for both realtime usage and offliine rendering:
 
 - OFF
 - 2x
@@ -45,20 +51,27 @@ When using oversampling, the load on the CPU can be split to all available cores
 
 ### Stereo processing
 
-This fork adds a little button (below the output level control) to choose between mono and stereo processing. For the moment it just uses the same NAM model and IR for both channels, but in the future I'll add the possibility to load two different models and IRs or link them to replicate the current behaviour.
+This fork adds a little button (in the lower right corner) to choose between mono and stereo processing. You can load two different models and IRs and set the pan and level of each channel independently, you can also link the model/IR selection to automatically load the same files on both channels.
 
 ### Customizable tonestacks
 
 The behaviour of the EQ controls can be changed by selecting a different tonestack, the available types are based on schematics of popular amps, pedals and outboard gear.
+
+<img width="380" height="507" alt="e00888b2-6ad5-4ff2-97b7-22640fafbbb6" src="https://github.com/user-attachments/assets/b701f211-2ae5-4c9f-97ad-a81be2565ace" />
+
 They can also be tweaked by changing component values in the Tonestack page (click on the Tonestack label to access it).
+
+<img width="596" height="395" alt="c73cb8c7-76c8-4200-8123-eea1381c7ef6" src="https://github.com/user-attachments/assets/0dc26900-1aad-4120-8ac8-26053dbbc246" />
 
 ### Pre/post EQ
 
-This fork adds a switch to move the EQ pre or post NAM, so you can sculpt the tone before or after distortion
+This fork adds a switch to move the EQ pre or post NAM, so you can sculpt the tone before or after distortion.
 
 ### Filters
 
 Low cut and high cut filters with independent slope control and pre/post switch. The filters page can be accessed by clicking on the red icon in the bottom-right corner.
+
+<img width="597" height="398" alt="e3f9c695-67b5-47a4-92c7-da4096dd91e0" src="https://github.com/user-attachments/assets/748a74f2-1ca9-49c8-99a5-39ff0349e14f" />
 
 ### Boost
 
@@ -89,11 +102,17 @@ Additional 'Auto' option in the Output mode, this automatically sets the output 
 ### Theme color
 
 You can customize the color of all lit-up elements via the theme color selector in the Settings page.
+
+<img width="488" height="650" alt="a21c9a9e-36fd-41b5-a00f-e2531dc17501" src="https://github.com/user-attachments/assets/a5d24e3f-14c1-49c1-b522-a031ddcfde02" />
+
 You can also make the color automatically be the same as the color of the track on your DAW by enabling "Follow Track Color"
 
 ### Tuner
 
 No amount of oversampling will make you sound better if you're out of tune, use it!
+
+<img width="597" height="397" alt="caff3137-9645-48a9-b450-005b740b3b90" src="https://github.com/user-attachments/assets/0c657ecf-d7a0-4ca8-b35b-6178ae7ee2de" />
+
 
 ## Notes
 
