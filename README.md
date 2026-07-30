@@ -95,6 +95,10 @@ You can also make the color automatically be the same as the color of the track 
 
 No amount of oversampling will make you sound better if you're out of tune, use it!
 
+## Notes
+
+Currently the Linux build has no GUI
+
 ---
 
 # Technical Deep Dive: Neural Amp Modeler Oversampling
