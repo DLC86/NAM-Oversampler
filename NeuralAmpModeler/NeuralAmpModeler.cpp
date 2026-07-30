@@ -1214,7 +1214,7 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
   else if (!allowFileStaging && (paramsChanged || toneStackComponentsChanged))
     mInternalPresetParamUIDirty.store(true, std::memory_order_release);
 #endif
-  _MarkInternalPresetUIDirty();
+  _RefreshCurrentInternalPresetDirty();
 }
 
 void NeuralAmpModeler::SelectInternalPreset(int index)
