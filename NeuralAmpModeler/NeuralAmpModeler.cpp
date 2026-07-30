@@ -756,7 +756,11 @@ bool NeuralAmpModeler::_IsCurrentInternalPresetModified() const
     return true;
   if (!_InternalPresetPathsEqual(preset.irPath, mIRPath.Get()))
     return true;
-  if (preset.toneStackComponentState != _SerializeToneStackComponentState())
+  if (!_InternalPresetPathsEqual(preset.namRightPath, mNAMRightPath.Get()))
+    return true;
+  if (!_InternalPresetPathsEqual(preset.irRightPath, mIRRightPath.Get()))
+    return true;
+  if (!preset.toneStackComponentState.empty() && preset.toneStackComponentState != _SerializeToneStackComponentState())
     return true;
 
   return false;
@@ -1434,6 +1438,14 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
         preset.paramValues[kToneStackType] = toneStackIndex;
         preset.toneStackTypeName =
           dsp::tone_stack::GetToneStackTypeName(dsp::tone_stack::ToneStackTypeFromInt(toneStackIndex));
+      }
+
+      for (int paramIdx = 0; paramIdx < kNumParams; ++paramIdx)
+      {
+        if (_IsInternalPresetParam(paramIdx))
+        {
+          preset.paramValues[paramIdx] = GetParam(paramIdx)->Constrain(preset.paramValues[paramIdx]);
+        }
       }
 
       if (!preset.saved)
