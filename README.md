@@ -236,5 +236,5 @@ For all power-of-two ratios ($2\times, 4\times, 8\times, 16\times, 32\times$), t
 
 ### Model Bandwidth Protection
 NAM models are typically trained on 48 kHz audio (Nyquist frequency of 24 kHz).
-- When running at higher host sample rates (e.g., 96 kHz / 192 kHz) or using oversampling, high frequencies outside the model's natural bandwidth could cause unexpected artifacts.
-- The ResamplingContainer automatically adapts its bandwidth filtering (bandwidthSampleRate) to match the model's native sample rate, guaranteeing that out-of-band signals are filtered cleanly before entering the neural network.
+When running at higher host sample rates (e.g., 96 kHz / 192 kHz) or using oversampling, high frequencies outside the model's natural bandwidth could cause unexpected artifacts.
+The ResamplingContainer automatically adapts its bandwidth filtering (bandwidthSampleRate) to match the model's native sample rate, guaranteeing that out-of-band signals are filtered cleanly before entering the neural network.
