@@ -1209,6 +1209,15 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
     }
   }
 
+  for (int i = 0; i < kNumParams; ++i)
+  {
+    if (_IsInternalPresetParam(i))
+      mInternalPresets[index].paramValues[i] = GetParam(i)->Value();
+  }
+  mInternalPresets[index].toneStackTypeName = dsp::tone_stack::GetToneStackTypeName(
+    dsp::tone_stack::ToneStackTypeFromInt(GetParam(kToneStackType)->Int()));
+  mInternalPresets[index].toneStackComponentState = _SerializeToneStackComponentState();
+
   if (allowFileStaging && (paramsChanged || toneStackComponentsChanged))
     OnParamReset(iplug::EParamSource::kPresetRecall);
   mApplyingInternalPreset.store(false, std::memory_order_release);
