@@ -97,8 +97,9 @@ No amount of oversampling will make you sound better if you're out of tune, use 
 
 ## Notes
 
-Currently the Linux build has no GUI
+Currently the Linux build has no GUI.
 
+---
 ---
 
 # Technical Deep Dive: Neural Amp Modeler Oversampling
