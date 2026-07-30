@@ -1106,7 +1106,7 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
   mCurrentInternalPreset.store(index, std::memory_order_release);
   mInitInternalPresetEditedName.clear();
   mInitInternalPresetHasEditedName = false;
-  mCurrentInternalPresetDirty.store(true, std::memory_order_release);
+  mCurrentInternalPresetDirty.store(false, std::memory_order_release);
   mInternalPresets[index].editedName.clear();
   mInternalPresets[index].hasEditedName = false;
   const auto& preset = mInternalPresets[index];
