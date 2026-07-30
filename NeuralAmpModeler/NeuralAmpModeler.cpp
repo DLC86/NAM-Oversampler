@@ -1211,15 +1211,10 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
 
   if (allowFileStaging && (paramsChanged || toneStackComponentsChanged))
     OnParamReset(iplug::EParamSource::kPresetRecall);
-  mLevelLinkSum = GetParam(kLevelL)->Value() + GetParam(kLevelR)->Value();
-#if PLUG_HAS_UI
-  if (allowFileStaging && (paramsChanged || toneStackComponentsChanged))
-    SendCurrentParamValuesFromDelegate();
-  else if (!allowFileStaging && (paramsChanged || toneStackComponentsChanged))
-    mInternalPresetParamUIDirty.store(true, std::memory_order_release);
-#endif
   mApplyingInternalPreset.store(false, std::memory_order_release);
-  _RefreshCurrentInternalPresetDirty();
+  if (!allowFileStaging && (paramsChanged || toneStackComponentsChanged))
+    mInternalPresetParamUIDirty.store(true, std::memory_order_release);
+  mPresetRecallDirtyRefreshPending.store(true, std::memory_order_release);
 }
 
 void NeuralAmpModeler::SelectInternalPreset(int index)
@@ -2324,6 +2319,14 @@ void NeuralAmpModeler::OnIdle()
       mModelCleared = false;
     }
   }
+  if (mPresetRecallDirtyRefreshPending.exchange(false, std::memory_order_acq_rel))
+  {
+    mLevelLinkSum = GetParam(kLevelL)->Value() + GetParam(kLevelR)->Value();
+#if PLUG_HAS_UI
+    SendCurrentParamValuesFromDelegate();
+#endif
+    _RefreshCurrentInternalPresetDirty();
+  }
 #endif
 }
 
@@ -2709,8 +2712,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
           if (GetParam(kIRToggleRight)->Value() != GetParam(kIRToggle)->Value())
           {
             GetParam(kIRToggleRight)->Set(GetParam(kIRToggle)->Value());
-            if (!mApplyingInternalPreset.load(std::memory_order_acquire))
-              SendParameterValueFromDelegate(kIRToggleRight, GetParam(kIRToggleRight)->GetNormalized(), true);
+            SendParameterValueFromDelegate(kIRToggleRight, GetParam(kIRToggleRight)->GetNormalized(), true);
           }
         }
         _UpdateLinkAndBrowserAvailability();
@@ -2721,8 +2723,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
           if (GetParam(kIRToggle)->Value() != GetParam(kIRToggleRight)->Value())
           {
             GetParam(kIRToggle)->Set(GetParam(kIRToggleRight)->Value());
-            if (!mApplyingInternalPreset.load(std::memory_order_acquire))
-              SendParameterValueFromDelegate(kIRToggle, GetParam(kIRToggle)->GetNormalized(), true);
+            SendParameterValueFromDelegate(kIRToggle, GetParam(kIRToggle)->GetNormalized(), true);
           }
         }
         _UpdateLinkAndBrowserAvailability();
@@ -2733,8 +2734,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
           if (GetParam(kIRToggleRight)->Value() != GetParam(kIRToggle)->Value())
           {
             GetParam(kIRToggleRight)->Set(GetParam(kIRToggle)->Value());
-            if (!mApplyingInternalPreset.load(std::memory_order_acquire))
-              SendParameterValueFromDelegate(kIRToggleRight, GetParam(kIRToggleRight)->GetNormalized(), true);
+            SendParameterValueFromDelegate(kIRToggleRight, GetParam(kIRToggleRight)->GetNormalized(), true);
           }
         }
         _UpdateLinkAndBrowserAvailability();
@@ -2752,8 +2752,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
           {
             GetParam(kPanR)->Set(targetR);
             OnParamChange(kPanR);
-            if (!mApplyingInternalPreset.load(std::memory_order_acquire))
-              SendParameterValueFromDelegate(kPanR, GetParam(kPanR)->GetNormalized(), true);
+            SendParameterValueFromDelegate(kPanR, GetParam(kPanR)->GetNormalized(), true);
           }
         }
         break;
@@ -2771,8 +2770,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
           {
             GetParam(kPanR)->Set(targetR);
             OnParamChange(kPanR);
-            if (!mApplyingInternalPreset.load(std::memory_order_acquire))
-              SendParameterValueFromDelegate(kPanR, GetParam(kPanR)->GetNormalized(), true);
+            SendParameterValueFromDelegate(kPanR, GetParam(kPanR)->GetNormalized(), true);
           }
         }
         break;
@@ -2784,8 +2782,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
           {
             GetParam(kPanL)->Set(targetL);
             OnParamChange(kPanL);
-            if (!mApplyingInternalPreset.load(std::memory_order_acquire))
-              SendParameterValueFromDelegate(kPanL, GetParam(kPanL)->GetNormalized(), true);
+            SendParameterValueFromDelegate(kPanL, GetParam(kPanL)->GetNormalized(), true);
           }
         }
         break;
@@ -2797,8 +2794,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
           {
             GetParam(kLevelR)->Set(targetR);
             OnParamChange(kLevelR);
-            if (!mApplyingInternalPreset.load(std::memory_order_acquire))
-              SendParameterValueFromDelegate(kLevelR, GetParam(kLevelR)->GetNormalized(), true);
+            SendParameterValueFromDelegate(kLevelR, GetParam(kLevelR)->GetNormalized(), true);
           }
         }
         break;
@@ -2810,8 +2806,7 @@ void NeuralAmpModeler::OnParamChangeUI(int paramIdx, EParamSource source)
           {
             GetParam(kLevelL)->Set(targetL);
             OnParamChange(kLevelL);
-            if (!mApplyingInternalPreset.load(std::memory_order_acquire))
-              SendParameterValueFromDelegate(kLevelL, GetParam(kLevelL)->GetNormalized(), true);
+            SendParameterValueFromDelegate(kLevelL, GetParam(kLevelL)->GetNormalized(), true);
           }
         }
         break;
@@ -3737,7 +3732,7 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
         }
       }
     }
-    _RefreshCurrentInternalPresetDirty();
+    _MarkCurrentInternalPresetDirty();
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, loadedNAMPath.GetLength() ? loadedNAMPath.GetLength() + 1 : 0,
                                loadedNAMPath.Get());
     if (linkNAM || !isStereo)
@@ -3822,7 +3817,7 @@ std::string NeuralAmpModeler::_StageModelRight(const WDL_String& modelPath)
       }
     }
 
-    _RefreshCurrentInternalPresetDirty();
+    _MarkCurrentInternalPresetDirty();
     SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadedModelRight, loadedNAMRightPath.GetLength() ? loadedNAMRightPath.GetLength() + 1 : 0, loadedNAMRightPath.Get());
   }
   catch (std::runtime_error& e)
@@ -3892,7 +3887,7 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIR(const WDL_String& irPath)
       mShouldRemoveIR = false;
       loadedIRPath = mIRPath;
     }
-    _RefreshCurrentInternalPresetDirty();
+    _MarkCurrentInternalPresetDirty();
     SendControlMsgFromDelegate(kCtrlTagIRFileBrowser, kMsgTagLoadedIR, loadedIRPath.GetLength() ? loadedIRPath.GetLength() + 1 : 0, loadedIRPath.Get());
     if (linkIR || !isStereo)
     {
@@ -3944,7 +3939,7 @@ dsp::wav::LoadReturnCode NeuralAmpModeler::_StageIRRight(const WDL_String& irPat
       mIRRightPath = irPath;
       loadedIRRightPath = mIRRightPath;
     }
-    _RefreshCurrentInternalPresetDirty();
+    _MarkCurrentInternalPresetDirty();
     SendControlMsgFromDelegate(kCtrlTagIRRightFileBrowser, kMsgTagLoadedIRRight, loadedIRRightPath.GetLength() ? loadedIRRightPath.GetLength() + 1 : 0, loadedIRRightPath.Get());
   }
   else

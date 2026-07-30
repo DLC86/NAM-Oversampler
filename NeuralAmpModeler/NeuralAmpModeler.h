@@ -1872,6 +1872,7 @@ private:
   std::atomic<bool> mInternalPresetParamUIDirty {false};
   std::atomic<bool> mCurrentInternalPresetDirty {true};
   std::atomic<bool> mApplyingInternalPreset {false};
+  std::atomic<bool> mPresetRecallDirtyRefreshPending {false};
   bool mUpdateCheckStarted = false;
   bool mUpdateCheckConsumed = false;
   bool mUpdateNotificationShown = false;
