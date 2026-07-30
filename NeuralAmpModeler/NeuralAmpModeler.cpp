@@ -1337,13 +1337,13 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
         preset.name = "empty";
       preset.editedName.clear();
       preset.hasEditedName = false;
-      preset.saved = p.value("saved", false);
       preset.namPath = p.value("namPath", "");
       preset.namRightPath = p.value("namRightPath", preset.namPath);
       preset.irPath = p.value("irPath", "");
       preset.irRightPath = p.value("irRightPath", preset.irPath);
       preset.toneStackTypeName = p.value("toneStackTypeName", "");
       preset.toneStackComponentState = p.value("toneStackComponents", "");
+      preset.saved = p.value("saved", false) || (!preset.name.empty() && preset.name != "empty") || !preset.namPath.empty() || !preset.irPath.empty();
 
       if (p.contains("params") && p["params"].is_array())
       {
