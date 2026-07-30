@@ -721,7 +721,7 @@ bool NeuralAmpModeler::_IsCurrentInternalPresetModified() const
     if (preset.hasEditedName && preset.editedName != "empty")
       return true;
 
-    static constexpr double kParamCompareEpsilon = 1.0e-6;
+    static constexpr double kParamCompareEpsilon = 1.0e-3;
     for (int i = 0; i < kNumParams; ++i)
     {
       if (!_IsInternalPresetParam(i))
@@ -742,7 +742,7 @@ bool NeuralAmpModeler::_IsCurrentInternalPresetModified() const
   if (preset.hasEditedName && preset.editedName != preset.name)
     return true;
 
-  static constexpr double kParamCompareEpsilon = 1.0e-6;
+  static constexpr double kParamCompareEpsilon = 1.0e-3;
   for (int i = 0; i < kNumParams; ++i)
   {
     if (!_IsInternalPresetParam(i))
@@ -1126,7 +1126,7 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
 
   mApplyingInternalPreset.store(true, std::memory_order_release);
   bool paramsChanged = false;
-  static constexpr double kParamRecallCompareEpsilon = 1.0e-6;
+  static constexpr double kParamRecallCompareEpsilon = 1.0e-3;
   for (int i = 0; i < kNumParams; ++i)
   {
     if (!_IsInternalPresetParam(i))
@@ -1136,6 +1136,7 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
       continue;
 
     GetParam(i)->Set(preset.paramValues[i]);
+    mInternalPresets[index].paramValues[i] = GetParam(i)->Value();
     OnParamChange(i);
     paramsChanged = true;
   }
