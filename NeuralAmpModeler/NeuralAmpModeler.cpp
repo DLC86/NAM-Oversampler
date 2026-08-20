@@ -2233,8 +2233,9 @@ void NeuralAmpModeler::OnIdle()
   if (GetParam(kFollowTrackColor)->Bool())
     _ApplyThemeColorToUI(false);
 
-  _MaybeStartUpdateCheck();
-  _HandleUpdateCheckResult();
+  // MH: disabling modal dialog
+  //_MaybeStartUpdateCheck();
+  //_HandleUpdateCheckResult();
 
   if (IsTunerActive())
   {
