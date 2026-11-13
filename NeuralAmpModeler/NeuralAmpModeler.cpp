@@ -2986,6 +2986,10 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     _ApplyActiveDSPSettings(false);
     mNewModelLoadedInDSP = true;
     _UpdateLatency();
+    // Capture the interface output reference on model activation. Changing
+    // Input Calibration later affects drive only; mode/trim changes must not
+    // silently recompute the output gain from the new input calibration.
+    mOutputCalibrationReferenceLevel = GetParam(kInputCalibrationLevel)->Value();
     _SetInputGain();
     _SetOutputGain();
   }
@@ -3122,7 +3126,7 @@ void NeuralAmpModeler::_SetOutputGain()
       case 2: // Calibrated
         if (mModel->HasOutputLevel())
         {
-          const double inputLevel = GetParam(kInputCalibrationLevel)->Value();
+          const double inputLevel = mOutputCalibrationReferenceLevel;
           const double outputLevel = mModel->GetOutputLevel();
           gainDB += (outputLevel - inputLevel);
         }
@@ -3157,7 +3161,7 @@ void NeuralAmpModeler::_SetOutputGain()
         {
           if (mModel->HasOutputLevel())
           {
-            const double inputLevel = GetParam(kInputCalibrationLevel)->Value();
+            const double inputLevel = mOutputCalibrationReferenceLevel;
             const double outputLevel = mModel->GetOutputLevel();
             gainDB += (outputLevel - inputLevel);
           }

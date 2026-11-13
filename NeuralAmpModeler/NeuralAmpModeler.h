@@ -1756,6 +1756,9 @@ private:
   // Input and output gain
   double mInputGain = 1.0;
   double mOutputGain = 1.0;
+  // Captured for the active model; subsequent drive-calibration edits do not
+  // modify the reference used by Calibrated or Auto output modes.
+  double mOutputCalibrationReferenceLevel = 12.0;
 
   // Noise gates
   dsp::noise_gate::Trigger mNoiseGateTrigger;
