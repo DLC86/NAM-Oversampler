@@ -2937,6 +2937,10 @@ void NeuralAmpModeler::_ApplyDSPStaging()
     mLiveModelRightPath.clear();
     mLoadedGearType.clear();
     mStagedGearType.clear();
+    mLoadedBranchLoudness.clear();
+    mStagedBranchLoudness.clear();
+    mLoadedRootLoudness.reset();
+    mStagedRootLoudness.reset();
     mNAMPath.Set("");
     mNAMRightPath.Set("");
     mShouldRemoveModel = false;
@@ -2971,6 +2975,9 @@ void NeuralAmpModeler::_ApplyDSPStaging()
       mModel = std::move(mStagedModel);
       mLiveModelPath = mStagedModelPath;
       mLoadedGearType = mStagedGearType;
+      mLoadedBranchLoudness = std::move(mStagedBranchLoudness);
+      mLoadedRootLoudness = mStagedRootLoudness;
+      mStagedRootLoudness.reset();
       mStagedModel = nullptr;
       mStagedModelPath.clear();
     }
@@ -3107,6 +3114,29 @@ void NeuralAmpModeler::_SetInputGain()
   mInputGain = DBToAmp(inputGainDB);
 }
 
+std::optional<double> NeuralAmpModeler::_GetEffectiveModelLoudness() const
+{
+  if (mModel == nullptr)
+    return std::nullopt;
+  if (mLoadedBranchLoudness.empty())
+    return mModel->HasLoudness()
+             ? std::optional<double>(mModel->GetLoudness()) : std::nullopt;
+
+  // ContainerModel selects the first max_value strictly greater than the
+  // size setting (exactly 0.5 selects Full in a two-size A2 container).
+  const double size = GetParam(kSlim)->Value();
+  const ModelLoudnessBranch* selected = &mLoadedBranchLoudness.back();
+  for (const auto& branch : mLoadedBranchLoudness)
+  {
+    if (size < branch.maxValue)
+    {
+      selected = &branch;
+      break;
+    }
+  }
+  return selected->loudness ? selected->loudness : mLoadedRootLoudness;
+}
+
 void NeuralAmpModeler::_SetOutputGain()
 {
   double gainDB = GetParam(kOutputLevel)->Value();
@@ -3116,11 +3146,9 @@ void NeuralAmpModeler::_SetOutputGain()
     switch (outputMode)
     {
       case 1: // Normalized
-        if (mModel->HasLoudness())
+        if (const auto loudness = _GetEffectiveModelLoudness())
         {
-          const double loudness = mModel->GetLoudness();
-          const double targetLoudness = -18.0;
-          gainDB += (targetLoudness - loudness);
+          gainDB += (-18.0 - *loudness);
         }
         break;
       case 2: // Calibrated
@@ -3150,11 +3178,9 @@ void NeuralAmpModeler::_SetOutputGain()
         
         if (targetMode == 1) // Normalized
         {
-          if (mModel->HasLoudness())
+          if (const auto loudness = _GetEffectiveModelLoudness())
           {
-            const double loudness = mModel->GetLoudness();
-            const double targetLoudness = -18.0;
-            gainDB += (targetLoudness - loudness);
+            gainDB += (-18.0 - *loudness);
           }
         }
         else if (targetMode == 2) // Calibrated
@@ -3187,6 +3213,8 @@ void NeuralAmpModeler::_ApplySlimParamToLoadedNAMs()
   apply(mStagedModel.get());
   apply(mModelRight.get());
   apply(mStagedModelRight.get());
+  // Normalization must track the currently selected Lite/Full submodel.
+  _SetOutputGain();
 }
 
 int NeuralAmpModeler::_GetActiveOversamplingFactor() const
@@ -3672,6 +3700,36 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       }
     }
 
+    // For multi-size NAM containers, only loudness comes from the selected
+    // submodel. Root metadata owns input/output levels and gear_type.
+    auto readLoudness = [](const nlohmann::json& metadata) -> std::optional<double> {
+      if (!metadata.is_object() || !metadata.contains("loudness") ||
+          !metadata["loudness"].is_number())
+        return std::nullopt;
+      const double value = metadata["loudness"].get<double>();
+      return std::isfinite(value) ? std::optional<double>(value) : std::nullopt;
+    };
+    const auto rootLoudness = readLoudness(returnedConfig.metadata);
+    std::vector<ModelLoudnessBranch> branchLoudness;
+    if (returnedConfig.config.is_object() &&
+        returnedConfig.config.contains("submodels") &&
+        returnedConfig.config["submodels"].is_array())
+    {
+      for (const auto& entry : returnedConfig.config["submodels"])
+      {
+        if (!entry.is_object() || !entry.contains("max_value") ||
+            !entry["max_value"].is_number())
+          continue;
+        nlohmann::json childMetadata = nlohmann::json::object();
+        if (entry.contains("model") && entry["model"].is_object())
+          childMetadata = entry["model"].value("metadata", nlohmann::json::object());
+        else
+          childMetadata = entry.value("metadata", nlohmann::json::object());
+        branchLoudness.push_back({entry["max_value"].get<double>(),
+                                  readLoudness(childMetadata)});
+      }
+    }
+
     double returnLevel = 0.0;
     bool hasReturnLevel = false;
     if (!returnedConfig.metadata.is_null())
@@ -3709,6 +3767,8 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       mStagedModelPath = modelPath.Get();
       mStagedModelRightPath = mNAMRightPath.Get();
       mStagedGearType = gearType;
+      mStagedBranchLoudness = std::move(branchLoudness);
+      mStagedRootLoudness = rootLoudness;
       mNAMPath = modelPath;
       mShouldRemoveModel = false;
       mModelCleared = false;
@@ -4369,7 +4429,7 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
       p->SetDisabled(disableInputCalibrationControls);
     if (auto* c = static_cast<OutputModeControl*>(pGraphics->GetControlWithTag(kCtrlTagOutputMode)))
     {
-      c->SetNormalizedDisable(!mModel->HasLoudness());
+      c->SetNormalizedDisable(!_GetEffectiveModelLoudness().has_value());
       c->SetCalibratedDisable(!mModel->HasOutputLevel());
 
       std::string resolvedMode = "Calibrated";

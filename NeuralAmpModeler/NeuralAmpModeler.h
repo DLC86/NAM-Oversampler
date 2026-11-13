@@ -48,6 +48,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <memory>
+#include <optional>
 #include <array>
 #include <unordered_map>
 #include <future>
@@ -1677,6 +1678,7 @@ private:
 
   void _SetInputGain();
   void _SetOutputGain();
+  std::optional<double> _GetEffectiveModelLoudness() const;
   void _ApplySlimParamToLoadedNAMs();
   int _GetActiveOversamplingFactor() const;
   int _GetAntiAliasFilterPhaseIndex() const;
@@ -1784,6 +1786,17 @@ private:
   std::string mStagedIRRightPath;
   std::string mStagedGearType;
   std::string mLoadedGearType;
+  // Calibration levels and gear_type are outer-file metadata. Only loudness
+  // is selected by Lite/Full model size, with outer metadata as fallback.
+  struct ModelLoudnessBranch
+  {
+    double maxValue = 1.0;
+    std::optional<double> loudness;
+  };
+  std::vector<ModelLoudnessBranch> mStagedBranchLoudness;
+  std::vector<ModelLoudnessBranch> mLoadedBranchLoudness;
+  std::optional<double> mStagedRootLoudness;
+  std::optional<double> mLoadedRootLoudness;
   std::mutex mDSPStagingMutex;
   // Flags to take away the modules at a safe time.
   std::atomic<bool> mShouldRemoveModel = false;
