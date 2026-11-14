@@ -181,10 +181,13 @@ jobs:
               exit 0
             fi
           fi
-          test "$(find packages -maxdepth 1 -type f | wc -l)" -ge 7
           tag="${RELEASE_REF#release/}"
           version="$(sed -n 's/^#define PLUG_VERSION_STR "\([^"]*\)".*$/\1/p' NeuralAmpModeler/config.h)"
           test "$tag" = "v$version"
+          test -f "packages/NAM-On-Steroids-v$version-linux-amd64.deb"
+          test -f "packages/NAM-On-Steroids-v$version-linux-i386.deb"
+          test -n "$(find packages -maxdepth 1 -name '*-Setup.exe' -print -quit)"
+          test -n "$(find packages -maxdepth 1 -name '*.dmg' -print -quit)"
           if gh release view "$tag" --json isDraft --jq .isDraft > draft-status; then
             test "$(cat draft-status)" = true
             gh release edit "$tag" --target "$GITHUB_SHA" --draft

@@ -219,7 +219,9 @@ XMLEND
 # --resources .
 
 TEMP_RESOURCES=$(mktemp -d)
-cp ./installer/license.rtf ${TEMP_RESOURCES}
+trap 'rm -r "$TEMP_RESOURCES"' EXIT
+cp ./installer/license.rtf ./installer/readme-mac.rtf ./installer/intro.rtf \
+   "./installer/$INSTALLER_BACKGROUND" "$TEMP_RESOURCES/"
 productbuild --resources ${TEMP_RESOURCES} --distribution ${TARGET_DIR}/distribution.xml --package-path ${PKG_DIR} "${TARGET_DIR}/$OUTPUT_BASE_FILENAME"
 
 rm ${TARGET_DIR}/distribution.xml

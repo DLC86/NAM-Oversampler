@@ -213,12 +213,24 @@ if [ -d "${AAX}" ]; then
 fi
 
 #---------------------------------------------------------------------------------------------------------
-# Both architectures must be present in every binary the installer ships.
-for bundle in "$APP" "$AU" "$VST3"; do
+# Inspect the same bundles that go into the installer.
+for installed_bundle in "$APP" "$AU" "$VST3"; do
+  bundle="build-mac/${installed_bundle##*/}"
+  if [[ ! -d "$bundle" && -d "$installed_bundle" ]]; then
+    ditto "$installed_bundle" "$bundle" || exit 1
+  fi
   binary="$bundle/Contents/MacOS/$PLUGIN_NAME"
-  if ! lipo -verify_arch arm64 x86_64 "$binary"; then
-    echo "Expected a universal binary at $binary" >&2
-    exit 1
+  slices="$(lipo -archs "$binary")" || exit 1
+  for required in arm64 x86_64; do
+    if [[ " $slices " != *" $required "* ]]; then
+      echo "Missing $required in $binary (found: $slices)" >&2
+      exit 1
+    fi
+  done
+  echo "$binary: $slices"
+  copy_third_party_notices "$bundle"
+  if [[ "$CODESIGN" == 0 ]]; then
+    codesign --force --deep --sign - "$bundle" || exit 1
   fi
 done
 
@@ -328,9 +340,13 @@ if [ $BUILD_INSTALLER == 1 ]; then
     cp installer/changelog.txt build-mac/installer/
     cp installer/known-issues.txt build-mac/installer/
     cp "$MANUAL_FILE" build-mac/installer/
-    hdiutil create "build-mac/$ARCHIVE_NAME.dmg" -format UDZO -srcfolder build-mac/installer/ -ov -anyowners -volname "$PLUGIN_NAME"
+    hdiutil create "build-mac/$ARCHIVE_NAME.dmg" -format UDZO -srcfolder build-mac/installer/ -ov -anyowners -volname "$PLUGIN_NAME" || exit 1
   fi
 
+  if [[ ! -s "build-mac/$ARCHIVE_NAME.dmg" ]]; then
+    echo "Disk image was not created." >&2
+    exit 1
+  fi
   sudo rm -R -f build-mac/installer/
 
   if [ $CODESIGN == 1 ]; then
@@ -395,7 +411,11 @@ sudo rm -R -f build-mac/*-dSYMs.zip
 
 echo "packaging dSYMs"
 echo ""
-zip -r "./build-mac/$ARCHIVE_NAME-dSYMs.zip" ./build-mac/*.dSYM
+shopt -s nullglob
+symbols=(./build-mac/*.dSYM)
+if (("${#symbols[@]}")); then
+  zip -r "./build-mac/$ARCHIVE_NAME-dSYMs.zip" "${symbols[@]}" || exit 1
+fi
 
 #---------------------------------------------------------------------------------------------------------
 
@@ -407,7 +427,10 @@ mkdir -p ./build-mac/out
 if [ -f "./build-mac/$ARCHIVE_NAME.dmg" ]; then
   mv "./build-mac/$ARCHIVE_NAME.dmg" ./build-mac/out
 fi
-mv ./build-mac/*.zip ./build-mac/out
+archives=(./build-mac/*.zip)
+if (("${#archives[@]}")); then
+  mv "${archives[@]}" ./build-mac/out
+fi
 
 #---------------------------------------------------------------------------------------------------------
 
