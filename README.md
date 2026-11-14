@@ -116,7 +116,14 @@ No amount of oversampling will make you sound better if you're out of tune, use 
 
 ## Notes
 
-Currently the Linux build has no GUI.
+The Linux installers include the GTK standalone application and the VST3.
+Use the amd64 package for 64-bit x86 or the i386 package for 32-bit x86 on
+Debian-compatible systems. The standalone uses the default ALSA input and
+output. A Linux DAW needs VST3 X11 embedding to open the editor.
+
+The Windows installer includes the x64 standalone and VST3. The macOS
+installer includes Universal binaries for the standalone, VST3, and Audio Unit,
+with both Apple Silicon and Intel slices.
 
 ---
 ---

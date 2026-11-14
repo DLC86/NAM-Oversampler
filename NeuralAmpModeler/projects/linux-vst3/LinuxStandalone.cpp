@@ -171,8 +171,11 @@ int SelfTest(const char* model)
   if (Difference(low, high) < 1e-4)
     throw std::runtime_error("Model control did not affect inference.");
 
+  SetParam(plugin, kOfflineAntiAliasFilterPhase, 2);
   SetParam(plugin, kOfflineOversamplingFactor, 2);
   const auto fourTimes = Render(plugin);
+  if (plugin.GetLatency() <= 0)
+    throw std::runtime_error("The oversampled PNAM path did not report linear-phase latency.");
   if (Difference(high, fourTimes) < 1e-5)
     throw std::runtime_error("Offline oversampling did not change the signal.");
 

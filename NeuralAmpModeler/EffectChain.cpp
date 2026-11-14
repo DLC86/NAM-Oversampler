@@ -67,7 +67,7 @@ std::vector<NeuralAmpModeler::EffectBlock> NeuralAmpModeler::_DefaultEffects()
 {
   return {
     {{kMainNam, EffectType::Nam}, {}},
-    {{kMainGate, EffectType::Gate, true, -60.0, kChainInput}, {}},
+    {{kMainGate, EffectType::Gate, true, -80.0, kChainInput}, {}},
     {{kMainCab, EffectType::Cab}, {}}
   };
 }
@@ -91,9 +91,9 @@ std::vector<NeuralAmpModeler::EffectSettings> NeuralAmpModeler::GetEffects() con
       settings.threshold = GetParam(kNoiseGateThreshold)->Value();
     }
     else if (settings.id == kMainCab)
-    {
       settings.path = mIRPath.Get();
-    }
+    else if (block.audio && block.audio->nam[0])
+      settings.hasModelSize = block.audio->nam[0]->GetSlimmableModel() != nullptr;
   }
   return effects;
 }
@@ -189,6 +189,14 @@ void NeuralAmpModeler::SetEffectEnabled(int id, bool enabled)
     return;
   }
 
+#if defined(OS_LINUX) && defined(NAM_LINUX_GUI)
+  if (!GetComponentHandler())
+  {
+    GetParam(param)->Set(enabled ? 1.0 : 0.0);
+    OnParamChange(param);
+    return;
+  }
+#endif
   BeginInformHostOfParamChangeFromUI(param);
   SendParameterValueFromUI(param, enabled ? 1.0 : 0.0);
   EndInformHostOfParamChangeFromUI(param);
@@ -207,6 +215,26 @@ void NeuralAmpModeler::SetEffectThreshold(int id, double threshold)
 void NeuralAmpModeler::SetEffectSidechain(int id, int source)
 {
   _EditEffect(id, [source](EffectSettings& effect) { effect.sidechain = source; });
+}
+
+void NeuralAmpModeler::SetExtraEffectParam(int id, int param, double value)
+{
+  if (!std::isfinite(value))
+    return;
+  _EditEffect(id, [param, value](EffectSettings& effect) {
+    switch (param)
+    {
+      case kEQActive: effect.tone.active = value != 0.0; break;
+      case kEQPostNAM: effect.tone.post = value != 0.0; break;
+      case kToneStackType:
+        effect.tone.type = std::clamp(static_cast<int>(value), 0, dsp::tone_stack::kNumToneStackTypes - 1);
+        break;
+      case kToneBass: case kToneMid: case kToneTreble:
+        effect.tone.values[param - kToneBass] = std::clamp(value, 0.0, 10.0);
+        break;
+      case kSlim: effect.modelSize = std::clamp(value, 0.0, 1.0); break;
+    }
+  });
 }
 
 std::string NeuralAmpModeler::LoadEffectFile(int id, const std::string& path, int channel)
@@ -313,10 +341,17 @@ std::shared_ptr<NeuralAmpModeler::EffectAudio> NeuralAmpModeler::_BuildEffectAud
     for (auto& model : audio->nam)
     {
       model = _CreateModel(path, nullptr, &controls);
+      model->SetSlimmableSize(settings.modelSize);
       model->SetOversamplingFactor(_GetActiveOversamplingFactor());
       model->SetAntiAliasFilterPhase(phase == 0 ? dsp::EAntiAliasFilterPhase::MinimumPhaseCascadedFIR
                                   : phase == 1 ? dsp::EAntiAliasFilterPhase::LinearCascadedFIRShort
                                                : dsp::EAntiAliasFilterPhase::LinearCascadedFIRLong);
+    }
+    audio->appliedModelSize = settings.modelSize;
+    if (!controls)
+    {
+      audio->tone = std::make_unique<dsp::tone_stack::BasicNamToneStack>();
+      audio->tone->Reset(rate, frames);
     }
     for (auto& output : audio->output)
       output.resize(frames);
@@ -340,33 +375,27 @@ void NeuralAmpModeler::_ResetEffects(double sampleRate, int maxBlockSize)
       channel.resize(maxBlockSize);
 
   std::lock_guard<std::mutex> lock(mEffectsMutex);
-  const auto reset = [&](std::vector<EffectBlock>& effects) {
-    for (auto& block : effects)
-    {
-      if (!block.audio)
-        continue;
-      for (auto& model : block.audio->nam)
-        if (model)
-          model->Reset(sampleRate, maxBlockSize);
-      for (auto& cab : block.audio->cab)
-        if (cab)
-          cab = std::make_unique<dsp::ImpulseResponse>(cab->GetData(), sampleRate);
-    }
+  const auto reset = [&](const std::shared_ptr<EffectAudio>& audio) {
+    if (!audio)
+      return;
+    for (auto& model : audio->nam)
+      if (model)
+        model->Reset(sampleRate, maxBlockSize);
+    for (auto& cab : audio->cab)
+      if (cab)
+        cab = std::make_unique<dsp::ImpulseResponse>(cab->GetData(), sampleRate);
+    if (audio->tone)
+      audio->tone->Reset(sampleRate, maxBlockSize);
   };
-  reset(mActiveEffects);
+  for (const auto& block : mActiveEffects)
+    reset(block.audio);
   if (mEffectsPending)
   {
-    for (auto& block : mStagedEffects)
+    for (const auto& block : mStagedEffects)
     {
-      if (!block.audio || std::any_of(mActiveEffects.begin(), mActiveEffects.end(),
-                                        [&](const EffectBlock& active) { return active.audio == block.audio; }))
-        continue;
-      for (auto& model : block.audio->nam)
-        if (model)
-          model->Reset(sampleRate, maxBlockSize);
-      for (auto& cab : block.audio->cab)
-        if (cab)
-          cab = std::make_unique<dsp::ImpulseResponse>(cab->GetData(), sampleRate);
+      if (std::none_of(mActiveEffects.begin(), mActiveEffects.end(),
+                        [&](const EffectBlock& active) { return active.audio == block.audio; }))
+        reset(block.audio);
     }
   }
 }
@@ -388,20 +417,23 @@ void NeuralAmpModeler::_ApplyExtraModelQuality(int oversamplingFactor, dsp::EAnt
   }
 }
 
-std::string NeuralAmpModeler::_SerializeEffects() const
+std::string NeuralAmpModeler::_SerializeEffects(bool defaultState) const
 {
   std::lock_guard<std::mutex> lock(mEffectsMutex);
   auto state = nlohmann::json::array();
-  for (const auto& block : mEditedEffects)
+  const auto defaults = defaultState ? _DefaultEffects() : std::vector<EffectBlock>();
+  for (const auto& block : defaultState ? defaults : mEditedEffects)
   {
     const auto& effect = block.settings;
     state.push_back({{"id", effect.id}, {"type", static_cast<int>(effect.type)}, {"enabled", effect.enabled},
                      {"threshold", effect.threshold}, {"sidechain", effect.sidechain}, {"path", effect.path},
-                     {"controls", SerializeModelControls(block.controls)}});
+                     {"controls", SerializeModelControls(block.controls)}, {"modelSize", effect.modelSize},
+                     {"tone", {{"active", effect.tone.active}, {"post", effect.tone.post},
+                               {"type", effect.tone.type}, {"values", effect.tone.values}}}});
   }
   auto primary = nlohmann::json::array();
   for (const auto& controls : mPrimaryModelControls)
-    primary.push_back(SerializeModelControls(controls));
+    primary.push_back(defaultState ? nlohmann::json() : SerializeModelControls(controls));
   return nlohmann::json {{"blocks", state}, {"primary", primary}}.dump();
 }
 
@@ -437,9 +469,20 @@ void NeuralAmpModeler::_RestoreEffects(const nlohmann::json& state)
 
         effect.type = static_cast<EffectType>(type);
         effect.enabled = entry.value("enabled", true);
-        effect.threshold = std::clamp(entry.value("threshold", -60.0), -100.0, 0.0);
+        effect.threshold = std::clamp(entry.value("threshold", -80.0), -100.0, 0.0);
         effect.sidechain = entry.value("sidechain", kEffectInput);
         effect.path = entry.value("path", "");
+        effect.modelSize = std::clamp(entry.value("modelSize", 1.0), 0.0, 1.0);
+        const auto tone = entry.value("tone", nlohmann::json::object());
+        if (tone.is_object())
+        {
+          effect.tone.active = tone.value("active", true);
+          effect.tone.post = tone.value("post", true);
+          effect.tone.type = std::clamp(tone.value("type", 0), 0, dsp::tone_stack::kNumToneStackTypes - 1);
+          effect.tone.values = tone.value("values", effect.tone.values);
+          for (auto& value : effect.tone.values)
+            value = std::clamp(value, 0.0, 10.0);
+        }
         auto& block = effects.emplace_back(EffectBlock {effect, {}});
         if (effect.id > kMainCab)
         {
@@ -479,6 +522,34 @@ sample** NeuralAmpModeler::_ProcessExtraEffect(const EffectBlock& block, sample*
   auto& audio = *block.audio;
   if (audio.nam[0])
   {
+    const auto& tone = block.settings.tone;
+    const bool useTone = audio.tone && tone.active;
+    if (useTone)
+    {
+      if (tone.type != audio.appliedToneType)
+      {
+        audio.tone->SetParam("type", tone.type);
+        audio.appliedToneType = tone.type;
+      }
+      static constexpr std::array<const char*, 3> knobs {"bass", "middle", "treble"};
+      for (size_t index = 0; index < knobs.size(); ++index)
+      {
+        if (tone.values[index] != audio.appliedTone[index])
+        {
+          audio.tone->SetParam(knobs[index], tone.values[index]);
+          audio.appliedTone[index] = tone.values[index];
+        }
+      }
+      if (!tone.post)
+        input = audio.tone->Process(input, channels, frames);
+    }
+    if (block.settings.modelSize != audio.appliedModelSize)
+    {
+      for (auto& model : audio.nam)
+        model->SetSlimmableSize(block.settings.modelSize);
+      audio.appliedModelSize = block.settings.modelSize;
+    }
+
     for (size_t channel = 0; channel < channels; ++channel)
     {
       if (audio.output[channel].size() < static_cast<size_t>(frames))
@@ -490,7 +561,8 @@ sample** NeuralAmpModeler::_ProcessExtraEffect(const EffectBlock& block, sample*
       audio.nam[0]->process_stereo(*audio.nam[1], input, audio.pointers.data(), input + 1, audio.pointers.data() + 1, frames);
     else
       audio.nam[0]->process(input, audio.pointers.data(), frames);
-    return audio.pointers.data();
+    return useTone && tone.post ? audio.tone->Process(audio.pointers.data(), channels, frames)
+                                : audio.pointers.data();
   }
   if (audio.cab[0])
   {

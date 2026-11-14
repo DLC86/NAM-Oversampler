@@ -1578,14 +1578,28 @@ public:
   static constexpr int kMaxEffectBlocks = 12;
   static constexpr int kEffectInput = -1;
   static constexpr int kChainInput = 0;
+  static constexpr int kMainNam = 1;
+  static constexpr int kMainGate = 2;
+  static constexpr int kMainCab = 3;
+
+  struct EffectToneStack
+  {
+    bool active = true;
+    bool post = true;
+    int type = 0;
+    std::array<double, 3> values {5.0, 5.0, 5.0};
+  };
   struct EffectSettings
   {
     int id = 0;
     EffectType type = EffectType::Gate;
     bool enabled = true;
-    double threshold = -60.0;
+    double threshold = -80.0;
     int sidechain = kEffectInput;
     std::string path;
+    EffectToneStack tone;
+    double modelSize = 1.0;
+    bool hasModelSize = false;
   };
   std::vector<EffectSettings> GetEffects() const;
   int AddEffect(EffectType type);
@@ -1594,6 +1608,7 @@ public:
   void SetEffectEnabled(int id, bool enabled);
   void SetEffectThreshold(int id, double threshold);
   void SetEffectSidechain(int id, int source);
+  void SetExtraEffectParam(int id, int param, double value);
   std::string LoadEffectFile(int id, const std::string& path, int channel = 0);
 #if defined(OS_LINUX) && defined(NAM_LINUX_GUI)
   Steinberg::IPlugView* PLUGIN_API createView(const char* name) override;
@@ -1682,16 +1697,16 @@ private:
     std::string effectChainState;
   };
 
-  static constexpr int kMainNam = 1;
-  static constexpr int kMainGate = 2;
-  static constexpr int kMainCab = 3;
-
   struct EffectAudio
   {
     EffectAudio() { trigger.AddListener(&gain); }
     dsp::noise_gate::Trigger trigger;
     dsp::noise_gate::Gain gain;
     std::array<std::unique_ptr<ResamplingNAM>, 2> nam;
+    std::unique_ptr<dsp::tone_stack::BasicNamToneStack> tone;
+    std::array<double, 3> appliedTone {5.0, 5.0, 5.0};
+    int appliedToneType = 0;
+    double appliedModelSize = 1.0;
     std::array<std::unique_ptr<dsp::ImpulseResponse>, 2> cab;
     std::array<std::vector<iplug::sample>, 2> output;
     std::array<iplug::sample*, 2> pointers {};
@@ -1714,7 +1729,7 @@ private:
   std::array<std::shared_ptr<ModelControls>, 2> mPrimaryModelControls;
   std::atomic<bool> mPrimaryHasModelSize {false};
   int mSelectedEffect = kMainNam;
-  std::string _SerializeEffects() const;
+  std::string _SerializeEffects(bool defaultState = false) const;
   void _RestoreEffects(const nlohmann::json& state);
   void _RestoreEffects(const std::string& state);
   iplug::sample** _ProcessExtraEffect(

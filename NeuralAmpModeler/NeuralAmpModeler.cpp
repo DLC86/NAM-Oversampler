@@ -682,7 +682,7 @@ bool NeuralAmpModeler::_IsCurrentInternalPresetModified() const
     if (CStringHasContents(mIRPath.Get()))
       return true;
 
-    return false;
+    return _SerializeEffects() != _SerializeEffects(true);
   }
 
   if (preset.hasEditedName && preset.editedName != preset.name)
@@ -706,7 +706,7 @@ bool NeuralAmpModeler::_IsCurrentInternalPresetModified() const
     return true;
   if (!_InternalPresetPathsEqual(preset.irRightPath, mIRRightPath.Get()))
     return true;
-  if (!preset.effectChainState.empty() && preset.effectChainState != _SerializeEffects())
+  if (_SerializeEffects() != (preset.effectChainState.empty() ? _SerializeEffects(true) : preset.effectChainState))
     return true;
   if (!preset.toneStackComponentState.empty() && preset.toneStackComponentState != _SerializeToneStackComponentState())
     return true;
@@ -2263,6 +2263,7 @@ void NeuralAmpModeler::OnIdle()
       mNewModelLoadedInDSP = false;
     }
   }
+#endif
   // Handle MIDI CC Learn assignment on main thread
   const int pendingLearnCC = mPendingMidiLearnAssignCC.exchange(-1, std::memory_order_acq_rel);
   const int pendingLearnParam = mPendingMidiLearnAssignParam.exchange(-1, std::memory_order_acq_rel);
@@ -2283,11 +2284,16 @@ void NeuralAmpModeler::OnIdle()
       midiParamsUpdated = true;
     }
   }
+#if PLUG_HAS_UI
   if (midiParamsUpdated)
   {
     if (auto* pGraphics = GetUI())
       pGraphics->SetAllControlsDirty();
   }
+
+#else
+  (void)midiParamsUpdated;
+#endif
 
   // Handle MIDI CC Preset Up/Down step on main thread
   const int pendingMidiStep = mPendingMidiPresetStep.exchange(0, std::memory_order_acq_rel);
@@ -2302,6 +2308,7 @@ void NeuralAmpModeler::OnIdle()
   {
     SelectInternalPreset(pendingPresetFileRecall);
   }
+#if PLUG_HAS_UI
   if (mInternalPresetUIDirty.exchange(false, std::memory_order_acq_rel))
   {
     if (auto* pGraphics = GetUI())
@@ -2330,6 +2337,7 @@ void NeuralAmpModeler::OnIdle()
       mModelCleared = false;
     }
   }
+#endif
   if (mPresetRecallDirtyRefreshPending.exchange(false, std::memory_order_acq_rel))
   {
     mLevelLinkSum = GetParam(kLevelL)->Value() + GetParam(kLevelR)->Value();
@@ -2338,7 +2346,6 @@ void NeuralAmpModeler::OnIdle()
 #endif
     _RefreshCurrentInternalPresetDirty();
   }
-#endif
 }
 
 bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const

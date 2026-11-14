@@ -19,7 +19,9 @@ public:
     std::string signature = std::to_string(mPlugin.GetSelectedEffect());
     for (const auto& effect : effects)
       signature += "|" + std::to_string(effect.id) + ":" + effect.path + ":" + std::to_string(effect.enabled)
-                   + ":" + std::to_string(effect.sidechain) + ":" + std::to_string(effect.threshold);
+                   + ":" + std::to_string(effect.sidechain) + ":" + std::to_string(effect.threshold)
+                   + ":" + std::to_string(effect.tone.type) + ":" + std::to_string(effect.tone.active)
+                   + ":" + std::to_string(effect.tone.post) + ":" + std::to_string(effect.modelSize);
     const auto controls = SelectedControls();
     const auto focus = std::make_tuple(mPlugin.GetSelectedEffect(), controls.get(), mPlugin.PrimaryHasModelSize());
     if (focus != mFocus)
@@ -91,20 +93,20 @@ public:
     Button(g, RemoveRect(), "Remove", kMuted);
     if (effect->type == Type::Gate)
     {
-      if (effect->id != 2)
+      if (effect->id != NeuralAmpModeler::kMainGate)
         Slider(g, ExtraThresholdRect(), "Threshold", (std::to_string(static_cast<int>(effect->threshold)) + " dB").c_str(),
                (effect->threshold + 100.0) / 100.0, accent);
       Text(g, "SIDECHAIN", SidechainRect().GetVShifted(-30), 11, kMuted, EAlign::Near);
       Button(g, SidechainRect(), SidechainLabel(effects, effect->sidechain).c_str(), kText);
     }
-    if (effect->id > 3 && effect->type != Type::Gate)
+    if (effect->id > NeuralAmpModeler::kMainCab && effect->type != Type::Gate)
     {
       const std::string fileName = effect->path.empty() ? "Load file..." : std::filesystem::u8path(effect->path).filename().string();
       Button(g, FileRect(), fileName.c_str(), kText);
     }
     if (const auto controls = SelectedControls())
     {
-      if (effect->id == 1 && CanChooseChannel())
+      if (effect->id == NeuralAmpModeler::kMainNam && CanChooseChannel())
         Button(g, ChannelRect(), mChannel == 0 ? "Left controls" : "Right controls", accent);
       if (controls->specs.size() > kControlsPerPage)
       {
@@ -126,8 +128,28 @@ public:
                range > 0.0 ? (value - spec.minimum) / range : 0.0, accent);
       }
     }
-    else if (effect->id == 1 && CanChooseChannel())
+    else if (effect->id == NeuralAmpModeler::kMainNam && CanChooseChannel())
       Button(g, ChannelRect(), mChannel == 0 ? "Left controls" : "Right controls", accent);
+    else if (HasExtraTone(*effect))
+    {
+      const auto type = dsp::tone_stack::ToneStackTypeFromInt(effect->tone.type);
+      Button(g, ChannelRect(), effect->tone.active ? "Tone stack on" : "Tone stack off", accent);
+      Button(g, ToneTypeRect(), dsp::tone_stack::GetToneStackTypeName(type), kText);
+      Button(g, TonePositionRect(), effect->tone.post ? "Post NAM" : "Pre NAM", kText);
+      static constexpr std::array<const char*, 3> names {"Bass", "Middle", "Treble"};
+      for (size_t index = 0; index < names.size(); ++index)
+      {
+        char value[16];
+        std::snprintf(value, sizeof(value), "%.1f", effect->tone.values[index]);
+        Slider(g, ParameterRect(index), names[index], value, effect->tone.values[index] / 10.0, accent);
+      }
+    }
+    if (effect->hasModelSize)
+    {
+      char value[16];
+      std::snprintf(value, sizeof(value), "%.0f%%", effect->modelSize * 100.0);
+      Slider(g, ModelSizeRect(), "Model size", value, effect->modelSize, accent);
+    }
   }
 
   void OnMouseDown(float x, float y, const IMouseMod& mod) override
@@ -179,17 +201,51 @@ public:
       mPlugin.RemoveEffect(effect->id);
     else if (effect->type == Type::Gate && SidechainRect().Contains(x, y))
       OpenSidechainMenu(effects, effect->id);
-    else if (effect->type == Type::Gate && effect->id != 2 && ExtraThresholdRect().Contains(x, y))
+    else if (effect->type == Type::Gate && effect->id != NeuralAmpModeler::kMainGate && ExtraThresholdRect().Contains(x, y))
     {
       mDragThreshold = true;
       mPlugin.SetEffectThreshold(effect->id, -100.0 + 100.0 * SliderPosition(ExtraThresholdRect(), x));
     }
-    else if (effect->id > 3 && effect->type != Type::Gate && FileRect().Contains(x, y))
+    else if (effect->id > NeuralAmpModeler::kMainCab && effect->type != Type::Gate && FileRect().Contains(x, y))
       OpenFile(*effect);
-    else if (effect->id == 1 && CanChooseChannel() && ChannelRect().Contains(x, y))
+    else if (effect->id == NeuralAmpModeler::kMainNam && CanChooseChannel() && ChannelRect().Contains(x, y))
     {
       mChannel = 1 - mChannel;
       mPage = 0;
+    }
+    else if (effect->hasModelSize && ModelSizeRect().Contains(x, y))
+    {
+      mDragExtra = kSlim;
+      mPlugin.SetExtraEffectParam(effect->id, mDragExtra, SliderPosition(ModelSizeRect(), x));
+    }
+    else if (HasExtraTone(*effect))
+    {
+      if (ChannelRect().Contains(x, y))
+        mPlugin.SetExtraEffectParam(effect->id, kEQActive, !effect->tone.active);
+      else if (TonePositionRect().Contains(x, y))
+        mPlugin.SetExtraEffectParam(effect->id, kEQPostNAM, !effect->tone.post);
+      else if (ToneTypeRect().Contains(x, y))
+      {
+        mMenu.Clear();
+        for (int index = 0; index < dsp::tone_stack::kNumToneStackTypes; ++index)
+          mMenu.AddItem(dsp::tone_stack::GetToneStackTypeName(dsp::tone_stack::ToneStackTypeFromInt(index)));
+        mMenuAction = MenuAction::ToneType;
+        mMenuEffect = effect->id;
+        GetUI()->CreatePopupMenu(*this, mMenu, ToneTypeRect());
+      }
+      else
+      {
+        for (int index = 0; index < 3; ++index)
+        {
+          const auto rect = ParameterRect(index);
+          if (rect.Contains(x, y))
+          {
+            mDragExtra = kToneBass + index;
+            mPlugin.SetExtraEffectParam(effect->id, mDragExtra, 10.0 * SliderPosition(rect, x));
+            break;
+          }
+        }
+      }
     }
     else if (const auto controls = SelectedControls())
     {
@@ -239,6 +295,12 @@ public:
     }
     if (mDragThreshold)
       mPlugin.SetEffectThreshold(mPlugin.GetSelectedEffect(), -100.0 + 100.0 * SliderPosition(ExtraThresholdRect(), x));
+    if (mDragExtra >= 0)
+    {
+      const double value = mDragExtra == kSlim ? SliderPosition(ModelSizeRect(), x) :
+        10.0 * SliderPosition(ParameterRect(mDragExtra - kToneBass), x);
+      mPlugin.SetExtraEffectParam(mPlugin.GetSelectedEffect(), mDragExtra, value);
+    }
     if (mDragParameter >= 0)
     {
       if (const auto controls = SelectedControls())
@@ -255,6 +317,7 @@ public:
     mDropIndex = -1;
     mDragThreshold = false;
     mDragParameter = -1;
+    mDragExtra = -1;
     SetDirty(false);
   }
 
@@ -276,6 +339,9 @@ public:
       case MenuAction::Choice:
         mPlugin.SetEffectModelControl(mMenuEffect, mChannel, mMenuIndex, static_cast<float>(chosen));
         break;
+      case MenuAction::ToneType:
+        mPlugin.SetExtraEffectParam(mMenuEffect, kToneStackType, chosen);
+        break;
       case MenuAction::Block:
         if (chosen == 2)
           mPlugin.RemoveEffect(mMenuEffect);
@@ -289,7 +355,7 @@ public:
 private:
   using Type = NeuralAmpModeler::EffectType;
   using Settings = NeuralAmpModeler::EffectSettings;
-  enum class MenuAction { Add, Sidechain, Choice, Block };
+  enum class MenuAction { Add, Sidechain, Choice, ToneType, Block };
   static constexpr size_t kControlsPerPage = 6;
   const IColor kSurface {255, 25, 29, 39};
   const IColor kEdge {255, 63, 70, 85};
@@ -306,6 +372,7 @@ private:
   float mDragX = 0;
   float mDragY = 0;
   int mDragParameter = -1;
+  int mDragExtra = -1;
   bool mDragThreshold = false;
   int mChannel = 0;
   size_t mPage = 0;
@@ -322,7 +389,7 @@ private:
   bool CanChooseChannel() const
   {
     return mPlugin.GetParam(kChannelMode)->Int() == 1 && !mPlugin.GetParam(kNAMLink)->Bool() &&
-           (mPlugin.GetEffectModelControls(1, 0) || mPlugin.GetEffectModelControls(1, 1));
+           (mPlugin.GetEffectModelControls(NeuralAmpModeler::kMainNam, 0) || mPlugin.GetEffectModelControls(NeuralAmpModeler::kMainNam, 1));
   }
 
   std::shared_ptr<const ModelControls> SelectedControls() const
@@ -343,6 +410,14 @@ private:
   static IRECT SidechainRect() { return {305, 339, 700, 375}; }
   static IRECT ExtraThresholdRect() { return {139, 335, 286, 391}; }
   static IRECT FileRect() { return {139, 265, 721, 301}; }
+  static IRECT ToneTypeRect() { return {271, 304, 390, 332}; }
+  static IRECT TonePositionRect() { return {392, 304, 451, 332}; }
+  static IRECT ModelSizeRect() { return {452, 298, 637, 337}; }
+  bool HasExtraTone(const Settings& effect) const
+  {
+    return effect.type == Type::Nam && effect.id > NeuralAmpModeler::kMainCab &&
+           !effect.path.empty() && !SelectedControls();
+  }
   static IRECT PreviousPage() { return {652, 303, 684, 330}; }
   static IRECT NextPage() { return {690, 303, 722, 330}; }
 

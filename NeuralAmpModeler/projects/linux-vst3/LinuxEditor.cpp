@@ -2,6 +2,8 @@
 #include "LinuxEditor.h"
 
 #include <gtk/gtkx.h>
+#undef Bool
+#undef Status
 #include <fstream>
 #include <iterator>
 
@@ -140,7 +142,7 @@ public:
     Refresh();
 
     gtk_widget_show_all(mRoot);
-    mTimer = g_timeout_add(120, +[](gpointer editor) {
+    mTimer = g_timeout_add(120, +[](gpointer editor) -> gboolean {
       static_cast<LinuxEditor*>(editor)->RefreshIfChanged();
       return G_SOURCE_CONTINUE;
     }, this);
@@ -166,7 +168,7 @@ private:
 
   GtkWindow* Window() const { return GTK_WINDOW(gtk_widget_get_toplevel(mRoot)); }
 
-  void Status(const std::string& text)
+  void SetStatus(const std::string& text)
   {
     gtk_label_set_text(GTK_LABEL(mStatus), text.c_str());
   }
@@ -184,6 +186,7 @@ private:
 
   void RefreshIfChanged()
   {
+    mPlugin.OnIdle();
     if (mSignature != ChainSignature())
       Refresh();
   }
@@ -268,7 +271,7 @@ private:
         std::ofstream output(path, std::ios::binary);
         if (mPlugin.SerializeState(state))
           output.write(reinterpret_cast<const char*>(state.GetData()), state.Size());
-        Status(output ? "Saved session" : "Unable to save session");
+        SetStatus(output ? "Saved session" : "Unable to save session");
       }
       else
       {
@@ -282,11 +285,11 @@ private:
           {
             state.PutBytes(data.data(), static_cast<int>(data.size()));
             mPlugin.UnserializeState(state, 0);
-            Status("Loaded session");
+            SetStatus("Loaded session");
           }
         }
         else
-          Status("Unable to open session");
+          SetStatus("Unable to open session");
       }
       g_free(path);
     }
@@ -306,7 +309,7 @@ private:
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
     {
       char* file = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
-      Status(mPlugin.LoadEffectFile(block.id, file, channel));
+      SetStatus(mPlugin.LoadEffectFile(block.id, file, channel));
       g_free(file);
     }
     gtk_widget_destroy(dialog);
@@ -395,7 +398,7 @@ private:
       Button(row, "Move right", [this, selected, position] { mPlugin.MoveEffect(selected, position + 1); Refresh(); });
       if (block->type == Type::Gate)
       {
-        if (selected == 2)
+        if (selected == NeuralAmpModeler::kMainGate)
           Param(mInspector, kNoiseGateThreshold);
         else
           Range(mInspector, "Threshold (dB)", -100.0, 0.0, 0.1, block->threshold, [this, selected](double value) {
@@ -419,25 +422,54 @@ private:
         const std::string label = block->path.empty() ? "Load file..." : std::filesystem::u8path(block->path).filename().string();
         Button(mInspector, label.c_str(), [this, effect = *block] { Load(effect, 0); });
         const bool stereo = mPlugin.GetParam(kChannelMode)->Int() == 1;
-        const bool split = (selected == 1 && !mPlugin.GetParam(kNAMLink)->Bool()) ||
-                           (selected == 3 && !mPlugin.GetParam(kIRLink)->Bool());
+        const bool split = (selected == NeuralAmpModeler::kMainNam && !mPlugin.GetParam(kNAMLink)->Bool()) ||
+                           (selected == NeuralAmpModeler::kMainCab && !mPlugin.GetParam(kIRLink)->Bool());
         if (stereo && split)
           Button(mInspector, "Load right channel...", [this, effect = *block] { Load(effect, 1); });
         if (block->type == Type::Nam)
         {
           const bool left = ModelControlsFor(selected, 0, stereo && split ? "Left model" : nullptr);
           const bool right = stereo && split && ModelControlsFor(selected, 1, "Right model");
-          if (!left && !right && selected == 1)
+          if (!left && !right && selected == NeuralAmpModeler::kMainNam)
             for (const auto index : {kEQActive, kToneStackType, kEQPostNAM, kToneBass, kToneMid, kToneTreble})
               Param(mInspector, index);
-          if (selected == 1 && mPlugin.PrimaryHasModelSize())
+          if (!left && !right && selected > NeuralAmpModeler::kMainCab && !block->path.empty())
+            ExtraTone(*block);
+          if (selected == NeuralAmpModeler::kMainNam && mPlugin.PrimaryHasModelSize())
             Param(mInspector, kSlim);
+          else if (block->hasModelSize)
+            Range(mInspector, "Model size", 0.0, 1.0, 0.01, block->modelSize, [this, selected](double size) {
+              mPlugin.SetExtraEffectParam(selected, kSlim, size);
+            });
         }
       }
     }
     mSignature = ChainSignature();
     gtk_widget_show_all(mChain);
     gtk_widget_show_all(mInspector);
+  }
+
+  void ExtraTone(const Settings& block)
+  {
+    const int id = block.id;
+    Label(mInspector, "Tone stack");
+    Choice(mInspector, {"Off", "On"}, block.tone.active ? 1 : 0, [this, id](int index) {
+      mPlugin.SetExtraEffectParam(id, kEQActive, index);
+    });
+    std::vector<std::string> types;
+    for (int index = 0; index < dsp::tone_stack::kNumToneStackTypes; ++index)
+      types.emplace_back(dsp::tone_stack::GetToneStackTypeName(dsp::tone_stack::ToneStackTypeFromInt(index)));
+    Choice(mInspector, types, block.tone.type, [this, id](int index) {
+      mPlugin.SetExtraEffectParam(id, kToneStackType, index);
+    });
+    Choice(mInspector, {"Pre NAM", "Post NAM"}, block.tone.post ? 1 : 0, [this, id](int index) {
+      mPlugin.SetExtraEffectParam(id, kEQPostNAM, index);
+    });
+    static constexpr std::array<const char*, 3> names {"Bass", "Middle", "Treble"};
+    for (size_t index = 0; index < names.size(); ++index)
+      Range(mInspector, names[index], 0.0, 10.0, 0.1, block.tone.values[index], [this, id, index](double value) {
+        mPlugin.SetExtraEffectParam(id, kToneBass + static_cast<int>(index), value);
+      });
   }
 
   bool ModelControlsFor(int id, int channel, const char* heading)
