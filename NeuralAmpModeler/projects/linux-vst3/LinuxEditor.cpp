@@ -538,6 +538,9 @@ public:
     if (!mLoop || mLoop->registerTimer(this, 16) != Steinberg::kResultOk)
       return Steinberg::kResultFalse;
     mPlug = gtk_plug_new(static_cast<Window>(reinterpret_cast<uintptr_t>(parent)));
+    g_signal_connect(mPlug, "destroy", G_CALLBACK(+[](GtkWidget*, gpointer view) {
+      static_cast<LinuxView*>(view)->mPlug = nullptr;
+    }), this);
     gtk_container_add(GTK_CONTAINER(mPlug), MakeLinuxEditor(mPlugin));
     gtk_widget_show_all(mPlug);
     return CPluginView::attached(parent, type);

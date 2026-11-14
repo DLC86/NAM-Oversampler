@@ -101,7 +101,9 @@ public:
     }
     if (effect->id > NeuralAmpModeler::kMainCab && effect->type != Type::Gate)
     {
-      const std::string fileName = effect->path.empty() ? "Load file..." : std::filesystem::u8path(effect->path).filename().string();
+      const auto lastSeparator = effect->path.find_last_of("/\\");
+      const auto start = lastSeparator == std::string::npos ? 0 : lastSeparator + 1;
+      const std::string fileName = effect->path.empty() ? "Load file..." : effect->path.substr(start);
       Button(g, FileRect(), fileName.c_str(), kText);
     }
     if (const auto controls = SelectedControls())
