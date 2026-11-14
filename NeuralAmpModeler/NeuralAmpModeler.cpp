@@ -9,7 +9,6 @@
 #include <sstream>
 #include <unordered_map>
 #include <utility>
-#include <tuple>
 
 #if defined(_WIN32)
   #ifndef WIN32_LEAN_AND_MEAN
@@ -92,7 +91,7 @@ EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char
   return pGraphics->ShowMessageBox(str, caption, type);
 #endif
 }
-#include "NAMChainEditor.h"
+#include "NAMPlayerEditor.h"
 #endif
 
 const std::string kCalibrateInputParamName = "CalibrateInput";
@@ -283,295 +282,16 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     return MakeGraphics(*this, PLUG_WIDTH, PLUG_HEIGHT, PLUG_FPS, scaleFactor);
   };
 
-  mLayoutFunc = [&](IGraphics* pGraphics) {
-    pGraphics->AttachCornerResizer(EUIResizerMode::Scale, false);
-    pGraphics->AttachTextEntryControl();
-    pGraphics->EnableMouseOver(true);
-    pGraphics->EnableTooltips(true);
-    pGraphics->EnableMultiTouch(true);
-
-    pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
-    pGraphics->LoadFont("Michroma-Regular", MICHROMA_FN);
-
-    const auto gearSVG = pGraphics->LoadSVG(GEAR_FN);
-    const auto tunerSVG = pGraphics->LoadSVG(TUNER_FN);
-    const auto fileSVG = pGraphics->LoadSVG(FILE_FN);
-    const auto globeSVG = pGraphics->LoadSVG(GLOBE_ICON_FN);
-    const auto linkSVG = pGraphics->LoadSVG(LINK_ICON_FN);
-    const auto crossSVG = pGraphics->LoadSVG(CLOSE_BUTTON_FN);
-    const auto rightArrowSVG = pGraphics->LoadSVG(RIGHT_ARROW_FN);
-    const auto leftArrowSVG = pGraphics->LoadSVG(LEFT_ARROW_FN);
-    const auto irIconOnSVG = pGraphics->LoadSVG(IR_ICON_ON_FN);
-    const auto backgroundBitmap = pGraphics->LoadBitmap(BACKGROUND_FN);
-    const auto fileBackgroundBitmap = pGraphics->LoadBitmap(FILEBACKGROUND_FN);
-    const auto inputLevelBackgroundBitmap = pGraphics->LoadBitmap(INPUTLEVELBACKGROUND_FN);
-    const auto knobBackgroundBitmap = pGraphics->LoadBitmap(KNOBBACKGROUND_FN);
-    const auto switchHandleBitmap = pGraphics->LoadBitmap(SLIDESWITCHHANDLE_FN);
-    const auto meterBackgroundBitmap = pGraphics->LoadBitmap(METERBACKGROUND_FN);
-    const auto ttsLogoBitmap = pGraphics->LoadBitmap(TTS_LOGO_FN);
-
-    const auto b = pGraphics->GetBounds();
-    const IRECT internalPresetArea {317, 17, 652, 48};
-    const IRECT inputKnobArea {22, 318, 102, 407};
-    const IRECT outputKnobArea {757, 318, 840, 407};
-    const IRECT noiseGateArea {157, 303, 283, 415};
-    const IRECT bassKnobArea {151, 341, 291, 432};
-    const IRECT midKnobArea {301, 341, 441, 432};
-    const IRECT trebleKnobArea {451, 341, 591, 432};
-    const IRECT inputBoostArea {24, 414, 101, 441};
-    const IRECT eqToggleArea {144, 302, 225, 333};
-    const IRECT toneStackSelectorArea {234, 302, 412, 333};
-    const IRECT eqPositionArea {420, 302, 523, 333};
-    const IRECT slimIconArea {535, 303, 638, 332};
-
-    const IRECT modelArea {144, 264, 720, 299};
-    const IRECT namLinkArea {421, 268, 443, 295};
-    const IRECT modelLeftArea {144, 264, 417, 299};
-    const IRECT modelRightArea {447, 264, 720, 299};
-    const auto irArea = modelArea;
-    const auto irLinkArea = namLinkArea;
-    const auto irLeftArea = modelLeftArea;
-    const auto irRightArea = modelRightArea;
-    const IRECT irSwitchArea {148, 313, 175, 337};
-    const IRECT irSwitchAreaLeft {148, 313, 175, 337};
-    const IRECT irSwitchAreaRight {184, 313, 211, 337};
-
-    const IRECT cutFiltersButtonArea {133, 466, 226, 496};
-    const IRECT channelModeArea {235, 466, 327, 496};
-    const IRECT inputMeterArea {47, 246, 77, 319};
-    const IRECT outputMeterArea {785, 246, 815, 319};
-    const IRECT settingsButtonArea {805, 15, 840, 50};
-    const IRECT tunerButtonArea {763, 15, 798, 50};
-    const IRECT oversamplingButtonArea {675, 15, 707, 50};
-    const IRECT oversamplingIndicatorArea {710, 15, 753, 50};
-
-    // Model loader button (Left)
-    auto loadModelCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
-      if (fileName.GetLength())
-      {
-        const std::string msg = _StageModel(fileName);
-        if (msg.size())
-        {
-          std::stringstream ss;
-          ss << "Failed to load NAM model. Message:\n\n" << msg;
-          _ShowMessageBox(GetUI(), ss.str().c_str(), "Failed to load model!", kMB_OK);
-        }
-        std::cout << "Loaded: " << fileName.Get() << std::endl;
-      }
-    };
-
-    // Model loader button (Right)
-    auto loadModelRightCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
-      if (fileName.GetLength())
-      {
-        const std::string msg = _StageModelRight(fileName);
-        if (msg.size())
-        {
-          std::stringstream ss;
-          ss << "Failed to load Right NAM model. Message:\n\n" << msg;
-          _ShowMessageBox(GetUI(), ss.str().c_str(), "Failed to load model!", kMB_OK);
-        }
-        std::cout << "Loaded Right: " << fileName.Get() << std::endl;
-      }
-    };
-
-    // IR loader button (Left)
-    auto loadIRCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
-      if (fileName.GetLength())
-      {
-        mIRPath = fileName;
-        const dsp::wav::LoadReturnCode retCode = _StageIR(fileName);
-        if (retCode != dsp::wav::LoadReturnCode::SUCCESS)
-        {
-          std::stringstream message;
-          message << "Failed to load IR file " << fileName.Get() << ":\n";
-          message << dsp::wav::GetMsgForLoadReturnCode(retCode);
-
-          _ShowMessageBox(GetUI(), message.str().c_str(), "Failed to load IR!", kMB_OK);
-        }
-      }
-    };
-
-    // IR loader button (Right)
-    auto loadIRRightCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
-      if (fileName.GetLength())
-      {
-        mIRRightPath = fileName;
-        const dsp::wav::LoadReturnCode retCode = _StageIRRight(fileName);
-        if (retCode != dsp::wav::LoadReturnCode::SUCCESS)
-        {
-          std::stringstream message;
-          message << "Failed to load Right IR file " << fileName.Get() << ":\n";
-          message << dsp::wav::GetMsgForLoadReturnCode(retCode);
-
-          _ShowMessageBox(GetUI(), message.str().c_str(), "Failed to load IR!", kMB_OK);
-        }
-      }
-    };
-
-    pGraphics->AttachPanelBackground(IColor(255, 15, 18, 24));
-    pGraphics->AttachControl(new NAMChainEditor(b, *this));
-    pGraphics->AttachControl(new NAMInternalPresetSlotControl(internalPresetArea, leftArrowSVG, rightArrowSVG),
-                             kCtrlTagInternalPresetSlot);
-
-#ifdef NAM_PICK_DIRECTORY
-    const std::string defaultNamFileString = "Select model directory...";
-    const std::string defaultIRString = "Select IR directory...";
-#else
-    const std::string defaultNamFileString = "Select model...";
-    const std::string defaultIRString = "Select IR...";
-#endif
-    // Getting started page listing additional resources
-    const char* const getUrl = "https://www.neuralampmodeler.com/users#comp-marb84o5";
-    pGraphics->AttachControl(
-      new NAMFileBrowserControl(modelLeftArea, kMsgTagClearModel, defaultNamFileString.c_str(), "nam",
-                                loadModelCompletionHandler, style, fileSVG, crossSVG, leftArrowSVG, rightArrowSVG,
-                                fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl, kNAMToggle),
-      kCtrlTagModelFileBrowser);
-
-    pGraphics->AttachControl(new NAMIconSwitchControl(namLinkArea, linkSVG, kNAMLink), kCtrlTagNAMLink)
-      ->SetTooltip("Link Left and Right NAM models");
-
-    pGraphics->AttachControl(
-      new NAMFileBrowserControl(modelRightArea, kMsgTagClearModelRight, defaultNamFileString.c_str(), "nam",
-                                loadModelRightCompletionHandler, style, fileSVG, crossSVG, leftArrowSVG, rightArrowSVG,
-                                fileBackgroundBitmap, globeSVG, "Get NAM Models", getUrl, kNAMToggle),
-      kCtrlTagModelRightFileBrowser);
-
-
-
-    pGraphics->AttachControl(new NAMIconSwitchControl(irSwitchArea, irIconOnSVG, kIRToggle), kCtrlTagIRToggle)
-      ->SetTooltip("Bypass IR");
-    pGraphics->AttachControl(new NAMIconSwitchControl(irSwitchAreaLeft, irIconOnSVG, kIRToggle), kCtrlTagIRToggleLeft)
-      ->SetTooltip("Bypass Left IR");
-    pGraphics->AttachControl(new NAMIconSwitchControl(irSwitchAreaRight, irIconOnSVG, kIRToggleRight), kCtrlTagIRToggleRight)
-      ->SetTooltip("Bypass Right IR");
-
-    pGraphics->AttachControl(
-      new NAMFileBrowserControl(irLeftArea, kMsgTagClearIR, defaultIRString.c_str(), "wav", loadIRCompletionHandler, style,
-                                fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
-                                "Get IRs", getUrl, kIRToggle),
-      kCtrlTagIRFileBrowser);
-
-    pGraphics->AttachControl(new NAMIconSwitchControl(irLinkArea, linkSVG, kIRLink), kCtrlTagIRLink)
-      ->SetTooltip("Link Left and Right IRs");
-
-    pGraphics->AttachControl(
-      new NAMFileBrowserControl(irRightArea, kMsgTagClearIRRight, defaultIRString.c_str(), "wav", loadIRRightCompletionHandler, style,
-                                fileSVG, crossSVG, leftArrowSVG, rightArrowSVG, fileBackgroundBitmap, globeSVG,
-                                "Get IRs", getUrl, kIRToggleRight),
-      kCtrlTagIRRightFileBrowser);
-    pGraphics->AttachControl(new NAMCutFiltersButtonControl(cutFiltersButtonArea,
-                                                            [pGraphics](IControl* pCaller) {
-                                                              pGraphics->GetControlWithTag(kCtrlTagCutFiltersBox)
-                                                                ->As<NAMCutFiltersPageControl>()
-                                                                ->HideAnimated(false);
-                                                            }),
-                             kCtrlTagCutFiltersButton);
-    pGraphics->AttachControl(new NAMSwitchControl(inputBoostArea, kInputBoost, "Boost", style, switchHandleBitmap))
-      ->SetTooltip("Input boost: +12 dB after the input gain control");
-    pGraphics->AttachControl(new NAMSwitchControl(eqToggleArea, kEQActive, "EQ", style, switchHandleBitmap), -1, "EQ_KNOBS");
-    pGraphics->AttachControl(
-      new NAMToneStackSelectorControl(toneStackSelectorArea, kToneStackType, leftArrowSVG, rightArrowSVG,
-                                      [pGraphics](IControl* pCaller) {
-                                        pGraphics->GetControlWithTag(kCtrlTagToneStackBox)
-                                          ->As<NAMToneStackPageControl>()
-                                          ->HideAnimated(false);
-                                      }),
-      kCtrlTagToneStackSelector, "EQ_KNOBS");
-    pGraphics->AttachControl(new NAMSwitchControl(eqPositionArea, kEQPostNAM, "Pre/Post", style, switchHandleBitmap),
-                             kCtrlTagEQPostNAM, "EQ_KNOBS")
-      ->SetTooltip("EQ position: off = pre NAM, on = post NAM");
-    pGraphics->AttachControl(new NAMChannelModeControl(channelModeArea, kChannelMode, "", style),
-                             kCtrlTagChannelMode)
-      ->SetTooltip("Channel mode: mono or stereo");
-
-    const IVStyle slimStyle = style.WithColor(kFG, PluginColors::OFF_WHITE)
-                                 .WithValueText(IText(DEFAULT_TEXT_SIZE, EVAlign::Top, PluginColors::NAM_THEMEFONTCOLOR))
-                                 .WithLabelText(style.labelText)
-                                 .WithLabelOrientation(EOrientation::South);
-
-    pGraphics->AttachControl(
-      new NAMModelSizeSliderControl(slimIconArea, kSlim, "Model Size", slimStyle, true, EDirection::Horizontal, DEFAULT_GEARING, 4.f),
-      kCtrlTagSlimmableIcon);
-
-    // The knobs
-    pGraphics->AttachControl(new NAMKnobControl(inputKnobArea, kInputLevel, "", style, knobBackgroundBitmap));
-    pGraphics->AttachControl(new NAMKnobControl(noiseGateArea, kNoiseGateThreshold, "", style, knobBackgroundBitmap), -1, "GATE_CONTROLS");
-    pGraphics->AttachControl(
-      new NAMKnobControl(bassKnobArea, kToneBass, "", style, knobBackgroundBitmap), -1, "EQ_KNOBS");
-    pGraphics->AttachControl(
-      new NAMKnobControl(midKnobArea, kToneMid, "", style, knobBackgroundBitmap), -1, "EQ_KNOBS");
-    pGraphics->AttachControl(
-      new NAMKnobControl(trebleKnobArea, kToneTreble, "", style, knobBackgroundBitmap), -1, "EQ_KNOBS");
-    pGraphics->AttachControl(new NAMKnobControl(outputKnobArea, kOutputLevel, "", style, knobBackgroundBitmap));
-
-    // Settings/help/about box
-    pGraphics->AttachControl(new NAMBitmapButtonControl(
-      oversamplingButtonArea,
-      [pGraphics](IControl* pCaller) {
-        pGraphics->GetControlWithTag(kCtrlTagOversamplingBox)->As<NAMOversamplingPageControl>()->HideAnimated(false);
-      },
-      ttsLogoBitmap));
-    pGraphics->AttachControl(new NAMOversamplingIndicatorControl(oversamplingIndicatorArea, kOversamplingFactor,
-                                                                 kOfflineOversamplingFactor),
-                             kCtrlTagOversamplingIndicator);
-
-    pGraphics->AttachControl(new NAMCircleButtonControl(
-      tunerButtonArea,
-      [pGraphics](IControl* pCaller) {
-        pGraphics->GetControlWithTag(kCtrlTagTunerBox)->As<NAMTunerPageControl>()->HideAnimated(false);
-      },
-      tunerSVG));
-
-    pGraphics->AttachControl(new NAMCircleButtonControl(
-      settingsButtonArea,
-      [pGraphics](IControl* pCaller) {
-        pGraphics->GetControlWithTag(kCtrlTagSettingsBox)->As<NAMSettingsPageControl>()->HideAnimated(false);
-      },
-      gearSVG));
-
-    // CutFilters / MIXER page (attached BEFORE meters so meters draw on top of MIXER page)
-    pGraphics
-      ->AttachControl(new NAMCutFiltersPageControl(b, backgroundBitmap, knobBackgroundBitmap, switchHandleBitmap,
-                                                   crossSVG, linkSVG, style, radioButtonStyle),
-                      kCtrlTagCutFiltersBox)
-      ->Hide(true);
-
-    // The meters
-    pGraphics->AttachControl(new NAMMeterControl(inputMeterArea, meterBackgroundBitmap, style), kCtrlTagInputMeter);
-    pGraphics->AttachControl(new NAMMeterControl(outputMeterArea, meterBackgroundBitmap, style), kCtrlTagOutputMeter);
-
-    // Overlay pages (attached AFTER meters so their background bitmaps naturally cover meters instantly without delay)
-    pGraphics
-      ->AttachControl(new NAMSettingsPageControl(b, backgroundBitmap, inputLevelBackgroundBitmap, switchHandleBitmap,
-                                                 crossSVG, style, radioButtonStyle),
-                      kCtrlTagSettingsBox)
-      ->Hide(true);
-
-    pGraphics
-      ->AttachControl(
-        new NAMOversamplingPageControl(b, backgroundBitmap, crossSVG, style, radioButtonStyle), kCtrlTagOversamplingBox)
-      ->Hide(true);
-
-    pGraphics
-      ->AttachControl(new NAMTunerPageControl(b, backgroundBitmap, switchHandleBitmap, crossSVG, style),
-                      kCtrlTagTunerBox)
-      ->Hide(true);
-
-    pGraphics
-      ->AttachControl(new NAMToneStackPageControl(b, backgroundBitmap, crossSVG, style, radioButtonStyle),
-                      kCtrlTagToneStackBox)
-      ->Hide(true);
-
-    SelectEffect(mSelectedEffect);
-    pGraphics->ForAllControlsFunc([](IControl* pControl) {
-      pControl->SetMouseEventsWhenDisabled(true);
-      pControl->SetMouseOverWhenDisabled(true);
-    });
-
-    // pGraphics->GetControlWithTag(kCtrlTagOutNorm)->SetMouseEventsWhenDisabled(false);
-    // pGraphics->GetControlWithTag(kCtrlTagCalibrateInput)->SetMouseEventsWhenDisabled(false);
+  mLayoutFunc = [&](IGraphics* graphics) {
+    graphics->AttachCornerResizer(EUIResizerMode::Scale, false);
+    graphics->AttachTextEntryControl();
+    graphics->EnableMouseOver(true);
+    graphics->EnableTooltips(true);
+    graphics->LoadFont("Roboto-Regular", ROBOTO_FN);
+    graphics->AttachPanelBackground(PlayerPalette::surface);
+    graphics->AttachControl(new NAMPlayerEditor(graphics->GetBounds(), *this));
+    graphics->AttachControl(new NAMPlayerMeter({23, 97, 101, 106}), kCtrlTagInputMeter);
+    graphics->AttachControl(new NAMPlayerMeter({759, 97, 837, 106}), kCtrlTagOutputMeter);
   };
 #endif
 }
@@ -2554,143 +2274,8 @@ void NeuralAmpModeler::OnParamChange(int paramIdx)
 void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
 {
 #if PLUG_HAS_UI
-  if (mUpdatingLinkAndBrowserAvailability)
-    return;
-  mUpdatingLinkAndBrowserAvailability = true;
-
-  if (auto pGraphics = GetUI())
-  {
-    const bool isStereo = _IsStereoRequested();
-    const bool namActive = GetParam(kNAMToggle)->Bool();
-    const bool irActive = GetParam(kIRToggle)->Bool();
-    const bool namLink = GetParam(kNAMLink)->Bool();
-    const bool irLink = GetParam(kIRLink)->Bool();
-
-    const bool inspectNam = mSelectedEffect == kMainNam;
-    const bool inspectCab = mSelectedEffect == kMainCab;
-    const bool hasParametric = GetEffectModelControls(kMainNam, 0) ||
-                              (isStereo && GetEffectModelControls(kMainNam, 1));
-    const IRECT modelArea {144, 264, 720, 299};
-    const IRECT namLinkArea {421, 268, 443, 295};
-    const IRECT modelLeftArea {144, 264, 417, 299};
-    const IRECT modelRightArea {447, 264, 720, 299};
-    const auto irArea = modelArea;
-    const auto irLinkArea = namLinkArea;
-    const auto irLeftArea = modelLeftArea;
-    const auto irRightArea = modelRightArea;
-
-    pGraphics->ForControlInGroup("EQ_KNOBS", [&](IControl* control) {
-      control->Hide(!inspectNam || hasParametric);
-    });
-    pGraphics->ForControlInGroup("GATE_CONTROLS", [&](IControl* control) {
-      control->Hide(mSelectedEffect != kMainGate);
-    });
-    if (auto* modelSize = pGraphics->GetControlWithTag(kCtrlTagSlimmableIcon))
-      modelSize->Hide(!inspectNam || !PrimaryHasModelSize());
-
-    if (auto* leftNamCtrl = dynamic_cast<NAMFileBrowserControl*>(pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser)))
-    {
-      leftNamCtrl->SetStereoMode(isStereo);
-#ifdef NAM_PICK_DIRECTORY
-      leftNamCtrl->SetDefaultLabelStr(isStereo ? "Select left model directory..." : "Select model directory...");
-#else
-      leftNamCtrl->SetDefaultLabelStr(isStereo ? "Select left model..." : "Select model...");
-#endif
-      leftNamCtrl->SetTargetAndDrawRECTs(isStereo ? modelLeftArea : modelArea);
-      leftNamCtrl->Hide(!inspectNam);
-      leftNamCtrl->SetDisabled(!namActive);
-      leftNamCtrl->SetDirty(false);
-    }
-    if (auto* rightNamCtrl = dynamic_cast<NAMFileBrowserControl*>(pGraphics->GetControlWithTag(kCtrlTagModelRightFileBrowser)))
-    {
-      rightNamCtrl->SetStereoMode(isStereo);
-#ifdef NAM_PICK_DIRECTORY
-      rightNamCtrl->SetDefaultLabelStr("Select right model directory...");
-#else
-      rightNamCtrl->SetDefaultLabelStr("Select right model...");
-#endif
-      rightNamCtrl->SetTargetAndDrawRECTs(modelRightArea);
-      bool rightNamDisabled = !namActive || !isStereo || namLink;
-      rightNamCtrl->SetDisabled(rightNamDisabled);
-      rightNamCtrl->Hide(!inspectNam || !isStereo);
-      rightNamCtrl->SetDirty(false);
-    }
-    if (auto* namLinkCtrl = pGraphics->GetControlWithTag(kCtrlTagNAMLink))
-    {
-      namLinkCtrl->SetTargetAndDrawRECTs(namLinkArea);
-      namLinkCtrl->SetDisabled(!isStereo);
-      namLinkCtrl->Hide(!inspectNam || !isStereo);
-      namLinkCtrl->SetDirty(false);
-    }
-    if (auto* leftIrCtrl = dynamic_cast<NAMFileBrowserControl*>(pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)))
-    {
-      leftIrCtrl->SetStereoMode(isStereo);
-#ifdef NAM_PICK_DIRECTORY
-      leftIrCtrl->SetDefaultLabelStr(isStereo ? "Select left IR directory..." : "Select IR directory...");
-#else
-      leftIrCtrl->SetDefaultLabelStr(isStereo ? "Select left IR..." : "Select IR...");
-#endif
-      leftIrCtrl->SetTargetAndDrawRECTs(isStereo ? irLeftArea : irArea);
-      leftIrCtrl->Hide(!inspectCab);
-      leftIrCtrl->SetDisabled(!irActive);
-      leftIrCtrl->SetDirty(false);
-    }
-    const bool irActiveRight = (irLink || !isStereo) ? irActive : GetParam(kIRToggleRight)->Bool();
-    if (auto* rightIrCtrl = dynamic_cast<NAMFileBrowserControl*>(pGraphics->GetControlWithTag(kCtrlTagIRRightFileBrowser)))
-    {
-      rightIrCtrl->SetStereoMode(isStereo);
-#ifdef NAM_PICK_DIRECTORY
-      rightIrCtrl->SetDefaultLabelStr("Select right IR directory...");
-#else
-      rightIrCtrl->SetDefaultLabelStr("Select right IR...");
-#endif
-      rightIrCtrl->SetTargetAndDrawRECTs(irRightArea);
-      bool rightIrDisabled = !irActiveRight || !isStereo || irLink;
-      rightIrCtrl->SetDisabled(rightIrDisabled);
-      rightIrCtrl->Hide(!inspectCab || !isStereo);
-      rightIrCtrl->SetDirty(false);
-    }
-    if (auto* irLinkCtrl = pGraphics->GetControlWithTag(kCtrlTagIRLink))
-    {
-      irLinkCtrl->SetTargetAndDrawRECTs(irLinkArea);
-      irLinkCtrl->SetDisabled(!isStereo);
-      irLinkCtrl->Hide(!inspectCab || !isStereo);
-      irLinkCtrl->SetDirty(false);
-    }
-
-    const bool splitIRButtons = isStereo && !irLink;
-    const IRECT irSwitchArea {148, 313, 175, 337};
-    const IRECT irSwitchAreaLeft {148, 313, 175, 337};
-    const IRECT irSwitchAreaRight {184, 313, 211, 337};
-
-    if (auto* singleIrSwitch = pGraphics->GetControlWithTag(kCtrlTagIRToggle))
-    {
-      singleIrSwitch->SetTargetAndDrawRECTs(irSwitchArea);
-      singleIrSwitch->Hide(!inspectCab || splitIRButtons);
-      singleIrSwitch->SetDirty(false);
-    }
-    if (auto* leftIrSwitch = pGraphics->GetControlWithTag(kCtrlTagIRToggleLeft))
-    {
-      leftIrSwitch->SetTargetAndDrawRECTs(irSwitchAreaLeft);
-      leftIrSwitch->Hide(!inspectCab || !splitIRButtons);
-      leftIrSwitch->SetDirty(false);
-    }
-    if (auto* rightIrSwitch = pGraphics->GetControlWithTag(kCtrlTagIRToggleRight))
-    {
-      rightIrSwitch->SetTargetAndDrawRECTs(irSwitchAreaRight);
-      rightIrSwitch->Hide(!inspectCab || !splitIRButtons);
-      rightIrSwitch->SetDirty(false);
-    }
-    if (auto* filtersPage = pGraphics->GetControlWithTag(kCtrlTagCutFiltersBox))
-    {
-      if (auto* cutFiltersPage = dynamic_cast<NAMCutFiltersPageControl*>(filtersPage))
-      {
-        cutFiltersPage->SetMonoState(!isStereo);
-      }
-    }
-  }
-
-  mUpdatingLinkAndBrowserAvailability = false;
+  if (auto* graphics = GetUI())
+    graphics->SetAllControlsDirty();
 #endif
 }
 
@@ -3213,7 +2798,7 @@ void NeuralAmpModeler::_SetOutputGain()
             targetMode = 2; // Calibrated
           }
         }
-        
+
         if (targetMode == 1) // Normalized
         {
           if (const auto loudness = _GetEffectiveModelLoudness())

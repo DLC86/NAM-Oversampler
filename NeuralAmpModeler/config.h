@@ -33,7 +33,7 @@
 #define PLUG_HAS_UI 1
 #endif
 #define PLUG_WIDTH 860
-#define PLUG_HEIGHT 510
+#define PLUG_HEIGHT 565
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
 #define PLUG_HOST_RESIZE 0

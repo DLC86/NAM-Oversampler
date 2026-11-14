@@ -86,24 +86,166 @@ void Range(GtkWidget* box, const char* name, double lo, double hi, double step, 
     +[](gpointer data, GClosure*) { delete static_cast<Callback*>(data); }, GConnectFlags(0));
 }
 
+
+struct RotaryBinding
+{
+  double min;
+  double max;
+  double step;
+  double value;
+  double nominal;
+  double previousY = 0.0;
+  bool active = false;
+  GtkWidget* number = nullptr;
+  std::function<void(double)> update;
+
+  void Set(GtkWidget* drawing, double requested)
+  {
+    value = std::clamp(requested, min, max);
+    char display[52];
+    g_snprintf(display, sizeof(display), "%.2f", value);
+    gtk_label_set_text(GTK_LABEL(number), display);
+    gtk_widget_queue_draw(drawing);
+    update(value);
+  }
+};
+
+void Rotary(GtkWidget* parent, const char* title, double minimum, double maximum, double step,
+            double value, double nominal, std::function<void(double)> update)
+{
+  auto* cell = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+  Pack(parent, cell, true);
+  auto* name = gtk_label_new(title);
+  gtk_widget_set_name(name, "nam-rotary-label");
+  Pack(cell, name);
+  auto* drawing = gtk_drawing_area_new();
+  gtk_widget_set_size_request(drawing, 68, 64);
+  gtk_widget_set_halign(drawing, GTK_ALIGN_CENTER);
+  Pack(cell, drawing);
+  char text[52];
+  g_snprintf(text, sizeof(text), "%.2f", value);
+  auto* number = gtk_label_new(text);
+  gtk_widget_set_name(number, "nam-rotary-value");
+  Pack(cell, number);
+
+  auto* knob = new RotaryBinding {minimum, maximum, step, value, nominal, 0, false, number, std::move(update)};
+  g_object_set_data_full(G_OBJECT(drawing), "nam-rotary", knob,
+    +[](gpointer data) { delete static_cast<RotaryBinding*>(data); });
+  gtk_widget_add_events(drawing, GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_POINTER_MOTION_MASK | GDK_SCROLL_MASK);
+  g_signal_connect(drawing, "draw", G_CALLBACK(+[](GtkWidget* widget, cairo_t* cr, gpointer data) -> gboolean {
+    const auto& state = *static_cast<RotaryBinding*>(data);
+    const double radius = std::min(gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget)) / 2.0 - 4;
+    const double x = gtk_widget_get_allocated_width(widget) / 2.0;
+    const double y = gtk_widget_get_allocated_height(widget) / 2.0;
+    constexpr double begin = -3.926990817, end = .7853981634;
+    const double ratio = std::clamp((state.value - state.min) / (state.max - state.min), 0.0, 1.0);
+    const double angle = begin + (end - begin) * ratio;
+    cairo_set_line_width(cr, radius * .16);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    cairo_set_source_rgb(cr, .176, .176, .176);
+    cairo_arc(cr, x, y, radius, begin, end);
+    cairo_stroke(cr);
+    if (ratio > .001)
+    {
+      cairo_set_source_rgb(cr, .749, 0, 0);
+      cairo_arc(cr, x, y, radius, begin, angle);
+      cairo_stroke(cr);
+    }
+    const auto face = radius * .72;
+    auto* gradient = cairo_pattern_create_linear(x, y - face, x, y + face);
+    cairo_pattern_add_color_stop_rgb(gradient, 0, .141, .141, .141);
+    cairo_pattern_add_color_stop_rgb(gradient, 1, .110, .110, .110);
+    cairo_set_source(cr, gradient);
+    cairo_arc(cr, x, y, face, 0, 6.283185307);
+    cairo_fill(cr);
+    cairo_pattern_destroy(gradient);
+    cairo_set_source_rgb(cr, .749, 0, 0);
+    cairo_set_line_width(cr, radius * .09);
+    cairo_move_to(cr, x + face * .35 * std::cos(angle), y + face * .35 * std::sin(angle));
+    cairo_line_to(cr, x + face * .85 * std::cos(angle), y + face * .85 * std::sin(angle));
+    cairo_stroke(cr);
+    return TRUE;
+  }), knob);
+  g_signal_connect(drawing, "button-press-event", G_CALLBACK(+[](GtkWidget* widget, GdkEventButton* event, gpointer data) -> gboolean {
+    if (event->button != 1)
+      return FALSE;
+    auto& state = *static_cast<RotaryBinding*>(data);
+    if (event->type == GDK_2BUTTON_PRESS)
+      state.Set(widget, state.nominal);
+    state.previousY = event->y;
+    state.active = true;
+    return TRUE;
+  }), knob);
+  g_signal_connect(drawing, "button-release-event", G_CALLBACK(+[](GtkWidget*, GdkEventButton*, gpointer data) -> gboolean {
+    static_cast<RotaryBinding*>(data)->active = false;
+    return TRUE;
+  }), knob);
+  g_signal_connect(drawing, "motion-notify-event", G_CALLBACK(+[](GtkWidget* widget, GdkEventMotion* event, gpointer data) -> gboolean {
+    auto& state = *static_cast<RotaryBinding*>(data);
+    if (state.active)
+    {
+      const auto scale = (event->state & GDK_SHIFT_MASK) ? .0015 : .0075;
+      state.Set(widget, state.value + (state.previousY - event->y) * (state.max - state.min) * scale);
+      state.previousY = event->y;
+    }
+    return TRUE;
+  }), knob);
+  g_signal_connect(drawing, "scroll-event", G_CALLBACK(+[](GtkWidget* widget, GdkEventScroll* event, gpointer data) -> gboolean {
+    auto& state = *static_cast<RotaryBinding*>(data);
+    const auto direction = event->direction == GDK_SCROLL_UP ? 1 : -1;
+    state.Set(widget, state.value + direction * (event->state & GDK_SHIFT_MASK ? 1 : 5) * state.step);
+    return TRUE;
+  }), knob);
+}
+
 class LinuxEditor
 {
 public:
   explicit LinuxEditor(NeuralAmpModeler& plugin) : mPlugin(plugin)
   {
     mRoot = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    gtk_widget_set_size_request(mRoot, 760, 480);
+    gtk_widget_set_size_request(mRoot, 790, 520);
     gtk_widget_set_name(mRoot, "nam-steroids");
-    gtk_container_set_border_width(GTK_CONTAINER(mRoot), 16);
-    auto* header = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    Pack(mRoot, header);
-    auto* title = gtk_label_new("NAM ON STEROIDS");
-    gtk_widget_set_name(title, "nam-title");
-    gtk_widget_set_halign(title, GTK_ALIGN_START);
-    Pack(header, title, true);
-    Button(header, "Open session", [this] { Session(false); });
-    Button(header, "Save session", [this] { Session(true); });
-    Button(header, "Settings", [this] { SettingsWindow(); });
+    gtk_container_set_border_width(GTK_CONTAINER(mRoot), 14);
+
+    auto* top = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_set_name(top, "nam-top");
+    gtk_container_set_border_width(GTK_CONTAINER(top), 7);
+    Pack(mRoot, top);
+    for (int index : {static_cast<int>(kInputLevel), -1, static_cast<int>(kOutputLevel)})
+    {
+      if (index >= 0)
+      {
+        const auto* param = mPlugin.GetParam(index);
+        auto* column = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+        gtk_widget_set_size_request(column, 105, -1);
+        Pack(top, column);
+        Rotary(column, index == kInputLevel ? "Input" : "Output", param->GetMin(), param->GetMax(), .1,
+               param->Value(), param->GetDefault(), [this, index](double value) { SendParam(index, value); });
+      }
+      else
+      {
+        auto* labels = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+        gtk_widget_set_valign(labels, GTK_ALIGN_CENTER);
+        Pack(top, labels, true);
+        auto* title = gtk_label_new("NAM On Steroids");
+        gtk_widget_set_name(title, "nam-title");
+        Pack(labels, title);
+        auto* version = gtk_label_new("v" PLUG_VERSION_STR);
+        gtk_widget_set_name(version, "nam-rotary-value");
+        Pack(labels, version);
+      }
+    }
+
+    auto* actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 7);
+    Pack(mRoot, actions);
+    Button(actions, "<", [this] { mPlugin.SelectAdjacentInternalPreset(-1); Refresh(); });
+    Button(actions, "Presets", [this] { PresetWindow(); });
+    Button(actions, ">", [this] { mPlugin.SelectAdjacentInternalPreset(1); Refresh(); });
+    Button(actions, "Open session", [this] { Session(false); });
+    Button(actions, "Save session", [this] { Session(true); });
+    Button(actions, "Oversampling", [this] { QualityWindow(); });
+    Button(actions, "Settings", [this] { SettingsWindow(); });
 
     auto* bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     Pack(mRoot, bar);
@@ -128,14 +270,10 @@ public:
     gtk_container_set_border_width(GTK_CONTAINER(mInspector), 10);
     gtk_container_add(GTK_CONTAINER(scroller), mInspector);
 
-    auto* footer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
-    Pack(mRoot, footer);
-    for (const auto param : {kInputLevel, kOutputLevel, kOversamplingFactor})
-    {
-      auto* column = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-      Pack(footer, column, true);
-      Param(column, param);
-    }
+    mFiles = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 7);
+    gtk_widget_set_name(mFiles, "nam-files");
+    gtk_container_set_border_width(GTK_CONTAINER(mFiles), 8);
+    Pack(mRoot, mFiles);
     mStatus = Label(mRoot, "");
     gtk_label_set_line_wrap(GTK_LABEL(mStatus), true);
     InstallStyle();
@@ -156,11 +294,16 @@ private:
   {
     auto* provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
-      "#nam-steroids { background-color: #11151f; color: #ecf0f7; font-family: Roboto, sans-serif; }"
-      "#nam-title { color: #ecf0f7; font-size: 21px; font-weight: bold; }"
-      "#nam-steroids button { border-radius: 6px; }"
-      "#nam-steroids button.suggested-action { background: #295c68; color: white; }"
-      "#nam-steroids button.nam-bypassed { opacity: 0.58; }", -1, nullptr);
+      "#nam-steroids { background-color: #0f0f0f; color: #ededed; font-family: Roboto, sans-serif; }"
+      "#nam-top, #nam-files { background-color: #1b1b1b; border: 1px solid #292929; }"
+      "#nam-title { color: #bf0000; font-size: 32px; font-weight: bold; }"
+      "#nam-rotary-label, #nam-rotary-value { color: #a1a1a1; font-size: 13px; }"
+      "#nam-steroids button { background-image: none; background-color: #1b1b1b; color: #ededed; "
+      "border: 1px solid #292929; border-radius: 18px; padding: 4px 11px; box-shadow: none; text-shadow: none; }"
+      "#nam-steroids button:hover { border-color: #bf0000; }"
+      "#nam-steroids button.suggested-action { background: #bf0000; color: #fff; }"
+      "#nam-steroids button.nam-bypassed { opacity: .57; }"
+      "#nam-steroids combobox button { color: #ededed; border-radius: 14px; }", -1, nullptr);
     gtk_style_context_add_provider_for_screen(gtk_widget_get_screen(mRoot), GTK_STYLE_PROVIDER(provider),
                                               GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     g_object_unref(provider);
@@ -233,6 +376,54 @@ private:
       Range(box, param->GetName(), lo, hi, step, param->Value(), [this, index](double v) { SendParam(index, v); });
   }
 
+  void QualityWindow()
+  {
+    auto* dialog = gtk_dialog_new_with_buttons("Oversampling", Window(), GTK_DIALOG_DESTROY_WITH_PARENT,
+      "_Close", GTK_RESPONSE_CLOSE, nullptr);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 360, 375);
+    auto* fields = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(fields), 14);
+    for (int index : {kOversamplingFactor, kAntiAliasFilterPhase, kOfflineOversamplingFactor,
+                      kOfflineAntiAliasFilterPhase, kPhaseMulticoreEnabled, kPhaseMulticoreThreadCount})
+      Param(fields, index);
+    gtk_widget_show_all(dialog);
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+  }
+
+  void PresetWindow()
+  {
+    auto* dialog = gtk_dialog_new_with_buttons("Presets", Window(), GTK_DIALOG_DESTROY_WITH_PARENT,
+      "_Cancel", GTK_RESPONSE_CANCEL, "_Save to slot", GTK_RESPONSE_APPLY, "_Load", GTK_RESPONSE_ACCEPT, nullptr);
+    auto* box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(box), 14);
+    auto* name = gtk_entry_new();
+    gtk_entry_set_placeholder_text(GTK_ENTRY(name), "Preset name");
+    gtk_entry_set_text(GTK_ENTRY(name), mPlugin.GetCurrentInternalPresetName());
+    Pack(box, name);
+    auto* slots = gtk_combo_box_text_new();
+    for (int slot = 0; slot < NeuralAmpModeler::GetInternalPresetCount(); ++slot)
+    {
+      const auto title = std::to_string(slot + 1) + "  " + mPlugin.GetInternalPresetName(slot);
+      gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(slots), title.c_str());
+    }
+    gtk_combo_box_set_active(GTK_COMBO_BOX(slots), std::max(0, mPlugin.GetCurrentInternalPresetIndex()));
+    Pack(box, slots);
+    gtk_widget_show_all(dialog);
+    const int action = gtk_dialog_run(GTK_DIALOG(dialog));
+    const int slot = gtk_combo_box_get_active(GTK_COMBO_BOX(slots));
+    if (slot >= 0 && action == GTK_RESPONSE_ACCEPT)
+      mPlugin.SelectInternalPreset(slot);
+    else if (slot >= 0 && action == GTK_RESPONSE_APPLY)
+    {
+      mPlugin.SaveCurrentInternalPresetToSlot(slot);
+      mPlugin.RenameCurrentInternalPreset(gtk_entry_get_text(GTK_ENTRY(name)));
+      mPlugin.SaveCurrentInternalPreset();
+    }
+    gtk_widget_destroy(dialog);
+    Refresh();
+  }
+
   void SettingsWindow()
   {
     auto* dialog = gtk_dialog_new_with_buttons("NAM On Steroids settings", Window(),
@@ -303,8 +494,10 @@ private:
     auto* dialog = gtk_file_chooser_dialog_new(nam ? "Load NAM model" : "Load cabinet IR", Window(),
       GTK_FILE_CHOOSER_ACTION_OPEN, "_Cancel", GTK_RESPONSE_CANCEL, "_Open", GTK_RESPONSE_ACCEPT, nullptr);
     auto* filter = gtk_file_filter_new();
-    gtk_file_filter_set_name(filter, nam ? "NAM models" : "WAVE impulse responses");
+    gtk_file_filter_set_name(filter, nam ? "NAM and PNAM models" : "WAVE impulse responses");
     gtk_file_filter_add_pattern(filter, nam ? "*.[nN][aA][mM]" : "*.[wW][aA][vV]");
+    if (nam)
+      gtk_file_filter_add_pattern(filter, "*.[pP][nN][aA][mM]");
     gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
     {
@@ -359,6 +552,7 @@ private:
 
     Clear(mChain);
     Clear(mInspector);
+    Clear(mFiles);
     GtkWidget* track = nullptr;
     for (int index = 0; index < static_cast<int>(effects.size()); ++index)
     {
@@ -419,13 +613,20 @@ private:
       }
       else
       {
-        const std::string label = block->path.empty() ? "Load file..." : std::filesystem::u8path(block->path).filename().string();
-        Button(mInspector, label.c_str(), [this, effect = *block] { Load(effect, 0); });
+        const bool nam = block->type == Type::Nam;
         const bool stereo = mPlugin.GetParam(kChannelMode)->Int() == 1;
         const bool split = (selected == NeuralAmpModeler::kMainNam && !mPlugin.GetParam(kNAMLink)->Bool()) ||
                            (selected == NeuralAmpModeler::kMainCab && !mPlugin.GetParam(kIRLink)->Bool());
+        const auto path = mPlugin.GetEffectFile(selected, 0);
+        Button(mFiles, nam ? "Select model" : "Select IR", [this, effect = *block] { Load(effect, 0); });
+        auto* loaded = Label(mFiles, path.empty() ? (nam ? "No model loaded" : "No IR loaded") :
+                                      std::filesystem::u8path(path).filename().string().c_str());
+        gtk_label_set_ellipsize(GTK_LABEL(loaded), PANGO_ELLIPSIZE_MIDDLE);
+        gtk_widget_set_hexpand(loaded, true);
+        if (!path.empty())
+          Button(mFiles, "Clear", [this, selected] { mPlugin.ClearEffectFile(selected); Refresh(); });
         if (stereo && split)
-          Button(mInspector, "Load right channel...", [this, effect = *block] { Load(effect, 1); });
+          Button(mFiles, "Select right channel", [this, effect = *block] { Load(effect, 1); });
         if (block->type == Type::Nam)
         {
           const bool left = ModelControlsFor(selected, 0, stereo && split ? "Left model" : nullptr);
@@ -447,6 +648,7 @@ private:
     mSignature = ChainSignature();
     gtk_widget_show_all(mChain);
     gtk_widget_show_all(mInspector);
+    gtk_widget_show_all(mFiles);
   }
 
   void ExtraTone(const Settings& block)
@@ -479,20 +681,29 @@ private:
       return false;
     if (heading)
       Label(mInspector, heading);
+    GtkWidget* row = nullptr;
     for (size_t index = 0; index < controls->specs.size(); ++index)
     {
+      if (index % 6 == 0)
+      {
+        row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+        gtk_widget_set_halign(row, GTK_ALIGN_CENTER);
+        Pack(mInspector, row);
+      }
       const auto& spec = controls->specs[index];
       const auto set = [this, id, channel, index](double value) {
         mPlugin.SetEffectModelControl(id, channel, index, static_cast<float>(value));
       };
       if (!spec.choices.empty())
       {
-        Label(mInspector, spec.name.c_str());
-        Choice(mInspector, spec.choices, static_cast<int>(controls->Get(index)), set);
+        auto* cell = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+        Pack(row, cell);
+        Label(cell, spec.name.c_str());
+        Choice(cell, spec.choices, static_cast<int>(controls->Get(index)), set);
       }
       else if (spec.maximum > spec.minimum)
-        Range(mInspector, spec.name.c_str(), spec.minimum, spec.maximum,
-              (spec.maximum - spec.minimum) / 300.0, controls->Get(index), set);
+        Rotary(row, spec.name.c_str(), spec.minimum, spec.maximum, (spec.maximum - spec.minimum) / 300.0,
+               controls->Get(index), spec.nominal, set);
     }
     return true;
   }
@@ -501,6 +712,7 @@ private:
   GtkWidget* mRoot = nullptr;
   GtkWidget* mChain = nullptr;
   GtkWidget* mInspector = nullptr;
+  GtkWidget* mFiles = nullptr;
   GtkWidget* mStatus = nullptr;
   std::string mSignature;
   guint mTimer = 0;

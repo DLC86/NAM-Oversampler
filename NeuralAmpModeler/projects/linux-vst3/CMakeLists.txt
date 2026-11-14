@@ -174,3 +174,10 @@ add_test(NAME parametric_chain COMMAND NAMOnSteroidsStandalone --self-test
   "${PROJECT_ROOT}/ParametricCore/tools/test/fixtures/hyperwavenet.nam")
 add_test(NAME concat_parametric_chain COMMAND NAMOnSteroidsStandalone --self-test
   "${PROJECT_ROOT}/ParametricCore/tools/test/fixtures/concat_wavenet.nam")
+
+
+option(NAM_BUILD_LINUX_UI_TEST "Build the X11 VST3 editor smoke-test host" OFF)
+if(NAM_BUILD_LINUX_UI_TEST)
+  add_executable(NAMLinuxEditorSmoke tests/LinuxEditorSmoke.cpp)
+  target_link_libraries(NAMLinuxEditorSmoke PRIVATE sdk PkgConfig::GTK ${CMAKE_DL_LIBS})
+endif()

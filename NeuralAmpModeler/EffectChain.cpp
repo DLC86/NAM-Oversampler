@@ -242,6 +242,29 @@ void NeuralAmpModeler::SetExtraEffectParam(int id, int param, double value)
   });
 }
 
+std::string NeuralAmpModeler::GetEffectFile(int id, int channel) const
+{
+  if (id == kMainNam)
+    return channel == 0 ? mNAMPath.Get() : mNAMRightPath.Get();
+  if (id == kMainCab)
+    return channel == 0 ? mIRPath.Get() : mIRRightPath.Get();
+
+  std::lock_guard<std::mutex> lock(mEffectsMutex);
+  const auto effect = std::find_if(mEditedEffects.begin(), mEditedEffects.end(),
+                                   [id](const EffectBlock& block) { return block.settings.id == id; });
+  return effect != mEditedEffects.end() ? effect->settings.path : std::string();
+}
+
+void NeuralAmpModeler::ClearEffectFile(int id, int channel)
+{
+  if (id == kMainNam)
+    OnMessage(channel == 0 ? kMsgTagClearModel : kMsgTagClearModelRight, 0, 0, nullptr);
+  else if (id == kMainCab)
+    OnMessage(channel == 0 ? kMsgTagClearIR : kMsgTagClearIRRight, 0, 0, nullptr);
+  else
+    LoadEffectFile(id, "");
+}
+
 std::string NeuralAmpModeler::LoadEffectFile(int id, const std::string& path, int channel)
 {
   if (id == kMainNam)

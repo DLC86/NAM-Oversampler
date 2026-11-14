@@ -230,6 +230,7 @@ for installed_bundle in "$APP" "$AU" "$VST3"; do
   echo "$binary: $slices"
   copy_third_party_notices "$bundle"
   if [[ "$CODESIGN" == 0 ]]; then
+    xattr -cr "$bundle" || exit 1
     codesign --force --deep --sign - "$bundle" || exit 1
   fi
 done

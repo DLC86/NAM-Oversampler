@@ -11,6 +11,9 @@ VERSION="$(sed -n 's/^#define PLUG_VERSION_STR "\(.*\)".*$/\1/p' "$PROJECT_DIR/c
 test -n "$PLUGIN_NAME" && test -n "$VERSION"
 
 cmake_flags=()
+if [[ "${NAM_VERIFY_LINUX_UI:-0}" == 1 ]]; then
+  cmake_flags+=("-DNAM_BUILD_LINUX_UI_TEST=ON")
+fi
 case "$ARCH" in
   amd64)
     ;;
@@ -72,3 +75,6 @@ CONTROL
 PACKAGE="$OUT_DIR/NAM-On-Steroids-v$VERSION-linux-$ARCH.deb"
 dpkg-deb --root-owner-group --build "$STAGING" "$PACKAGE"
 dpkg-deb --contents "$PACKAGE"
+if [[ "${NAM_VERIFY_LINUX_UI:-0}" == 1 ]]; then
+  NAM_LINUX_EDITOR_PREVIEW="$OUT_DIR/editor.png" bash "$SCRIPT_DIR/check-linux-ui.sh" "$PACKAGE" "$BUILD_DIR/cmake/bin/Release/NAMLinuxEditorSmoke"
+fi

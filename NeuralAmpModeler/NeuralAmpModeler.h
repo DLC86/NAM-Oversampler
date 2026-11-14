@@ -1610,6 +1610,9 @@ public:
   void SetEffectSidechain(int id, int source);
   void SetExtraEffectParam(int id, int param, double value);
   std::string LoadEffectFile(int id, const std::string& path, int channel = 0);
+  std::string GetEffectFile(int id, int channel = 0) const;
+  void ClearEffectFile(int id, int channel = 0);
+  static constexpr int GetInternalPresetCount() { return kNumInternalPresets; }
 #if defined(OS_LINUX) && defined(NAM_LINUX_GUI)
   Steinberg::IPlugView* PLUGIN_API createView(const char* name) override;
 #endif
