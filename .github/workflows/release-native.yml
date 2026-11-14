@@ -8,25 +8,34 @@ on:
     branches:
       - "release/v*"
 
+concurrency:
+  group: native-build-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   PROJECT_DIR: NeuralAmpModeler
   ARTIFACT_NAME: NAM On Steroids
 
 jobs:
   build:
-    name: Build
+    name: Build (${{ matrix.platform }})
     runs-on: ${{matrix.os}}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, windows-2022, ubuntu-latest]
         include:
           - os: macos-15
+            platform: macOS Universal
             build_dir: build-mac
           - os: windows-2022
+            platform: Windows x64
             build_dir: build-win
-          - os: ubuntu-latest
-            build_dir: build-linux
+          - os: ubuntu-22.04
+            platform: Linux amd64
+            linux_arch: amd64
+          - os: ubuntu-22.04
+            platform: Linux i386
+            linux_arch: i386
 
     steps:
     - name: Check out repository
@@ -41,6 +50,7 @@ jobs:
       shell: bash
 
     - name: Get Prebuilt Libs
+      if: matrix.linux_arch == null
       run: |
         cd iPlug2/Dependencies
         ./download-prebuilt-libs.sh
@@ -61,17 +71,24 @@ jobs:
         ./makedist-mac.sh full installer
       shell: bash
 
-    - name: Build Linux VST3
-      if: matrix.os == 'ubuntu-latest'
-      id: linux_build_step
+    - name: Install Linux amd64 build dependencies
+      if: matrix.linux_arch == 'amd64'
       run: |
-        cd ${{env.PROJECT_DIR}}/scripts
-        bash ./makedist-linux.sh
-        ZIP_PATH="$(find ../build-linux/out -maxdepth 1 -name '*-linux-vst3.zip' -print -quit)"
-        test -n "$ZIP_PATH"
-        echo "zip_path=$ZIP_PATH" >> $GITHUB_OUTPUT
-        echo "zip_name=$(basename "$ZIP_PATH")" >> $GITHUB_OUTPUT
-      shell: bash
+        sudo apt-get update
+        sudo apt-get install -y libgtk-3-dev libasound2-dev
+
+    - name: Install Linux i386 build dependencies
+      if: matrix.linux_arch == 'i386'
+      run: |
+        sudo dpkg --add-architecture i386
+        sudo apt-get update
+        sudo apt-get install -y g++-multilib libgtk-3-dev:i386 libasound2-dev:i386
+
+    - name: Build and package Linux
+      if: matrix.linux_arch != null
+      env:
+        LINUX_ARCH: ${{ matrix.linux_arch }}
+      run: bash "./$PROJECT_DIR/scripts/makedist-linux.sh" "$LINUX_ARCH"
 
     - name: Add msbuild to PATH (Windows)
       if: matrix.os == 'windows-2022'
@@ -100,11 +117,11 @@ jobs:
       shell: pwsh
 
     - name: Upload Linux packages
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.linux_arch != null
       uses: actions/upload-artifact@v4
       with:
-        name: native-linux
-        path: ${{ steps.linux_build_step.outputs.zip_path }}
+        name: native-linux-${{ matrix.linux_arch }}
+        path: ${{ env.PROJECT_DIR }}/build-linux/${{ matrix.linux_arch }}/out/*.deb
         if-no-files-found: error
 
     - name: Upload macOS packages
@@ -117,6 +134,12 @@ jobs:
           ${{ env.PROJECT_DIR }}/${{ matrix.build_dir }}/out/${{ steps.mac_archivename_step.outputs.archive_name }}.dmg
         if-no-files-found: error
 
+    - name: Name the Windows installer
+      if: matrix.os == 'windows-2022'
+      env:
+        ARCHIVE: ${{ steps.win_archivename_step.outputs.archive_name }}
+      run: Copy-Item -LiteralPath "$env:PROJECT_DIR/build-win/installer/NAM On Steroids Installer.exe" -Destination "$env:PROJECT_DIR/build-win/out/$env:ARCHIVE-Setup.exe"
+
     - name: Upload Windows packages
       if: matrix.os == 'windows-2022'
       uses: actions/upload-artifact@v4
@@ -125,6 +148,7 @@ jobs:
         path: |
           ${{ env.PROJECT_DIR }}/${{ matrix.build_dir }}/out/${{ steps.win_archivename_step.outputs.archive_name }}-pdbs.zip
           ${{ env.PROJECT_DIR }}/${{ matrix.build_dir }}/out/${{ steps.win_archivename_step.outputs.archive_name }}.zip
+          ${{ env.PROJECT_DIR }}/${{ matrix.build_dir }}/out/${{ steps.win_archivename_step.outputs.archive_name }}-Setup.exe
         if-no-files-found: error
 
   draft_release:
@@ -146,6 +170,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_REF: ${{ github.ref_name }}
         run: |
+          test "$(find packages -maxdepth 1 -type f | wc -l)" -ge 7
           tag="${RELEASE_REF#release/}"
           version="$(sed -n 's/^#define PLUG_VERSION_STR "\([^"]*\)".*$/\1/p' NeuralAmpModeler/config.h)"
           test "$tag" = "v$version"

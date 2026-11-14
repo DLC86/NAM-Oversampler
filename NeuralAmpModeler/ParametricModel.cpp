@@ -31,13 +31,20 @@ void ModelControls::Set(size_t index, float value)
 
 namespace
 {
+struct ParametricRenderState
+{
+  std::shared_ptr<ModelControls> controls;
+  std::vector<float> values;
+  std::array<nlohmann::json, 2> models;
+};
+
 class ParametricDSP : public nam::DSP
 {
 public:
   ParametricDSP(std::unique_ptr<pnamcore::DSP> main, std::unique_ptr<pnamcore::DSP> lite,
-                std::shared_ptr<ModelControls> controls)
+                std::shared_ptr<ParametricRenderState> state)
   : nam::DSP(1, 1, main->GetExpectedSampleRate()), mModels {std::move(main), std::move(lite)},
-    mControls(std::move(controls)), mValues(mControls->specs.size())
+    mState(std::move(state))
   {
     auto& source = *mModels[0];
     for (size_t index = 0; index < mModels.size(); ++index)
@@ -55,6 +62,13 @@ public:
 
   void process(NAM_SAMPLE** input, NAM_SAMPLE** output, int frames) override
   {
+    const auto selected = mRequestedSize.load(std::memory_order_relaxed);
+    if (mSelected != selected)
+    {
+      mSelected = selected;
+      ApplyControls(mSelected);
+      mModels[mSelected]->Reset(mExternalSampleRate, GetMaxBufferSize());
+    }
     ApplyControls(mSelected);
     mModels[mSelected]->process(input, output, frames);
   }
@@ -62,6 +76,8 @@ public:
   void Reset(double sampleRate, int maxBlockSize) override
   {
     nam::DSP::Reset(sampleRate, maxBlockSize);
+    SnapshotControls();
+    mSelected = mRequestedSize.load(std::memory_order_relaxed);
     for (size_t index = 0; index < mModels.size(); ++index)
     {
       if (!mModels[index])
@@ -71,16 +87,17 @@ public:
     }
   }
 
+  std::unique_ptr<nam::DSP> CloneForPhase() const override;
+
+  void SnapshotControls()
+  {
+    for (size_t index = 0; index < mState->values.size(); ++index)
+      mState->values[index] = mState->controls->Get(index);
+  }
+
   void SelectSize(double size)
   {
-    const size_t selected = size < 0.5 ? 1 : 0;
-    if (selected != mSelected)
-    {
-      mSelected = selected;
-      ApplyControls(mSelected);
-      if (GetMaxBufferSize() > 0)
-        mModels[mSelected]->Reset(mExternalSampleRate, GetMaxBufferSize());
-    }
+    mRequestedSize.store(size < 0.5 ? 1 : 0, std::memory_order_relaxed);
   }
 
 private:
@@ -88,20 +105,15 @@ private:
   {
     auto& target = *mControlTargets[index];
     const auto current = target.GetParams();
-    bool changed = false;
-    for (size_t i = 0; i < mValues.size(); ++i)
-    {
-      mValues[i] = mControls->Get(i);
-      changed |= current[i] != mValues[i];
-    }
-    if (changed)
-      target.SetParams(mValues);
+    const auto& values = mState->values;
+    if (!std::equal(current.begin(), current.end(), values.begin(), values.end()))
+      target.SetParams(values);
   }
 
   std::array<std::unique_ptr<pnamcore::DSP>, 2> mModels;
   std::array<pnamcore::IParametricControl*, 2> mControlTargets {};
-  std::shared_ptr<ModelControls> mControls;
-  std::vector<float> mValues;
+  std::shared_ptr<ParametricRenderState> mState;
+  std::atomic<size_t> mRequestedSize {0};
   size_t mSelected = 0;
 };
 
@@ -111,6 +123,22 @@ public:
   using ParametricDSP::ParametricDSP;
   void SetSlimmableSize(double size) override { SelectSize(size); }
 };
+
+std::unique_ptr<nam::DSP> ParametricDSP::CloneForPhase() const
+{
+  auto full = pnamcore::get_dsp(mState->models[0], pnamcore::DspLoadOptions {false});
+  if (mModels[1])
+  {
+    auto lite = pnamcore::get_dsp(mState->models[1], pnamcore::DspLoadOptions {false});
+    return std::make_unique<HyperA2DSP>(std::move(full), std::move(lite), mState);
+  }
+  return std::make_unique<ParametricDSP>(std::move(full), nullptr, mState);
+}
+}
+
+void PrepareParametricBlock(nam::DSP& dsp)
+{
+  static_cast<ParametricDSP&>(dsp).SnapshotControls();
 }
 
 std::unique_ptr<nam::DSP> LoadParametricModel(const nlohmann::json& file, const std::string& path,
@@ -125,8 +153,9 @@ std::unique_ptr<nam::DSP> LoadParametricModel(const nlohmann::json& file, const 
     return {};
 
   const bool hasSizes = architecture == "HyperA2";
-  auto main = pnamcore::get_dsp(hasSizes ? pnamcore::wavenet::SelectHyperA2Branch(model, false) : model,
-                                pnamcore::DspLoadOptions {false});
+  auto state = std::make_shared<ParametricRenderState>();
+  state->models[0] = hasSizes ? pnamcore::wavenet::SelectHyperA2Branch(model, false) : model;
+  auto main = pnamcore::get_dsp(state->models[0], pnamcore::DspLoadOptions {false});
   if (!main || main->NumInputChannels() != 1 || main->NumOutputChannels() != 1)
     throw std::runtime_error("Parametric models must have one audio input and one output.");
 
@@ -137,15 +166,18 @@ std::unique_ptr<nam::DSP> LoadParametricModel(const nlohmann::json& file, const 
   if (!controls || controls->path != path || controls->specs != specs)
     controls = std::make_shared<ModelControls>(std::move(specs), path);
 
+  state->controls = controls;
+  state->values.resize(controls->specs.size());
+
   std::unique_ptr<nam::DSP> dsp;
   if (hasSizes)
   {
-    auto lite = pnamcore::get_dsp(pnamcore::wavenet::SelectHyperA2Branch(model, true),
-                                 pnamcore::DspLoadOptions {false});
-    dsp = std::make_unique<HyperA2DSP>(std::move(main), std::move(lite), controls);
+    state->models[1] = pnamcore::wavenet::SelectHyperA2Branch(model, true);
+    auto lite = pnamcore::get_dsp(state->models[1], pnamcore::DspLoadOptions {false});
+    dsp = std::make_unique<HyperA2DSP>(std::move(main), std::move(lite), state);
   }
   else
-    dsp = std::make_unique<ParametricDSP>(std::move(main), nullptr, controls);
+    dsp = std::make_unique<ParametricDSP>(std::move(main), nullptr, state);
 
   if (metadata)
   {

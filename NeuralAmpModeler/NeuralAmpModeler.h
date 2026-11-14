@@ -845,6 +845,11 @@ public:
       return;
     }
 
+    if (mParametric)
+      PrepareParametricBlock(*mEncapsulated);
+    if (right.mParametric)
+      PrepareParametricBlock(*right.mEncapsulated);
+
     // The cascaded power-of-two resamplers invoke their DSP callbacks exactly
     // once per external block. Nesting the right callback exposes both
     // oversampled buffers at the same time, allowing one combined phase barrier.
@@ -941,6 +946,9 @@ private:
     if (numFrames > mMaxExternalBlockSize)
       ResetUnlocked(mExternalSampleRate, numFrames);
 
+    if (mParametric)
+      PrepareParametricBlock(*mEncapsulated);
+
     if (!IsResamplingActive())
     {
       mEncapsulated->process(input, output, numFrames);
@@ -978,6 +986,7 @@ private:
     // are independent and require one barrier for the whole block.
     mPhaseMulticoreActive = phaseMulticoreRequested;
     mPhaseCount = mPhaseMulticoreActive ? timeScale : 1;
+    mPhaseCursor = 0;
 
     // Create the worker pool lazily in the processing path. In stereo the left
     // instance owns the combined barrier; an eager right-side pool would remain
@@ -1061,11 +1070,15 @@ private:
     // keep one continuous high-rate state and therefore use the single-model
     // path even when multicore is enabled.
     return resamplingActive && mRequestedOversamplingFactor >= 2 && timeScale >= 2 && !mModelPath.empty()
-           && mPhaseMulticoreEnabled && mEncapsulated && mEncapsulated->SupportsStridedProcess();
+           && mEncapsulated && (mParametric ||
+               (mPhaseMulticoreEnabled && mEncapsulated->SupportsStridedProcess()));
   }
 
   int PhaseMulticoreThreadCountUnlocked() const
   {
+    if (!mPhaseMulticoreEnabled)
+      return 1;
+
     int requested = mPhaseMulticoreRequestedThreads > 0
                       ? NAMPhaseMulticoreClampInt(mPhaseMulticoreRequestedThreads, 1, 64)
                       : NAMPhaseMulticoreSmartAutoThreadCount();
@@ -1213,9 +1226,20 @@ private:
            && std::abs(mRenderingSampleRate - right.mRenderingSampleRate) < 1.0e-6;
   }
 
+  int PhaseOffsetUnlocked(int phase) const
+  {
+    return (phase + mPhaseCount - mPhaseCursor) % mPhaseCount;
+  }
+
   int PhaseFrameCountUnlocked(int phase, int resampledFrames) const
   {
-    return phase < resampledFrames ? ((resampledFrames - phase + mPhaseCount - 1) / mPhaseCount) : 0;
+    const int offset = PhaseOffsetUnlocked(phase);
+    return offset < resampledFrames ? ((resampledFrames - offset + mPhaseCount - 1) / mPhaseCount) : 0;
+  }
+
+  void AdvancePhaseCursorUnlocked(int frames)
+  {
+    mPhaseCursor = (mPhaseCursor + frames) % mPhaseCount;
   }
 
   void DeinterleavePhaseInputsUnlocked(NAM_SAMPLE** resampledInput, int resampledFrames)
@@ -1229,7 +1253,7 @@ private:
       auto& phaseInput = mPhaseInputBuffers[static_cast<size_t>(phase)];
 
       for (int i = 0; i < phaseFrames; i++)
-        phaseInput[static_cast<size_t>(i)] = resampledInput[0][phase + i * mPhaseCount];
+        phaseInput[static_cast<size_t>(i)] = resampledInput[0][PhaseOffsetUnlocked(phase) + i * mPhaseCount];
     }
   }
 
@@ -1243,7 +1267,7 @@ private:
 
       const auto& phaseOutput = mPhaseOutputBuffers[static_cast<size_t>(phase)];
       for (int i = 0; i < phaseFrames; i++)
-        resampledOutput[0][phase + i * mPhaseCount] = phaseOutput[static_cast<size_t>(i)];
+        resampledOutput[0][PhaseOffsetUnlocked(phase) + i * mPhaseCount] = phaseOutput[static_cast<size_t>(i)];
     }
   }
 
@@ -1266,7 +1290,7 @@ private:
       if (!inputsAreDeinterleaved && phaseModel->SupportsStridedProcess())
       {
         phaseModel->process_strided(
-          resampledInput[0] + phase, mPhaseCount, phaseOutput.data(), 1, phaseFrames);
+          resampledInput[0] + PhaseOffsetUnlocked(phase), mPhaseCount, phaseOutput.data(), 1, phaseFrames);
         continue;
       }
 
@@ -1328,6 +1352,8 @@ private:
 
     ReinterleavePhaseOutputsUnlocked(leftResampledOutput, resampledFrames);
     right.ReinterleavePhaseOutputsUnlocked(rightResampledOutput, resampledFrames);
+    AdvancePhaseCursorUnlocked(resampledFrames);
+    right.AdvancePhaseCursorUnlocked(resampledFrames);
   }
 
 
@@ -1367,12 +1393,13 @@ private:
     });
 
     ReinterleavePhaseOutputsUnlocked(resampledOutput, resampledFrames);
+    AdvancePhaseCursorUnlocked(resampledFrames);
   }
 
 double GetRenderingSampleRate(double externalSampleRate) const
   {
     const double encapsulatedSampleRate = GetEncapsulatedSampleRate();
-    if (mParametric || mRequestedOversamplingFactor <= 1)
+    if (mRequestedOversamplingFactor <= 1)
       return encapsulatedSampleRate;
 
     const double requestedRenderingSampleRate = externalSampleRate * static_cast<double>(mRequestedOversamplingFactor);
@@ -1391,6 +1418,7 @@ double GetRenderingSampleRate(double externalSampleRate) const
   std::filesystem::path mModelPath;
   bool mPhaseMulticoreActive = false;
   int mPhaseCount = 1;
+  int mPhaseCursor = 0;
   double mSlimmableSize = 1.0;
   std::vector<std::unique_ptr<nam::DSP>> mPhaseModels;
   std::vector<std::vector<NAM_SAMPLE>> mPhaseInputBuffers;
@@ -1566,7 +1594,10 @@ public:
   void SetEffectEnabled(int id, bool enabled);
   void SetEffectThreshold(int id, double threshold);
   void SetEffectSidechain(int id, int source);
-  std::string LoadEffectFile(int id, const std::string& path);
+  std::string LoadEffectFile(int id, const std::string& path, int channel = 0);
+#if defined(OS_LINUX) && defined(NAM_LINUX_GUI)
+  Steinberg::IPlugView* PLUGIN_API createView(const char* name) override;
+#endif
   static const char* EffectName(EffectType type);
   std::shared_ptr<const ModelControls> GetEffectModelControls(int id, int channel = 0) const;
   void SetEffectModelControl(int id, int channel, size_t index, float value);

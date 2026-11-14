@@ -99,7 +99,7 @@ public:
     }
     if (effect->id > 3 && effect->type != Type::Gate)
     {
-      const std::string fileName = effect->path.empty() ? "Load file..." : WDL_get_filepart(effect->path.c_str());
+      const std::string fileName = effect->path.empty() ? "Load file..." : std::filesystem::u8path(effect->path).filename().string();
       Button(g, FileRect(), fileName.c_str(), kText);
     }
     if (const auto controls = SelectedControls())

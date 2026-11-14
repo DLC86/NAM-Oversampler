@@ -43,6 +43,9 @@ smtg_create_public_sdk_common_target()
 smtg_create_public_sdk_target()
 
 find_package(Threads REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
+pkg_check_modules(ALSA REQUIRED IMPORTED_TARGET alsa)
 
 file(GLOB NAM_CORE_SOURCES
   "${NAM_CORE_ROOT}/NAM/*.cpp"
@@ -54,11 +57,12 @@ file(GLOB PNAM_CORE_SOURCES
   "${PROJECT_ROOT}/ParametricCore/NAM/*.cpp"
   "${PROJECT_ROOT}/ParametricCore/NAM/*/*.cpp"
 )
-set_source_files_properties(${PNAM_CORE_SOURCES} PROPERTIES COMPILE_DEFINITIONS "nam=pnamcore")
+set_source_files_properties(${PNAM_CORE_SOURCES} PROPERTIES COMPILE_DEFINITIONS "nam=pnamcore;tanh_bak=pnam_tanh_bak;sigmoid_bak=pnam_sigmoid_bak;silu_bak=pnam_silu_bak")
 
 set(PLUGIN_SOURCES
   "${PLUGIN_ROOT}/NeuralAmpModeler.cpp"
   "${PLUGIN_ROOT}/ToneStack.cpp"
+  "${CMAKE_CURRENT_LIST_DIR}/LinuxEditor.cpp"
   "${IPLUG2_ROOT}/IPlug/IPlugAPIBase.cpp"
   "${IPLUG2_ROOT}/IPlug/IPlugParameter.cpp"
   "${IPLUG2_ROOT}/IPlug/IPlugPaths.cpp"
@@ -83,18 +87,30 @@ set(PLUGIN_SOURCES
   "${PLUGIN_ROOT}/ParametricModel.cpp"
 )
 
-smtg_add_vst3plugin(NAMOnSteroids PACKAGE_NAME "NAM On Steroids" SOURCES_LIST ${PLUGIN_SOURCES})
+add_library(NAMOnSteroidsCommon OBJECT ${PLUGIN_SOURCES})
+set_target_properties(NAMOnSteroidsCommon PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(NAMOnSteroidsCommon PUBLIC sdk Threads::Threads PkgConfig::GTK)
 
-target_compile_definitions(NAMOnSteroids
-  PRIVATE
+smtg_add_vst3plugin(NAMOnSteroids PACKAGE_NAME "NAM On Steroids"
+  SOURCES_LIST $<TARGET_OBJECTS:NAMOnSteroidsCommon>)
+set_target_properties(NAMOnSteroids PROPERTIES LINKER_LANGUAGE CXX)
+target_link_libraries(NAMOnSteroids PRIVATE sdk Threads::Threads PkgConfig::GTK)
+
+add_executable(NAMOnSteroidsStandalone LinuxStandalone.cpp)
+set_target_properties(NAMOnSteroidsStandalone PROPERTIES OUTPUT_NAME nam-on-steroids)
+target_link_libraries(NAMOnSteroidsStandalone PRIVATE NAMOnSteroidsCommon PkgConfig::ALSA)
+
+target_compile_definitions(NAMOnSteroidsCommon
+  PUBLIC
     VST3_API
     NO_IGRAPHICS
     NAM_HEADLESS_LINUX
+    NAM_LINUX_GUI
     NAM_ENABLE_A2_FAST
 )
 
-target_include_directories(NAMOnSteroids
-  PRIVATE
+target_include_directories(NAMOnSteroidsCommon
+  PUBLIC
     "${PLUGIN_ROOT}"
     "${IPLUG2_ROOT}"
     "${IPLUG2_ROOT}/IPlug"
@@ -114,7 +130,6 @@ target_include_directories(NAMOnSteroids
     "${AUDIO_DSP_TOOLS_ROOT}/Dependencies/eigen"
 )
 
-target_link_libraries(NAMOnSteroids PRIVATE sdk Threads::Threads)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0")
     target_link_libraries(NAMOnSteroids PRIVATE stdc++fs)
@@ -124,7 +139,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   target_link_options(NAMOnSteroids PRIVATE "-Wl,-z,defs")
 endif()
 
-target_compile_options(NAMOnSteroids
+target_compile_options(NAMOnSteroidsCommon
   PRIVATE
     -Wall
     -Wextra
@@ -135,9 +150,21 @@ target_compile_options(NAMOnSteroids
     $<$<CONFIG:Release>:-O3>
 )
 
-set_target_properties(NAMOnSteroids
+set_target_properties(NAMOnSteroids NAMOnSteroidsCommon NAMOnSteroidsStandalone
   PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
     INTERPROCEDURAL_OPTIMIZATION_RELEASE ON
 )
+
+
+if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+  target_link_libraries(NAMOnSteroids PRIVATE atomic)
+  target_link_libraries(NAMOnSteroidsStandalone PRIVATE atomic)
+endif()
+
+enable_testing()
+add_test(NAME parametric_chain COMMAND NAMOnSteroidsStandalone --self-test
+  "${PROJECT_ROOT}/ParametricCore/tools/test/fixtures/hyperwavenet.nam")
+add_test(NAME concat_parametric_chain COMMAND NAMOnSteroidsStandalone --self-test
+  "${PROJECT_ROOT}/ParametricCore/tools/test/fixtures/concat_wavenet.nam")

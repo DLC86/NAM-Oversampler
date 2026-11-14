@@ -209,8 +209,20 @@ void NeuralAmpModeler::SetEffectSidechain(int id, int source)
   _EditEffect(id, [source](EffectSettings& effect) { effect.sidechain = source; });
 }
 
-std::string NeuralAmpModeler::LoadEffectFile(int id, const std::string& path)
+std::string NeuralAmpModeler::LoadEffectFile(int id, const std::string& path, int channel)
 {
+  if (id == kMainNam)
+  {
+    const WDL_String file(path.c_str());
+    return channel == 0 ? _StageModel(file) : _StageModelRight(file);
+  }
+  if (id == kMainCab)
+  {
+    const WDL_String file(path.c_str());
+    const auto code = channel == 0 ? _StageIR(file) : _StageIRRight(file);
+    return code == dsp::wav::LoadReturnCode::SUCCESS ? std::string() : dsp::wav::GetMsgForLoadReturnCode(code);
+  }
+
   EffectSettings settings;
   {
     std::lock_guard<std::mutex> lock(mEffectsMutex);
@@ -473,8 +485,6 @@ sample** NeuralAmpModeler::_ProcessExtraEffect(const EffectBlock& block, sample*
         audio.output[channel].resize(frames);
       audio.pointers[channel] = audio.output[channel].data();
       audio.nam[channel]->SetAudioWorkgroup(mAudioWorkgroup.load(std::memory_order_acquire));
-      audio.nam[channel]->SetPhaseMulticoreSettings(mPhaseMulticoreEnabledParam.load(),
-                                                   mPhaseMulticoreRequestedThreadsParam.load());
     }
     if (channels == kNumChannelsStereo)
       audio.nam[0]->process_stereo(*audio.nam[1], input, audio.pointers.data(), input + 1, audio.pointers.data() + 1, frames);

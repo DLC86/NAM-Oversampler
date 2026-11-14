@@ -4,7 +4,7 @@ NAM On Steroids 3.0.0
 - Add, remove, reorder, and bypass Gate, NAM, and Cab blocks.
 - Route a gate's detector from its own input, the chain input, or the output of any preceding block.
 - Load HyperA2, HyperWaveNet, ConcatWaveNet, and ConcatLSTM with their own controls.
-  Parametric models process at their native model sample rate.
+  Realtime and offline oversampling support these models through native-rate phase lanes.
 - The original tone stack remains available for traditional NAM files.
 - Host sessions and internal presets store the signal chain, sidechain choices, and model control values.
 

@@ -2441,7 +2441,7 @@ void NeuralAmpModeler::OnUIClose()
 void NeuralAmpModeler::OnParamChange(int paramIdx)
 {
   if (_IsInternalPresetParam(paramIdx))
-    _MarkCurrentInternalPresetDirty();
+    mPresetRecallDirtyRefreshPending.store(true, std::memory_order_release);
 
   switch (paramIdx)
   {
@@ -3288,6 +3288,11 @@ void NeuralAmpModeler::_ApplyImmediatePhaseMulticoreSettings(bool enabled, int r
     mModel->SetPhaseMulticoreSettings(enabled, requestedThreads);
   if (mModelRight != nullptr)
     mModelRight->SetPhaseMulticoreSettings(enabled, requestedThreads);
+  for (const auto& block : mActiveEffects)
+    if (block.audio)
+      for (const auto& model : block.audio->nam)
+        if (model)
+          model->SetPhaseMulticoreSettings(enabled, requestedThreads);
 
   _UpdateLatency();
 }

@@ -30,3 +30,7 @@ private:
 
 std::unique_ptr<nam::DSP> LoadParametricModel(const nlohmann::json& file, const std::string& path,
                                             std::shared_ptr<ModelControls>& controls, nam::dspData* metadata);
+
+
+// Freeze the UI values once before dispatching the model's phase lanes.
+void PrepareParametricBlock(nam::DSP& dsp);

@@ -120,13 +120,13 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
 #endif
 
   if (mNAMPath.GetLength())
-  {
     _StageModel(mNAMPath);
-  }
+  else
+    OnMessage(kMsgTagClearModel, kCtrlTagModelFileBrowser, 0, nullptr);
   if (mIRPath.GetLength())
-  {
     _StageIR(mIRPath);
-  }
+  else
+    OnMessage(kMsgTagClearIR, kCtrlTagIRFileBrowser, 0, nullptr);
   _RestoreEffects(config.value("Effect Chain", nlohmann::json()));
   mApplyingInternalPreset.store(false, std::memory_order_release);
   mCurrentInternalPresetSnapshot = _CaptureCurrentInternalPresetSnapshot();

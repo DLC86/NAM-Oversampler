@@ -174,11 +174,11 @@ fi
 # build xcode project. Change target to build individual formats, or add to All target in the xcode project
 
 if command -v xcpretty >/dev/null 2>&1; then
-  xcodebuild -project "$PROJECT_XCODEPROJ" -xcconfig "$PROJECT_XCCONFIG" DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release 2>&1 | tee build-mac.log | xcpretty
+  xcodebuild -project "$PROJECT_XCODEPROJ" -xcconfig "$PROJECT_XCCONFIG" DEMO_VERSION=$DEMO ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO -target "All" -UseModernBuildSystem=NO -configuration Release 2>&1 | tee build-mac.log | xcpretty
   BUILD_STATUS=${PIPESTATUS[0]}
 else
   echo "xcpretty not found; using raw xcodebuild output"
-  xcodebuild -project "$PROJECT_XCODEPROJ" -xcconfig "$PROJECT_XCCONFIG" DEMO_VERSION=$DEMO -target "All" -UseModernBuildSystem=NO -configuration Release 2>&1 | tee build-mac.log
+  xcodebuild -project "$PROJECT_XCODEPROJ" -xcconfig "$PROJECT_XCCONFIG" DEMO_VERSION=$DEMO ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO -target "All" -UseModernBuildSystem=NO -configuration Release 2>&1 | tee build-mac.log
   BUILD_STATUS=${PIPESTATUS[0]}
 fi
 
@@ -211,6 +211,16 @@ fi
 if [ -d "${AAX}" ]; then
   ./$SCRIPTS/SetFileIcon -image "$ICON_FILE" -file "${AAX}"
 fi
+
+#---------------------------------------------------------------------------------------------------------
+# Both architectures must be present in every binary the installer ships.
+for bundle in "$APP" "$AU" "$VST3"; do
+  binary="$bundle/Contents/MacOS/$PLUGIN_NAME"
+  if ! lipo -verify_arch arm64 x86_64 "$binary"; then
+    echo "Expected a universal binary at $binary" >&2
+    exit 1
+  fi
+done
 
 #---------------------------------------------------------------------------------------------------------
 #strip symbols from binaries
