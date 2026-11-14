@@ -209,7 +209,7 @@ enum EMsgTags
 // Get the sample rate of a NAM model.
 // Sometimes, the model doesn't know its own sample rate; this wrapper guesses 48k based on the way that most
 // people have used NAM in the past.
-double GetNAMSampleRate(const std::unique_ptr<nam::DSP>& model)
+inline double GetNAMSampleRate(const std::unique_ptr<nam::DSP>& model)
 {
   // Some models are from when we didn't have sample rate in the model.
   // For those, this wraps with the assumption that they're 48k models, which is probably true.

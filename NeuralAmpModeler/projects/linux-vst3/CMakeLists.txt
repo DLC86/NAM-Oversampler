@@ -75,8 +75,6 @@ set(PLUGIN_SOURCES
   # The SDK's `sdk` target does not include this implementation, although
   # IPlugVST3_ProcessorBase derives from SingleComponentEffect.
   "${VST3_SDK_ROOT}/public.sdk/source/vst/vstsinglecomponenteffect.cpp"
-  # Entry point functions (ModuleEntry/ModuleExit) for Linux VST3
-  "${VST3_SDK_ROOT}/public.sdk/source/main/linuxmain.cpp"
   "${AUDIO_DSP_TOOLS_ROOT}/dsp/dsp.cpp"
   "${AUDIO_DSP_TOOLS_ROOT}/dsp/ImpulseResponse.cpp"
   "${AUDIO_DSP_TOOLS_ROOT}/dsp/NoiseGate.cpp"

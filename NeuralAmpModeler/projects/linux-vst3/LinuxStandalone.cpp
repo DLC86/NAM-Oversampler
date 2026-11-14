@@ -17,11 +17,15 @@ void SetParam(NeuralAmpModeler& plugin, int index, double value)
   plugin.OnParamChange(index);
 }
 
-void Configure(NeuralAmpModeler& plugin)
+void Configure(NeuralAmpModeler& plugin, bool offline = false)
 {
-  plugin.SetSampleRate(kSampleRate);
-  plugin.SetBlockSize(kFrames);
-  plugin.OnReset();
+  Steinberg::Vst::ProcessSetup setup {};
+  setup.sampleRate = kSampleRate;
+  setup.maxSamplesPerBlock = kFrames;
+  setup.symbolicSampleSize = Steinberg::Vst::kSample64;
+  setup.processMode = offline ? Steinberg::Vst::kOffline : Steinberg::Vst::kRealtime;
+  if (plugin.setupProcessing(setup) != Steinberg::kResultOk)
+    throw std::runtime_error("Could not initialize the audio engine.");
 }
 
 class LinuxAudio
@@ -152,9 +156,8 @@ int SelfTest(const char* model)
 {
   using Type = NeuralAmpModeler::EffectType;
   NeuralAmpModeler plugin(iplug::InstanceInfo {});
-  Configure(plugin);
+  Configure(plugin, true);
   SetParam(plugin, kOutputMode, 0);
-  plugin.SetRenderingOffline(true);
   SetParam(plugin, kOfflineOversamplingFactor, 0);
   const auto result = plugin.LoadEffectFile(1, model);
   if (!result.empty())
