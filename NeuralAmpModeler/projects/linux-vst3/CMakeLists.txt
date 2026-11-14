@@ -89,6 +89,14 @@ add_library(NAMOnSteroidsCommon OBJECT ${PLUGIN_SOURCES})
 set_target_properties(NAMOnSteroidsCommon PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_link_libraries(NAMOnSteroidsCommon PUBLIC sdk Threads::Threads PkgConfig::GTK)
 
+# A multilib -m32 build runs uname on the amd64 host. Name the bundle
+# directory from the target ABI and keep the SDK's native strip command.
+if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+  function(smtg_get_linux_architecture_name)
+    set(LINUX_ARCHITECTURE_NAME x86-linux PARENT_SCOPE)
+  endfunction()
+endif()
+
 smtg_add_vst3plugin(NAMOnSteroids PACKAGE_NAME "NAM On Steroids"
   SOURCES_LIST $<TARGET_OBJECTS:NAMOnSteroidsCommon>)
 set_target_properties(NAMOnSteroids PROPERTIES LINKER_LANGUAGE CXX)

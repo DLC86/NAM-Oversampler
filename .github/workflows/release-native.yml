@@ -9,7 +9,7 @@ on:
       - "release/v*"
 
 concurrency:
-  group: native-build-${{ github.ref }}
+  group: native-build-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 
 env:
@@ -157,6 +157,8 @@ jobs:
     name: Save draft release
     if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release/v')
     needs: build
+    concurrency:
+      group: native-draft-${{ github.ref }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -172,6 +174,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_REF: ${{ github.ref_name }}
         run: |
+          if [[ "$RELEASE_REF" == release/* ]]; then
+            tip="$(git ls-remote origin "refs/heads/$RELEASE_REF" | cut -f1)"
+            if [[ "$tip" != "$GITHUB_SHA" ]]; then
+              echo "A newer revision of $RELEASE_REF is available."
+              exit 0
+            fi
+          fi
           test "$(find packages -maxdepth 1 -type f | wc -l)" -ge 7
           tag="${RELEASE_REF#release/}"
           version="$(sed -n 's/^#define PLUG_VERSION_STR "\([^"]*\)".*$/\1/p' NeuralAmpModeler/config.h)"

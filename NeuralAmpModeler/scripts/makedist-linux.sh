@@ -15,7 +15,6 @@ case "$ARCH" in
   amd64)
     ;;
   i386)
-    export CROSS_COMPILE=x86-
     export PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
     cmake_flags+=("-DCMAKE_C_FLAGS=-m32 -msse2 -mfpmath=sse"
                   "-DCMAKE_CXX_FLAGS=-m32 -msse2 -mfpmath=sse")
@@ -32,9 +31,11 @@ cmake --build "$BUILD_DIR/cmake" --config Release --parallel "${NAM_BUILD_JOBS:-
 ctest --test-dir "$BUILD_DIR/cmake" --output-on-failure
 
 VST3_DIR="$BUILD_DIR/cmake/VST3/Release/$PLUGIN_NAME.vst3"
-APP_PATH="$BUILD_DIR/cmake/nam-on-steroids"
-test -d "$VST3_DIR"
-test -x "$APP_PATH"
+APP_PATH="$BUILD_DIR/cmake/bin/Release/nam-on-steroids"
+if [[ ! -d "$VST3_DIR" || ! -x "$APP_PATH" ]]; then
+  echo "Expected the VST3 bundle at $VST3_DIR and the standalone at $APP_PATH" >&2
+  exit 1
+fi
 elf_class=ELF64
 if [[ "$ARCH" == i386 ]]; then
   elf_class=ELF32
@@ -62,7 +63,7 @@ Package: nam-on-steroids
 Version: $VERSION
 Architecture: $ARCH
 Maintainer: The Tone Scientist
-Depends: libgtk-3-0, libasound2, libstdc++6
+Depends: libgtk-3-0 | libgtk-3-0t64, libasound2 | libasound2t64, libstdc++6 (>= 12), libatomic1
 Section: sound
 Priority: optional
 Description: Neural Amp Modeler with oversampling and a modular signal chain
