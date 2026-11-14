@@ -137,7 +137,8 @@ void Rotary(GtkWidget* parent, const char* title, double minimum, double maximum
     const double radius = std::min(gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget)) / 2.0 - 4;
     const double x = gtk_widget_get_allocated_width(widget) / 2.0;
     const double y = gtk_widget_get_allocated_height(widget) / 2.0;
-    constexpr double begin = -3.926990817, end = .7853981634;
+    constexpr double begin = -3.926990817;
+    constexpr double end = .7853981634;
     const double ratio = std::clamp((state.value - state.min) / (state.max - state.min), 0.0, 1.0);
     const double angle = begin + (end - begin) * ratio;
     cairo_set_line_width(cr, radius * .16);
@@ -245,6 +246,8 @@ public:
     Button(actions, "Open session", [this] { Session(false); });
     Button(actions, "Save session", [this] { Session(true); });
     Button(actions, "Oversampling", [this] { QualityWindow(); });
+    Button(actions, "Mixer", [this] { MixerWindow(); });
+    Button(actions, "Tuner", [this] { TunerWindow(); });
     Button(actions, "Settings", [this] { SettingsWindow(); });
 
     auto* bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
@@ -374,6 +377,70 @@ private:
     const double step = param->GetStep() > 0.0 ? param->GetStep() : (hi - lo) / 200.0;
     if (hi > lo)
       Range(box, param->GetName(), lo, hi, step, param->Value(), [this, index](double v) { SendParam(index, v); });
+  }
+
+  void MixerWindow()
+  {
+    auto* dialog = gtk_dialog_new_with_buttons("Mixer and filters", Window(), GTK_DIALOG_DESTROY_WITH_PARENT,
+      "_Close", GTK_RESPONSE_CLOSE, nullptr);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 540, 570);
+    auto* body = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    auto* scroll = gtk_scrolled_window_new(nullptr, nullptr);
+    auto* fields = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_container_set_border_width(GTK_CONTAINER(fields), 14);
+    gtk_container_add(GTK_CONTAINER(scroll), fields);
+    Pack(body, scroll, true);
+    auto* knobs = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 7);
+    Pack(fields, knobs);
+    for (int index : {kLevelL, kPanL, kTimeAlign, kPanR, kLevelR})
+    {
+      const auto* param = mPlugin.GetParam(index);
+      Rotary(knobs, param->GetName(), param->GetMin(), param->GetMax(), param->GetStep(), param->Value(),
+             param->GetDefault(), [this, index](double value) { SendParam(index, value); });
+    }
+    auto* align = Button(fields, "Auto align", [this] { mPlugin.ToggleAutoAlignment(); });
+    gtk_widget_set_tooltip_text(align, "Start or cancel stereo alignment");
+    for (int index : {kPanLink, kLevelLink, kPhaseInvertL, kPhaseInvertR, kLowCutFrequency, kLowCutSlope,
+                      kLowCutPostNAM, kHighCutFrequency, kHighCutSlope, kHighCutPostNAM, kDCBlockerActive})
+      Param(fields, index);
+    gtk_widget_show_all(dialog);
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+  }
+
+  void TunerWindow()
+  {
+    auto* dialog = gtk_dialog_new_with_buttons("Tuner", Window(), GTK_DIALOG_DESTROY_WITH_PARENT,
+      "_Close", GTK_RESPONSE_CLOSE, nullptr);
+    gtk_window_set_default_size(GTK_WINDOW(dialog), 370, 230);
+    auto* box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(box), 15);
+    auto* label = gtk_label_new("Play a note");
+    gtk_widget_set_name(label, "nam-title");
+    Pack(box, label, true);
+    Param(box, kTunerMute);
+    mPlugin.SetTunerActive(true);
+    struct Update { NeuralAmpModeler& plugin; GtkWidget* label; } update {mPlugin, label};
+    const guint timer = g_timeout_add(55, +[](gpointer ptr) -> gboolean {
+      const auto& data = *static_cast<Update*>(ptr);
+      const auto pitch = data.plugin.GetTunerResult();
+      if (pitch.valid && pitch.frequency > 0)
+      {
+        const int key = std::clamp(static_cast<int>(std::lround(69 + 12 * std::log2(pitch.frequency / 440.f))), 0, 127);
+        constexpr const char* notes[] {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+        char text[64];
+        g_snprintf(text, sizeof(text), "%s%d  %+.0f cents", notes[key % 12], key / 12 - 1, pitch.cents);
+        gtk_label_set_text(GTK_LABEL(data.label), text);
+      }
+      else
+        gtk_label_set_text(GTK_LABEL(data.label), "Play a note");
+      return G_SOURCE_CONTINUE;
+    }, &update);
+    gtk_widget_show_all(dialog);
+    gtk_dialog_run(GTK_DIALOG(dialog));
+    g_source_remove(timer);
+    mPlugin.SetTunerActive(false);
+    gtk_widget_destroy(dialog);
   }
 
   void QualityWindow()

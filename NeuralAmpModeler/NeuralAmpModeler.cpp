@@ -1951,6 +1951,8 @@ void NeuralAmpModeler::_ApplyThemeColorToUI(bool force)
 
 void NeuralAmpModeler::OnIdle()
 {
+  if (IsTunerActive())
+    mTunerDetector.AnalyzePending();
 #if PLUG_HAS_UI
   if (GetParam(kFollowTrackColor)->Bool())
     _ApplyThemeColorToUI(false);
@@ -1960,7 +1962,6 @@ void NeuralAmpModeler::OnIdle()
 
   if (IsTunerActive())
   {
-    mTunerDetector.AnalyzePending();
     if (auto* pGraphics = GetUI())
     {
       if (auto* tuner = dynamic_cast<NAMTunerPageControl*>(pGraphics->GetControlWithTag(kCtrlTagTunerBox)))

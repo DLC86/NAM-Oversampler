@@ -138,12 +138,12 @@ void ExercisePlugin(const char* library)
     Require(component->queryInterface(Vst::IEditController::iid, reinterpret_cast<void**>(&interface)) == kResultOk && interface,
             "The VST3 did not expose its editor controller.");
     auto controller = OwnVst(interface);
+    HostFrame host;
     auto view = OwnVst(controller->createView(Vst::ViewType::kEditor));
     Require(static_cast<bool>(view), "The VST3 did not expose a graphical editor.");
     Require(view->isPlatformTypeSupported(kPlatformTypeX11EmbedWindowID) == kResultTrue,
             "The VST3 editor rejected X11 embedding.");
 
-    HostFrame host;
     auto* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     auto* socket = gtk_socket_new();
     gtk_container_add(GTK_CONTAINER(window), socket);
