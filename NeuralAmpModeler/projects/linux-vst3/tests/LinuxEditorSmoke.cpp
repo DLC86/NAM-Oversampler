@@ -93,20 +93,15 @@ GtkWidget* FindWidget(GtkWidget* node, const Match& match)
 
 GtkWidget* FindInEditor(GtkWidget* socket, const char* caption)
 {
-  Require(gtk_socket_get_plug_window(GTK_SOCKET(socket)) != nullptr, "The VST3 editor did not embed an X11 window.");
-  GtkWidget* found = nullptr;
-  GList* topLevels = gtk_window_list_toplevels();
-  for (GList* window = topLevels; window && !found; window = window->next)
-  {
-    found = FindWidget(GTK_WIDGET(window->data), [&](GtkWidget* widget) {
-      if (!GTK_IS_BUTTON(widget) || !gtk_widget_get_visible(widget))
-        return false;
-      const char* label = gtk_button_get_label(GTK_BUTTON(widget));
-      return label && std::strcmp(label, caption) == 0;
-    });
-  }
-  g_list_free(topLevels);
-  return found;
+  auto* plug = FindWidget(socket, [](GtkWidget* widget) { return GTK_IS_PLUG(widget); });
+  Require(plug && gtk_plug_get_socket_window(GTK_PLUG(plug)) == gtk_widget_get_window(socket) &&
+          gtk_widget_get_mapped(plug), "The VST3 editor did not embed an X11 window.");
+  return FindWidget(plug, [&](GtkWidget* widget) {
+    if (!GTK_IS_BUTTON(widget) || !gtk_widget_get_mapped(widget))
+      return false;
+    const char* label = gtk_button_get_label(GTK_BUTTON(widget));
+    return label && std::strcmp(label, caption) == 0;
+  });
 }
 
 void ExercisePlugin(const char* library)
@@ -147,7 +142,9 @@ void ExercisePlugin(const char* library)
     auto* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     auto* socket = gtk_socket_new();
     gtk_container_add(GTK_CONTAINER(window), socket);
-    gtk_window_set_default_size(GTK_WINDOW(window), 860, 510);
+    ViewRect size {};
+    Require(view->getSize(&size) == kResultOk, "The VST3 editor did not report its size.");
+    gtk_window_set_default_size(GTK_WINDOW(window), size.getWidth(), size.getHeight());
     gtk_widget_show_all(window);
     const auto xid = gtk_socket_get_id(GTK_SOCKET(socket));
     view->setFrame(&host);
@@ -172,7 +169,11 @@ void ExercisePlugin(const char* library)
       }
     }
     gtk_button_clicked(GTK_BUTTON(addGate));
-    host.Tick();
+    for (int attempt = 0; attempt < 5; ++attempt)
+    {
+      host.Tick();
+      g_usleep(10000);
+    }
     Require(FindInEditor(socket, "Remove") && FindInEditor(socket, "Move left"),
             "The embedded effect inspector did not respond after adding a block.");
 
