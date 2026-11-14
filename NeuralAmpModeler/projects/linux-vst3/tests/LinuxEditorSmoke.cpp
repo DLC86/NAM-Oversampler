@@ -6,7 +6,6 @@
 #include <gtk/gtkx.h>
 #include <dlfcn.h>
 #include <cstring>
-#include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -158,16 +157,7 @@ void ExercisePlugin(const char* library)
     auto* addGate = FindInEditor(socket, "+ Gate");
     Require(addGate && FindInEditor(socket, "+ NAM") && FindInEditor(socket, "+ Cab"),
             "The VST3 effect chain controls were missing from the embedded editor.");
-    if (const char* preview = std::getenv("NAM_LINUX_EDITOR_PREVIEW"))
-    {
-      auto* capture = gdk_pixbuf_get_from_window(gtk_widget_get_window(window), 0, 0,
-        gtk_widget_get_allocated_width(window), gtk_widget_get_allocated_height(window));
-      if (capture)
-      {
-        gdk_pixbuf_save(capture, preview, "png", nullptr, nullptr);
-        g_object_unref(capture);
-      }
-    }
+    std::cout << "Packaged VST3 editor opened inside the X11 host" << std::endl;
     gtk_button_clicked(GTK_BUTTON(addGate));
     for (int attempt = 0; attempt < 5; ++attempt)
     {

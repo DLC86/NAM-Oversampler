@@ -18,12 +18,15 @@ xvfb-run -a -s '-screen 0 1280x800x24' env GDK_BACKEND=x11 bash -euo pipefail -c
   "$app" >"$log" 2>&1 &
   app_pid=$!
   trap "kill $app_pid 2>/dev/null || true; wait $app_pid 2>/dev/null || true" EXIT
-  if ! timeout 20s xdotool search --sync --onlyvisible --name "^NAM On Steroids$" >/dev/null; then
+  if ! window="$(timeout 20s xdotool search --sync --onlyvisible --limit 1 --name "^NAM On Steroids$")"; then
     cat "$log"
     echo "The installed standalone did not open its X11 window." >&2
     exit 1
   fi
   kill -0 "$app_pid"
+  if [[ -n "${NAM_LINUX_EDITOR_PREVIEW:-}" ]]; then
+    import -window "$window" "$NAM_LINUX_EDITOR_PREVIEW"
+  fi
   echo "Packaged standalone opened its graphical window over X11"
 ' nam-standalone-check "$standalone" "$unpacked/standalone.log"
 
