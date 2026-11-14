@@ -300,7 +300,11 @@ if [ $BUILD_INSTALLER == 1 ]; then
   echo "building installer"
   echo ""
 
-  ./scripts/makeinstaller-mac.sh $FULL_VERSION
+  ./scripts/makeinstaller-mac.sh "$FULL_VERSION" || exit 1
+  if [[ ! -s "$PKG" ]]; then
+    echo "Installer package missing: $PKG" >&2
+    exit 1
+  fi
 
   if [ $CODESIGN == 1 ]; then
     echo "code-sign installer for Gatekeeper on macOS 10.8+"

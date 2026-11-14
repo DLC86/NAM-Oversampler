@@ -137,7 +137,12 @@ void NeuralAmpModeler::RemoveEffect(int id)
     mEditedEffects.erase(it);
     _PublishEffectsLocked();
   }
-  _MarkCurrentInternalPresetDirty();
+  if (id == kMainNam)
+    OnMessage(kMsgTagClearModel, kCtrlTagModelFileBrowser, 0, nullptr);
+  else if (id == kMainCab)
+    OnMessage(kMsgTagClearIR, kCtrlTagIRFileBrowser, 0, nullptr);
+  else
+    _MarkCurrentInternalPresetDirty();
 }
 
 void NeuralAmpModeler::MoveEffect(int id, int index)

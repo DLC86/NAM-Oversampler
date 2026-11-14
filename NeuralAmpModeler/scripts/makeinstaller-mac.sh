@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # IPlug2 project macOS installer build script, using pkgbuild and productbuild
 # based on script for SURGE https://github.com/surge-synthesizer/surge
@@ -31,6 +32,7 @@ PRODUCT_NAME=$(sed -n 's/^#define BUNDLE_NAME "\(.*\)"/\1/p' config.h)
 if [[ -z "$PRODUCT_NAME" ]]; then
   PRODUCT_NAME="$PROJECT_NAME"
 fi
+PRODUCT_ID=$(sed -n 's/^#define BUNDLE_ID_NAME "\(.*\)".*$/\1/p' config.h | tr -d '\r')
 PKG_ID_PREFIX="${INSTALLER_PKG_ID_PREFIX:-com.StevenAtkinson}"
 INSTALLER_BACKGROUND="${PRODUCT_NAME}-installer-bg.png"
 if [[ ! -f "installer/${INSTALLER_BACKGROUND}" ]]; then
@@ -45,11 +47,11 @@ AU="${PRODUCT_NAME}.component"
 APP="${PRODUCT_NAME}.app"
 AAX="${PRODUCT_NAME}.aaxplugin"
 
-VST3_PKG_ID="${PKG_ID_PREFIX}.vst3.pkg.${PRODUCT_NAME}"
-AU_PKG_ID="${PKG_ID_PREFIX}.au.pkg.${PRODUCT_NAME}"
-AAX_PKG_ID="${PKG_ID_PREFIX}.aax.pkg.${PRODUCT_NAME}"
-APP_PKG_ID="${PKG_ID_PREFIX}.app.pkg.${PRODUCT_NAME}"
-RES_PKG_ID="${PKG_ID_PREFIX}.resources.pkg.${PRODUCT_NAME}"
+VST3_PKG_ID="${PKG_ID_PREFIX}.vst3.pkg.${PRODUCT_ID}"
+AU_PKG_ID="${PKG_ID_PREFIX}.au.pkg.${PRODUCT_ID}"
+AAX_PKG_ID="${PKG_ID_PREFIX}.aax.pkg.${PRODUCT_ID}"
+APP_PKG_ID="${PKG_ID_PREFIX}.app.pkg.${PRODUCT_ID}"
+RES_PKG_ID="${PKG_ID_PREFIX}.resources.pkg.${PRODUCT_ID}"
 
 RSRCS="~/Music/${PRODUCT_NAME}/Resources"
 
@@ -116,29 +118,29 @@ build_flavor()
       ;;
   esac
 
-  pkgbuild --root "$TMPDIR" --identifier "$ident" --version "$VERSION" --install-location "$loc" "${PKG_DIR}/${PRODUCT_NAME}_${flavor}.pkg" #|| exit 1
+  pkgbuild --root "$TMPDIR" --identifier "$ident" --version "$VERSION" --install-location "$loc" "${PKG_DIR}/${PRODUCT_NAME}_${flavor}.pkg"
 
   rm -r "$TMPDIR"
 }
 
 # # try to build VST3 package
 if [[ -d $PRODUCTS/$VST3 ]]; then
-  build_flavor "VST3" $VST3 "$VST3_PKG_ID" "/Library/Audio/Plug-Ins/VST3"
+  build_flavor "VST3" "$VST3" "$VST3_PKG_ID" "/Library/Audio/Plug-Ins/VST3"
 fi
 
 # # try to build AU package
 if [[ -d $PRODUCTS/$AU ]]; then
-  build_flavor "AU" $AU "$AU_PKG_ID" "/Library/Audio/Plug-Ins/Components"
+  build_flavor "AU" "$AU" "$AU_PKG_ID" "/Library/Audio/Plug-Ins/Components"
 fi
 
 # # try to build AAX package
 if [[ -d $PRODUCTS/$AAX ]]; then
-  build_flavor "AAX" $AAX "$AAX_PKG_ID" ""/Library/Application Support/Avid/Audio/Plug-Ins""
+  build_flavor "AAX" "$AAX" "$AAX_PKG_ID" "/Library/Application Support/Avid/Audio/Plug-Ins"
 fi
 
 # try to build App package
 if [[ -d $PRODUCTS/$APP ]]; then
-  build_flavor "APP" $APP "$APP_PKG_ID" "/Applications"
+  build_flavor "APP" "$APP" "$APP_PKG_ID" "/Applications"
 fi
 
 # write build info to resources folder

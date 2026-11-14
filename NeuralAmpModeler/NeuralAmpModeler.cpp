@@ -2857,8 +2857,13 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
           mPrimaryModelControls[1].reset();
         mPrimaryHasModelSize.store(false);
       }
-      mNAMPath.Set("");
-      mShouldRemoveModel = true;
+      {
+        std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+        mStagedModel.reset();
+        mStagedModelPath.clear();
+        mNAMPath.Set("");
+        mShouldRemoveModel = true;
+      }
       if (GetParam(kNAMLink)->Bool() || !_IsStereoRequested())
       {
         mNAMRightPath.Set("");
@@ -2888,8 +2893,13 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
       _MarkCurrentInternalPresetDirty();
       return true;
     case kMsgTagClearIR:
-      mIRPath.Set("");
-      mShouldRemoveIR = true;
+      {
+        std::lock_guard<std::mutex> lock(mDSPStagingMutex);
+        mStagedIR.reset();
+        mStagedIRPath.clear();
+        mIRPath.Set("");
+        mShouldRemoveIR = true;
+      }
       if (GetParam(kIRLink)->Bool() || !_IsStereoRequested())
       {
         mIRRightPath.Set("");

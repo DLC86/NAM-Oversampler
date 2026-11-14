@@ -99,6 +99,17 @@ if errorlevel 1 (
   exit /B 1
 )
 
+REM Stage the linked outputs for the installer and portable package.
+set "NAM_APP=build-win\app\x64\Release\NAM On Steroids.exe"
+set "NAM_PLUGIN=build-win\vst3\x64\Release\NAM On Steroids.vst3"
+set "NAM_BUNDLE=build-win\NAM On Steroids.vst3"
+
+copy /Y "%NAM_APP%" "build-win\NAM On Steroids_x64.exe" > NUL
+if errorlevel 1 exit /B 1
+call "..\iPlug2\Scripts\create_bundle.bat" "%NAM_BUNDLE%" "resources\NeuralAmpModeler.ico" ".vst3"
+copy /Y "%NAM_PLUGIN%" "%NAM_BUNDLE%\Contents\x86_64-win\NAM On Steroids.vst3" > NUL
+if errorlevel 1 exit /B 1
+
 REM --echo Copying AAX Presets
 
 REM --echo ------------------------------------------------------------------
@@ -121,6 +132,7 @@ echo Making Installer ...
 
   REM :64-Bit-is
   "%ProgramFiles(x86)%\Inno Setup 6\iscc" /Q ".\installer\NeuralAmpModeler.iss"
+  if errorlevel 1 exit /B 1
   REM goto END-is
 
   REM :END-is
