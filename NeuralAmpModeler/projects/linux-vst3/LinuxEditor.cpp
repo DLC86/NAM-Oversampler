@@ -267,6 +267,7 @@ public:
     Pack(mRoot, mChain);
 
     auto* scroller = gtk_scrolled_window_new(nullptr, nullptr);
+    gtk_widget_set_name(scroller, "nam-inspector");
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroller), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
     Pack(mRoot, scroller, true);
     mInspector = gtk_box_new(GTK_ORIENTATION_VERTICAL, 7);
@@ -279,6 +280,7 @@ public:
     Pack(mRoot, mFiles);
     mStatus = Label(mRoot, "");
     gtk_label_set_line_wrap(GTK_LABEL(mStatus), true);
+    gtk_widget_set_no_show_all(mStatus, true);
     InstallStyle();
     Refresh();
 
@@ -297,13 +299,13 @@ private:
   {
     auto* provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
-      "#nam-steroids { background-color: #0f0f0f; color: #ededed; font-family: Roboto, sans-serif; }"
-      "#nam-top, #nam-files { background-color: #1b1b1b; border: 1px solid #292929; }"
+      "#nam-window, #nam-plug, #nam-steroids { background-color: #0f0f0f; color: #ededed; font-family: Roboto, sans-serif; }"
+      "#nam-top, #nam-files, #nam-inspector, #nam-audio { background-color: #1b1b1b; border: 1px solid #292929; }"
       "#nam-title { color: #bf0000; font-size: 32px; font-weight: bold; }"
       "#nam-rotary-label, #nam-rotary-value { color: #a1a1a1; font-size: 13px; }"
-      "#nam-steroids button { background-image: none; background-color: #1b1b1b; color: #ededed; "
+      "#nam-steroids button, #nam-audio button { background-image: none; background-color: #1b1b1b; color: #ededed; "
       "border: 1px solid #292929; border-radius: 18px; padding: 4px 11px; box-shadow: none; text-shadow: none; }"
-      "#nam-steroids button:hover { border-color: #bf0000; }"
+      "#nam-steroids button:hover, #nam-audio button:hover { border-color: #bf0000; }"
       "#nam-steroids button.suggested-action { background: #bf0000; color: #fff; }"
       "#nam-steroids button.nam-bypassed { opacity: .57; }"
       "#nam-steroids combobox button { color: #ededed; border-radius: 14px; }", -1, nullptr);
@@ -317,6 +319,7 @@ private:
   void SetStatus(const std::string& text)
   {
     gtk_label_set_text(GTK_LABEL(mStatus), text.c_str());
+    gtk_widget_set_visible(mStatus, !text.empty());
   }
 
   std::string ChainSignature() const
@@ -659,13 +662,20 @@ private:
       Button(row, "Move right", [this, selected, position] { mPlugin.MoveEffect(selected, position + 1); Refresh(); });
       if (block->type == Type::Gate)
       {
-        if (selected == NeuralAmpModeler::kMainGate)
-          Param(mInspector, kNoiseGateThreshold);
-        else
-          Range(mInspector, "Threshold (dB)", -100.0, 0.0, 0.1, block->threshold, [this, selected](double value) {
+        auto* controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+        Pack(mInspector, controls);
+        const auto* threshold = mPlugin.GetParam(kNoiseGateThreshold);
+        Rotary(controls, "Threshold", threshold->GetMin(), threshold->GetMax(), .1,
+               block->threshold, threshold->GetDefault(), [this, selected](double value) {
+          if (selected == NeuralAmpModeler::kMainGate)
+            SendParam(kNoiseGateThreshold, value);
+          else
             mPlugin.SetEffectThreshold(selected, value);
-          });
-        Label(mInspector, "Sidechain");
+        });
+        auto* sidechain = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+        gtk_widget_set_valign(sidechain, GTK_ALIGN_CENTER);
+        Pack(controls, sidechain);
+        Label(sidechain, "Sidechain");
         std::vector<int> sources {NeuralAmpModeler::kEffectInput, NeuralAmpModeler::kChainInput};
         std::vector<std::string> titles {"Block input", "Chain input"};
         for (auto it = effects.begin(); it != block; ++it)
@@ -674,7 +684,7 @@ private:
           titles.emplace_back(std::to_string(titles.size() - 1) + "  " + mPlugin.EffectName(it->type) + " output");
         }
         const int source = static_cast<int>(std::distance(sources.begin(), std::find(sources.begin(), sources.end(), block->sidechain)));
-        Choice(mInspector, titles, source, [this, selected, sources](int index) {
+        Choice(sidechain, titles, source, [this, selected, sources](int index) {
           mPlugin.SetEffectSidechain(selected, sources[index]);
         });
       }
@@ -698,11 +708,8 @@ private:
         {
           const bool left = ModelControlsFor(selected, 0, stereo && split ? "Left model" : nullptr);
           const bool right = stereo && split && ModelControlsFor(selected, 1, "Right model");
-          if (!left && !right && selected == NeuralAmpModeler::kMainNam)
-            for (const auto index : {kEQActive, kToneStackType, kEQPostNAM, kToneBass, kToneMid, kToneTreble})
-              Param(mInspector, index);
-          if (!left && !right && selected > NeuralAmpModeler::kMainCab && !block->path.empty())
-            ExtraTone(*block);
+          if (!left && !right && (selected == NeuralAmpModeler::kMainNam || !block->path.empty()))
+            ToneStack(*block);
           if (selected == NeuralAmpModeler::kMainNam && mPlugin.PrimaryHasModelSize())
             Param(mInspector, kSlim);
           else if (block->hasModelSize)
@@ -718,27 +725,47 @@ private:
     gtk_widget_show_all(mFiles);
   }
 
-  void ExtraTone(const Settings& block)
+  void ToneStack(const Settings& block)
   {
-    const int id = block.id;
-    Label(mInspector, "Tone stack");
-    Choice(mInspector, {"Off", "On"}, block.tone.active ? 1 : 0, [this, id](int index) {
-      mPlugin.SetExtraEffectParam(id, kEQActive, index);
-    });
+    const bool main = block.id == NeuralAmpModeler::kMainNam;
+    const auto set = [this, main, id = block.id](int parameter, double value) {
+      if (main)
+        SendParam(parameter, value);
+      else
+        mPlugin.SetExtraEffectParam(id, parameter, value);
+    };
+    const auto value = [this, main](int parameter, double stored) {
+      return main ? mPlugin.GetParam(parameter)->Value() : stored;
+    };
+
+    auto* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 13);
+    Pack(mInspector, row);
+    const auto addChoice = [&](const char* title, const std::vector<std::string>& names, int parameter, double stored) {
+      auto* column = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+      gtk_widget_set_valign(column, GTK_ALIGN_CENTER);
+      Pack(row, column);
+      Label(column, title);
+      Choice(column, names, static_cast<int>(value(parameter, stored)), [set, parameter](int index) {
+        set(parameter, index);
+      });
+    };
     std::vector<std::string> types;
     for (int index = 0; index < dsp::tone_stack::kNumToneStackTypes; ++index)
       types.emplace_back(dsp::tone_stack::GetToneStackTypeName(dsp::tone_stack::ToneStackTypeFromInt(index)));
-    Choice(mInspector, types, block.tone.type, [this, id](int index) {
-      mPlugin.SetExtraEffectParam(id, kToneStackType, index);
-    });
-    Choice(mInspector, {"Pre NAM", "Post NAM"}, block.tone.post ? 1 : 0, [this, id](int index) {
-      mPlugin.SetExtraEffectParam(id, kEQPostNAM, index);
-    });
-    static constexpr std::array<const char*, 3> names {"Bass", "Middle", "Treble"};
+    addChoice("Tone stack", {"Off", "On"}, kEQActive, block.tone.active);
+    addChoice("Circuit", types, kToneStackType, block.tone.type);
+    addChoice("Position", {"Pre NAM", "Post NAM"}, kEQPostNAM, block.tone.post);
+
+    static constexpr std::array<const char*, 3> names {"Bass", "Mid", "Treble"};
     for (size_t index = 0; index < names.size(); ++index)
-      Range(mInspector, names[index], 0.0, 10.0, 0.1, block.tone.values[index], [this, id, index](double value) {
-        mPlugin.SetExtraEffectParam(id, kToneBass + static_cast<int>(index), value);
+    {
+      const int parameter = kToneBass + static_cast<int>(index);
+      const auto* param = mPlugin.GetParam(parameter);
+      Rotary(row, names[index], param->GetMin(), param->GetMax(), .1,
+             value(parameter, block.tone.values[index]), param->GetDefault(), [set, parameter](double current) {
+        set(parameter, current);
       });
+    }
   }
 
   bool ModelControlsFor(int id, int channel, const char* heading)
@@ -817,6 +844,7 @@ public:
     if (!mLoop || mLoop->registerTimer(this, 16) != Steinberg::kResultOk)
       return Steinberg::kResultFalse;
     mPlug = gtk_plug_new(static_cast<Window>(reinterpret_cast<uintptr_t>(parent)));
+    gtk_widget_set_name(mPlug, "nam-plug");
     g_signal_connect(mPlug, "destroy", G_CALLBACK(+[](GtkWidget*, gpointer view) {
       static_cast<LinuxView*>(view)->mPlug = nullptr;
     }), this);

@@ -235,18 +235,22 @@ int main(int argc, char** argv)
   Configure(plugin);
   LinuxAudio audio(plugin);
   auto* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  gtk_widget_set_name(window, "nam-window");
   gtk_window_set_title(GTK_WINDOW(window), "NAM On Steroids");
   gtk_window_set_default_size(GTK_WINDOW(window), PLUG_WIDTH, PLUG_HEIGHT);
-  auto* root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+  auto* root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
   gtk_container_add(GTK_CONTAINER(window), root);
   gtk_box_pack_start(GTK_BOX(root), MakeLinuxEditor(plugin), true, true, 0);
 
   auto* audioBar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 7);
+  gtk_widget_set_name(audioBar, "nam-audio");
   gtk_container_set_border_width(GTK_CONTAINER(audioBar), 8);
   gtk_box_pack_start(GTK_BOX(root), audioBar, false, false, 0);
   auto* start = gtk_button_new_with_label("Start audio");
   auto* status = gtk_label_new("ALSA default input and output");
   gtk_box_pack_start(GTK_BOX(audioBar), start, false, false, 0);
+  gtk_widget_set_name(status, "nam-rotary-value");
+  gtk_label_set_xalign(GTK_LABEL(status), 0);
   gtk_box_pack_start(GTK_BOX(audioBar), status, true, true, 0);
   struct Binding { LinuxAudio* audio; GtkWidget* status; } binding {&audio, status};
   g_signal_connect(start, "clicked", G_CALLBACK(+[](GtkButton* button, gpointer ptr) {
