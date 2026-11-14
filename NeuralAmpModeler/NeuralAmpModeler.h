@@ -25,6 +25,7 @@
 #endif
 
 #include "ToneStack.h"
+#include "ParametricModel.h"
 #include "Tuner.h"
 
 #include "IPlug_include_in_plug_hdr.h"
@@ -780,9 +781,10 @@ class ResamplingNAM : public nam::DSP
 public:
   // Resampling wrapper around the NAM models
   ResamplingNAM(std::unique_ptr<nam::DSP> encapsulated, const double expected_sample_rate,
-                const std::filesystem::path& modelPath = std::filesystem::path())
+                const std::filesystem::path& modelPath = std::filesystem::path(), bool parametric = false)
   : nam::DSP(encapsulated->NumInputChannels(), encapsulated->NumOutputChannels(), expected_sample_rate)
   , mEncapsulated(std::move(encapsulated))
+  , mParametric(parametric)
   , mModelPath(modelPath)
   {
     // Get the other information from the encapsulated NAM so that we can tell the outside world about what we're
@@ -917,6 +919,7 @@ public:
   // So that we can let the world know if we're resampling (useful for debugging)
   double GetEncapsulatedSampleRate() const { return GetNAMSampleRate(mEncapsulated); };
 
+  bool IsParametric() const { return mParametric; }
   nam::SlimmableModel* GetSlimmableModel() { return dynamic_cast<nam::SlimmableModel*>(mEncapsulated.get()); }
   const nam::SlimmableModel* GetSlimmableModel() const
   {
@@ -1369,7 +1372,7 @@ private:
 double GetRenderingSampleRate(double externalSampleRate) const
   {
     const double encapsulatedSampleRate = GetEncapsulatedSampleRate();
-    if (mRequestedOversamplingFactor <= 1)
+    if (mParametric || mRequestedOversamplingFactor <= 1)
       return encapsulatedSampleRate;
 
     const double requestedRenderingSampleRate = externalSampleRate * static_cast<double>(mRequestedOversamplingFactor);
@@ -1381,6 +1384,7 @@ double GetRenderingSampleRate(double externalSampleRate) const
 
   // The encapsulated NAM
   std::unique_ptr<nam::DSP> mEncapsulated;
+  bool mParametric;
 
   // Experimental Gateway-style phase-parallel oversampling.
   // With time-scaled dilations, each oversampled phase is independent and can be processed by a separate model copy.
@@ -1542,6 +1546,34 @@ public:
   void OnIdle() override;
   void OnAudioWorkgroupChanged(void* workgroup) override { mAudioWorkgroup.store(workgroup, std::memory_order_release); }
 
+  enum class EffectType { Gate, Nam, Cab };
+  static constexpr int kMaxEffectBlocks = 12;
+  static constexpr int kEffectInput = -1;
+  static constexpr int kChainInput = 0;
+  struct EffectSettings
+  {
+    int id = 0;
+    EffectType type = EffectType::Gate;
+    bool enabled = true;
+    double threshold = -60.0;
+    int sidechain = kEffectInput;
+    std::string path;
+  };
+  std::vector<EffectSettings> GetEffects() const;
+  int AddEffect(EffectType type);
+  void RemoveEffect(int id);
+  void MoveEffect(int id, int index);
+  void SetEffectEnabled(int id, bool enabled);
+  void SetEffectThreshold(int id, double threshold);
+  void SetEffectSidechain(int id, int source);
+  std::string LoadEffectFile(int id, const std::string& path);
+  static const char* EffectName(EffectType type);
+  std::shared_ptr<const ModelControls> GetEffectModelControls(int id, int channel = 0) const;
+  void SetEffectModelControl(int id, int channel, size_t index, float value);
+  bool PrimaryHasModelSize() const { return mPrimaryHasModelSize.load(); }
+  int GetSelectedEffect() const { return mSelectedEffect; }
+  void SelectEffect(int id);
+
   bool SerializeState(iplug::IByteChunk& chunk) const override;
   int UnserializeState(const iplug::IByteChunk& chunk, int startPos) override;
   void ProcessMidiMsg(const iplug::IMidiMsg& msg) override;
@@ -1616,7 +1648,59 @@ private:
     std::string irRightPath;
     std::string toneStackTypeName;
     std::string toneStackComponentState;
+    std::string effectChainState;
   };
+
+  static constexpr int kMainNam = 1;
+  static constexpr int kMainGate = 2;
+  static constexpr int kMainCab = 3;
+
+  struct EffectAudio
+  {
+    EffectAudio() { trigger.AddListener(&gain); }
+    dsp::noise_gate::Trigger trigger;
+    dsp::noise_gate::Gain gain;
+    std::array<std::unique_ptr<ResamplingNAM>, 2> nam;
+    std::array<std::unique_ptr<dsp::ImpulseResponse>, 2> cab;
+    std::array<std::vector<iplug::sample>, 2> output;
+    std::array<iplug::sample*, 2> pointers {};
+  };
+  struct EffectBlock
+  {
+    EffectSettings settings;
+    std::shared_ptr<EffectAudio> audio;
+    std::shared_ptr<ModelControls> controls;
+  };
+  static std::vector<EffectBlock> _DefaultEffects();
+  void _EditEffect(int id, const std::function<void(EffectSettings&)>& edit);
+  void _PublishEffectsLocked();
+  void _ApplyEffectStaging();
+  void _ResetEffects(double sampleRate, int maxBlockSize);
+  void _ApplyExtraModelQuality(int oversamplingFactor, dsp::EAntiAliasFilterPhase phase);
+  std::shared_ptr<EffectAudio> _BuildEffectAudio(const EffectSettings& settings,
+                                                std::shared_ptr<ModelControls>& controls);
+  std::shared_ptr<ModelControls> _GetEffectModelControlsLocked(int id, int channel) const;
+  std::array<std::shared_ptr<ModelControls>, 2> mPrimaryModelControls;
+  std::atomic<bool> mPrimaryHasModelSize {false};
+  int mSelectedEffect = kMainNam;
+  std::string _SerializeEffects() const;
+  void _RestoreEffects(const nlohmann::json& state);
+  void _RestoreEffects(const std::string& state);
+  iplug::sample** _ProcessExtraEffect(
+    const EffectBlock& block, iplug::sample** input, size_t channels, int frames);
+  iplug::sample** _ProcessGate(EffectAudio& dsp, double threshold, iplug::sample** detector,
+                             iplug::sample** input, size_t channels, int frames);
+  void _SaveEffectTap(size_t tap, iplug::sample** input, size_t channels, int frames);
+  void _RefreshEffectRoutingLocked();
+
+  mutable std::mutex mEffectsMutex;
+  std::vector<EffectBlock> mEditedEffects = _DefaultEffects();
+  std::vector<EffectBlock> mActiveEffects = _DefaultEffects();
+  std::vector<EffectBlock> mStagedEffects;
+  bool mEffectsPending = false;
+  EffectAudio mMainGateAudio;
+  std::array<std::array<std::vector<iplug::sample>, 2>, kMaxEffectBlocks + 1> mEffectTaps;
+  std::array<std::array<iplug::sample*, 2>, kMaxEffectBlocks + 1> mEffectTapPointers {};
 
   // Allocates mInputPointers and mOutputPointers
   void _AllocateIOPointers(const size_t nChans);
@@ -1641,7 +1725,8 @@ private:
   void _RestageCurrentModelAndIRForStereo();
   bool _NeedsStereoModelRestageForPath(const std::string& modelPath);
   bool _NeedsStereoIRRestageForPath(const std::string& irPath);
-  std::unique_ptr<ResamplingNAM> _CreateModel(const WDL_String& modelPath, nam::dspData* returnedConfig = nullptr);
+  std::unique_ptr<ResamplingNAM> _CreateModel(const WDL_String& modelPath, nam::dspData* returnedConfig = nullptr,
+                                              std::shared_ptr<ModelControls>* parametric = nullptr);
   // Loads a NAM model and stores it to mStagedNAM
   // Returns an empty string on success, or an error message on failure.
   std::string _StageModel(const WDL_String& dspFile);
@@ -1762,9 +1847,6 @@ private:
   // modify the reference used by Calibrated or Auto output modes.
   double mOutputCalibrationReferenceLevel = 12.0;
 
-  // Noise gates
-  dsp::noise_gate::Trigger mNoiseGateTrigger;
-  dsp::noise_gate::Gain mNoiseGateGain;
   // The model actually being used:
   std::unique_ptr<ResamplingNAM> mModel;
   std::unique_ptr<ResamplingNAM> mModelRight;

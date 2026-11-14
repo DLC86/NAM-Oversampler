@@ -127,6 +127,7 @@ void NeuralAmpModeler::_UnserializeApplyConfig(nlohmann::json& config)
   {
     _StageIR(mIRPath);
   }
+  _RestoreEffects(config.value("Effect Chain", nlohmann::json()));
   mApplyingInternalPreset.store(false, std::memory_order_release);
   mCurrentInternalPresetSnapshot = _CaptureCurrentInternalPresetSnapshot();
   mCurrentInternalPresetDirty.store(_IsCurrentInternalPresetModified(), std::memory_order_release);
@@ -1082,6 +1083,16 @@ int NeuralAmpModeler::_UnserializeStateWithKnownVersion(const iplug::IByteChunk&
   {
     // You shouldn't be here...
     assert(false);
+  }
+  if (version >= _Version(3, 0, 0) && pos >= 0)
+  {
+    WDL_String effects;
+    const int end = chunk.GetStr(effects, pos);
+    if (end >= 0)
+    {
+      config["Effect Chain"] = nlohmann::json::parse(effects.Get(), nullptr, false);
+      pos = end;
+    }
   }
   if (!(version >= _Version(2, 2, 0)))
     _RemapLegacyToneStackTypeConfig(config);

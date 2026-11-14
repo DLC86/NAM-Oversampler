@@ -1,7 +1,7 @@
 #define PLUG_NAME "NAM On Steroids"
 #define PLUG_MFR "The Tone Scientist"
-#define PLUG_VERSION_HEX 0x00020304
-#define PLUG_VERSION_STR "2.3.4"
+#define PLUG_VERSION_HEX 0x00030000
+#define PLUG_VERSION_STR "3.0.0"
 #define PLUG_UNIQUE_ID '1YEo'
 #define PLUG_MFR_ID 'TTSc'
 #define PLUG_URL_STR "https://github.com/sdatkinson/NeuralAmpModelerPlugin"
@@ -32,8 +32,8 @@
 #else
 #define PLUG_HAS_UI 1
 #endif
-#define PLUG_WIDTH 600
-#define PLUG_HEIGHT 400
+#define PLUG_WIDTH 860
+#define PLUG_HEIGHT 510
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
 #define PLUG_HOST_RESIZE 0

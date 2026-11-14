@@ -9,6 +9,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <utility>
+#include <tuple>
 
 #if defined(_WIN32)
   #ifndef WIN32_LEAN_AND_MEAN
@@ -75,8 +76,6 @@ const IVStyle style =
           DEFAULT_SHADOW_OFFSET,
           DEFAULT_WIDGET_FRAC,
           DEFAULT_WIDGET_ANGLE};
-const IVStyle titleStyle =
-  DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular")).WithDrawFrame(false).WithShadowOffset(2.f);
 const IVStyle radioButtonStyle =
     style
         .WithColor(EVColor::kON, mAppliedThemeColor) // Pressed buttons and their labels
@@ -93,6 +92,7 @@ EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char
   return pGraphics->ShowMessageBox(str, caption, type);
 #endif
 }
+#include "NAMChainEditor.h"
 #endif
 
 const std::string kCalibrateInputParamName = "CalibrateInput";
@@ -271,8 +271,6 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
   MakeDefaultPreset("Default");
   _LoadGlobalInternalPresetBank();
 
-  mNoiseGateTrigger.AddListener(&mNoiseGateGain);
-
 #if PLUG_HAS_UI
   mMakeGraphicsFunc = [&]() {
 
@@ -303,99 +301,49 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
     const auto crossSVG = pGraphics->LoadSVG(CLOSE_BUTTON_FN);
     const auto rightArrowSVG = pGraphics->LoadSVG(RIGHT_ARROW_FN);
     const auto leftArrowSVG = pGraphics->LoadSVG(LEFT_ARROW_FN);
-    const auto modelIconSVG = pGraphics->LoadSVG(MODEL_ICON_FN);
     const auto irIconOnSVG = pGraphics->LoadSVG(IR_ICON_ON_FN);
-    const auto irIconOffSVG = pGraphics->LoadSVG(IR_ICON_OFF_FN);
     const auto backgroundBitmap = pGraphics->LoadBitmap(BACKGROUND_FN);
     const auto fileBackgroundBitmap = pGraphics->LoadBitmap(FILEBACKGROUND_FN);
     const auto inputLevelBackgroundBitmap = pGraphics->LoadBitmap(INPUTLEVELBACKGROUND_FN);
-    const auto linesBitmap = pGraphics->LoadBitmap(LINES_FN);
     const auto knobBackgroundBitmap = pGraphics->LoadBitmap(KNOBBACKGROUND_FN);
     const auto switchHandleBitmap = pGraphics->LoadBitmap(SLIDESWITCHHANDLE_FN);
     const auto meterBackgroundBitmap = pGraphics->LoadBitmap(METERBACKGROUND_FN);
     const auto ttsLogoBitmap = pGraphics->LoadBitmap(TTS_LOGO_FN);
 
     const auto b = pGraphics->GetBounds();
-    const auto mainArea = b.GetPadded(-20);
-    const auto contentArea = mainArea.GetPadded(-10);
-    const auto titleHeight = 50.0f;
-    const auto titleArea = contentArea.GetFromTop(titleHeight);
-    const auto internalPresetArea =
-      IRECT(contentArea.MW() - 170.0f, b.T + 7.0f, contentArea.MW() + 170.0f, b.T + 29.0f);
+    const IRECT internalPresetArea {317, 17, 652, 48};
+    const IRECT inputKnobArea {22, 318, 102, 407};
+    const IRECT outputKnobArea {757, 318, 840, 407};
+    const IRECT noiseGateArea {157, 303, 283, 415};
+    const IRECT bassKnobArea {151, 341, 291, 432};
+    const IRECT midKnobArea {301, 341, 441, 432};
+    const IRECT trebleKnobArea {451, 341, 591, 432};
+    const IRECT inputBoostArea {24, 414, 101, 441};
+    const IRECT eqToggleArea {144, 302, 225, 333};
+    const IRECT toneStackSelectorArea {234, 302, 412, 333};
+    const IRECT eqPositionArea {420, 302, 523, 333};
+    const IRECT slimIconArea {535, 303, 638, 332};
 
-    // Areas for knobs
-    const auto knobsPad = 20.0f;
-    const auto knobsExtraSpaceBelowTitle = 25.0f;
-    const auto singleKnobPad = -2.0f;
-    const auto knobsArea = contentArea.GetFromTop(NAM_KNOB_HEIGHT)
-                             .GetReducedFromLeft(knobsPad)
-                             .GetReducedFromRight(knobsPad)
-                             .GetVShifted(titleHeight + knobsExtraSpaceBelowTitle);
-    const auto inputKnobArea = knobsArea.GetGridCell(0, kInputLevel, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto noiseGateArea = knobsArea.GetGridCell(0, kNoiseGateThreshold, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto bassKnobArea = knobsArea.GetGridCell(0, kToneBass, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto midKnobArea = knobsArea.GetGridCell(0, kToneMid, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto trebleKnobArea = knobsArea.GetGridCell(0, kToneTreble, 1, numKnobs).GetPadded(-singleKnobPad);
-    const auto outputKnobArea = knobsArea.GetGridCell(0, kOutputLevel, 1, numKnobs).GetPadded(-singleKnobPad);
+    const IRECT modelArea {144, 264, 720, 299};
+    const IRECT namLinkArea {421, 268, 443, 295};
+    const IRECT modelLeftArea {144, 264, 417, 299};
+    const IRECT modelRightArea {447, 264, 720, 299};
+    const auto irArea = modelArea;
+    const auto irLinkArea = namLinkArea;
+    const auto irLeftArea = modelLeftArea;
+    const auto irRightArea = modelRightArea;
+    const IRECT irSwitchArea {148, 313, 175, 337};
+    const IRECT irSwitchAreaLeft {148, 313, 175, 337};
+    const IRECT irSwitchAreaRight {184, 313, 211, 337};
 
-    const auto ngToggleArea =
-      noiseGateArea.GetVShifted(noiseGateArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
-    const auto inputBoostArea =
-      inputKnobArea.GetVShifted(inputKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
-    const auto eqToggleArea =
-      bassKnobArea.GetVShifted(bassKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
-    const auto toneStackSelectorBaseArea =
-      midKnobArea.GetVShifted(midKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
-    const auto toneStackSelectorArea =
-      IRECT(toneStackSelectorBaseArea.L - 14.0f, toneStackSelectorBaseArea.T + 1.0f,
-            toneStackSelectorBaseArea.R + 14.0f, toneStackSelectorBaseArea.B + 1.0f);
-    const auto eqPositionArea =
-      trebleKnobArea.GetVShifted(trebleKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
-    // Request 6: Model Size slider area under Output knob
-    const auto slimIconArea =
-      outputKnobArea.GetVShifted(outputKnobArea.H()).SubRectVertical(2, 0).GetReducedFromTop(10.0f);
-
-    // Areas for model and IR
-    const auto fileWidth = 230.0f;
-    const auto fileHeight = 30.0f;
-    const auto irYOffset = 38.0f;
-    const auto modelArea =
-      contentArea.GetFromBottom((2.0f * fileHeight)).GetFromTop(fileHeight).GetMidHPadded(fileWidth).GetVShifted(-1);
-    
-    const auto namLinkArea = IRECT(modelArea.MW() - 9.0f, modelArea.T + 6.0f, modelArea.MW() + 9.0f, modelArea.T + 24.0f);
-    const auto modelLeftArea = IRECT(modelArea.L, modelArea.T, modelArea.MW() - 11.0f, modelArea.B);
-    const auto modelRightArea = IRECT(modelArea.MW() + 11.0f, modelArea.T, modelArea.R, modelArea.B);
-
-    // FILTERS & MIX button to the right of modelArea (NAM field), shifted 4px to left total (R - 4.0f)
-    const auto cutFiltersButtonArea =
-      IRECT(modelArea.R - 4.0f, modelArea.MH() - 14.0f, modelArea.R - 4.0f + 56.0f, modelArea.MH() + 14.0f);
-    
-    // Request 3: NAM bypass icon 2px lower (Y + 2)
-    const auto modelIconArea = modelArea.GetFromLeft(30).GetTranslated(-40, 2).GetCentredInside(30.f, 14.f);
-
-    const auto irArea = modelArea.GetVShifted(irYOffset);
-    const auto irLinkArea = IRECT(irArea.MW() - 9.0f, irArea.T + 6.0f, irArea.MW() + 9.0f, irArea.T + 24.0f);
-    const auto irLeftArea = IRECT(irArea.L, irArea.T, irArea.MW() - 11.0f, irArea.B);
-    const auto irRightArea = IRECT(irArea.MW() + 11.0f, irArea.T, irArea.R, irArea.B);
-
-    const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
-    const auto irSwitchAreaLeft = irArea.GetFromLeft(15.0f).GetHShifted(-41.0f).GetCentredInside(15.0f, 18.0f);
-    const auto irSwitchAreaRight = irArea.GetFromLeft(15.0f).GetHShifted(-24.0f).GetCentredInside(15.0f, 18.0f);
-    
-    // Mono/Stereo button to the right of irArea (IR field), shifted 4px to left total (R - 4.0f)
-    const auto channelModeArea =
-      IRECT(irArea.R - 4.0f, irArea.MH() - 14.0f, irArea.R - 4.0f + 56.0f, irArea.MH() + 14.0f);
-
-    // Areas for meters
-    const auto inputMeterArea = contentArea.GetFromLeft(30).GetHShifted(-20).GetMidVPadded(100).GetVShifted(-25);
-    const auto outputMeterArea = contentArea.GetFromRight(30).GetHShifted(20).GetMidVPadded(100).GetVShifted(-25);
-
-    // Misc Areas
-    const auto settingsButtonArea = CornerButtonArea(b).GetVShifted(10.0f);
-    const auto tunerButtonArea = settingsButtonArea.GetTranslated(-34.0f, 0.0f);
-    const auto oversamplingButtonArea = LeftCornerButtonArea(b, 42.0f).GetTranslated(8.0f, 10.0f);
-    const auto oversamplingIndicatorArea =
-      oversamplingButtonArea.GetTranslated(34.0f, 0.0f).GetCentredInside(38.0f, 22.0f);
+    const IRECT cutFiltersButtonArea {133, 466, 226, 496};
+    const IRECT channelModeArea {235, 466, 327, 496};
+    const IRECT inputMeterArea {47, 246, 77, 319};
+    const IRECT outputMeterArea {785, 246, 815, 319};
+    const IRECT settingsButtonArea {805, 15, 840, 50};
+    const IRECT tunerButtonArea {763, 15, 798, 50};
+    const IRECT oversamplingButtonArea {675, 15, 707, 50};
+    const IRECT oversamplingIndicatorArea {710, 15, 753, 50};
 
     // Model loader button (Left)
     auto loadModelCompletionHandler = [&](const WDL_String& fileName, const WDL_String& path) {
@@ -461,12 +409,10 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
       }
     };
 
-    pGraphics->AttachBackground(BACKGROUND_FN);
-    pGraphics->AttachControl(new IBitmapControl(b, linesBitmap));
-    pGraphics->AttachControl(new IVLabelControl(titleArea, "NAM ON STEROIDS", titleStyle));
+    pGraphics->AttachPanelBackground(IColor(255, 15, 18, 24));
+    pGraphics->AttachControl(new NAMChainEditor(b, *this));
     pGraphics->AttachControl(new NAMInternalPresetSlotControl(internalPresetArea, leftArrowSVG, rightArrowSVG),
                              kCtrlTagInternalPresetSlot);
-    pGraphics->AttachControl(new NAMIconSwitchControl(modelIconArea, modelIconSVG, kNAMToggle));
 
 #ifdef NAM_PICK_DIRECTORY
     const std::string defaultNamFileString = "Select model directory...";
@@ -522,11 +468,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                                                 ->HideAnimated(false);
                                                             }),
                              kCtrlTagCutFiltersButton);
-    pGraphics->AttachControl(
-      new NAMSwitchControl(ngToggleArea, kNoiseGateActive, "Noise Gate", style, switchHandleBitmap));
     pGraphics->AttachControl(new NAMSwitchControl(inputBoostArea, kInputBoost, "Boost", style, switchHandleBitmap))
       ->SetTooltip("Input boost: +12 dB after the input gain control");
-    pGraphics->AttachControl(new NAMSwitchControl(eqToggleArea, kEQActive, "EQ", style, switchHandleBitmap));
+    pGraphics->AttachControl(new NAMSwitchControl(eqToggleArea, kEQActive, "EQ", style, switchHandleBitmap), -1, "EQ_KNOBS");
     pGraphics->AttachControl(
       new NAMToneStackSelectorControl(toneStackSelectorArea, kToneStackType, leftArrowSVG, rightArrowSVG,
                                       [pGraphics](IControl* pCaller) {
@@ -534,9 +478,9 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                                           ->As<NAMToneStackPageControl>()
                                           ->HideAnimated(false);
                                       }),
-      kCtrlTagToneStackSelector);
+      kCtrlTagToneStackSelector, "EQ_KNOBS");
     pGraphics->AttachControl(new NAMSwitchControl(eqPositionArea, kEQPostNAM, "Pre/Post", style, switchHandleBitmap),
-                             kCtrlTagEQPostNAM)
+                             kCtrlTagEQPostNAM, "EQ_KNOBS")
       ->SetTooltip("EQ position: off = pre NAM, on = post NAM");
     pGraphics->AttachControl(new NAMChannelModeControl(channelModeArea, kChannelMode, "", style),
                              kCtrlTagChannelMode)
@@ -553,7 +497,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
 
     // The knobs
     pGraphics->AttachControl(new NAMKnobControl(inputKnobArea, kInputLevel, "", style, knobBackgroundBitmap));
-    pGraphics->AttachControl(new NAMKnobControl(noiseGateArea, kNoiseGateThreshold, "", style, knobBackgroundBitmap));
+    pGraphics->AttachControl(new NAMKnobControl(noiseGateArea, kNoiseGateThreshold, "", style, knobBackgroundBitmap), -1, "GATE_CONTROLS");
     pGraphics->AttachControl(
       new NAMKnobControl(bassKnobArea, kToneBass, "", style, knobBackgroundBitmap), -1, "EQ_KNOBS");
     pGraphics->AttachControl(
@@ -620,6 +564,7 @@ NeuralAmpModeler::NeuralAmpModeler(const InstanceInfo& info)
                       kCtrlTagToneStackBox)
       ->Hide(true);
 
+    SelectEffect(mSelectedEffect);
     pGraphics->ForAllControlsFunc([](IControl* pControl) {
       pControl->SetMouseEventsWhenDisabled(true);
       pControl->SetMouseOverWhenDisabled(true);
@@ -676,6 +621,7 @@ void NeuralAmpModeler::_InitInternalPresets()
     preset.irRightPath.clear();
     preset.toneStackTypeName.clear();
     preset.toneStackComponentState.clear();
+    preset.effectChainState.clear();
   }
   mMidiCCToParam.fill(kNoMidiCCAssignment);
 }
@@ -760,6 +706,8 @@ bool NeuralAmpModeler::_IsCurrentInternalPresetModified() const
     return true;
   if (!_InternalPresetPathsEqual(preset.irRightPath, mIRRightPath.Get()))
     return true;
+  if (!preset.effectChainState.empty() && preset.effectChainState != _SerializeEffects())
+    return true;
   if (!preset.toneStackComponentState.empty() && preset.toneStackComponentState != _SerializeToneStackComponentState())
     return true;
 
@@ -800,6 +748,7 @@ std::string NeuralAmpModeler::_CaptureCurrentInternalPresetSnapshot() const
   snapshot["name"] = GetCurrentInternalPresetName();
   snapshot["namPath"] = mNAMPath.Get();
   snapshot["irPath"] = mIRPath.Get();
+  snapshot["effectChain"] = _SerializeEffects();
   snapshot["toneStackComponents"] = _SerializeToneStackComponentState();
   snapshot["params"] = nlohmann::json::array();
   for (int i = 0; i < kNumParams; ++i)
@@ -994,6 +943,7 @@ void NeuralAmpModeler::_StoreInternalPreset(int index)
   preset.toneStackTypeName = dsp::tone_stack::GetToneStackTypeName(
     dsp::tone_stack::ToneStackTypeFromInt(GetParam(kToneStackType)->Int()));
   preset.toneStackComponentState = _SerializeToneStackComponentState();
+  preset.effectChainState = _SerializeEffects();
 }
 
 void NeuralAmpModeler::SaveCurrentInternalPreset()
@@ -1063,6 +1013,7 @@ void NeuralAmpModeler::RenameCurrentInternalPreset(const char* name)
 
 void NeuralAmpModeler::_ApplyEmptyInternalPresetState()
 {
+  _RestoreEffects(std::string());
   mApplyingInternalPreset.store(true, std::memory_order_release);
 
   for (int i = 0; i < kNumParams; ++i)
@@ -1207,6 +1158,7 @@ void NeuralAmpModeler::_RecallInternalPreset(int index, bool allowFileStaging)
         _StageIRRight(rightPath);
       }
     }
+    _RestoreEffects(preset.effectChainState);
   }
 
   for (int i = 0; i < kNumParams; ++i)
@@ -1274,6 +1226,7 @@ std::string NeuralAmpModeler::_SerializeInternalPresetState() const
     p["irRightPath"] = preset.irRightPath;
     p["toneStackTypeName"] = preset.toneStackTypeName;
     p["toneStackComponents"] = preset.toneStackComponentState;
+    p["effectChain"] = preset.effectChainState;
     p["channelMode"] = preset.paramValues[kChannelMode];
     p["irToggleRight"] = preset.paramValues[kIRToggleRight];
     p["params"] = nlohmann::json::array();
@@ -1347,6 +1300,7 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
       preset.irRightPath = p.value("irRightPath", preset.irPath);
       preset.toneStackTypeName = p.value("toneStackTypeName", "");
       preset.toneStackComponentState = p.value("toneStackComponents", "");
+      preset.effectChainState = p.value("effectChain", "");
       preset.saved = p.value("saved", false) || (!preset.name.empty() && preset.name != "empty") || !preset.namPath.empty() || !preset.irPath.empty();
 
       if (p.contains("params") && p["params"].is_array())
@@ -1464,6 +1418,7 @@ void NeuralAmpModeler::_UnserializeApplyInternalPresetState(const nlohmann::json
         preset.irRightPath.clear();
         preset.toneStackTypeName.clear();
         preset.toneStackComponentState.clear();
+        preset.effectChainState.clear();
         for (int paramIdx = 0; paramIdx < kNumParams; ++paramIdx)
           preset.paramValues[paramIdx] = GetParam(paramIdx)->GetDefault();
       }
@@ -1703,6 +1658,7 @@ void NeuralAmpModeler::ProcessBlock(iplug::sample** inputs, iplug::sample** outp
   // OFFLINE_RENDER_STATE_SYNC
   // Always use offline settings while the host reports offline rendering.
   // If the state changes without OnReset(), update DSP and latency immediately.
+  _ApplyEffectStaging();
   const bool offlineNow = GetRenderingOffline();
   if (mOfflineRenderLatencyArmed != offlineNow)
   {
@@ -1726,6 +1682,8 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
   const size_t numChannelsExternalOut = processStereo ? kNumChannelsStereo : numChannelsConnectedOut;
   const size_t numFrames = (size_t)nFrames;
   const double sampleRate = GetSampleRate();
+  if (nFrames <= 0)
+    return;
 
   // Disable floating point denormals
   std::fenv_t fe_state;
@@ -1738,121 +1696,164 @@ const size_t numChannelsConnectedIn = std::max((size_t)NInChansConnected(), kNum
   _ProcessTunerInput(mInputPointers, numFrames, numChannelsInternal, sampleRate);
   _ApplyDSPStaging();
   _PrepareRealtimeDSPTransition(sampleRate);
-  const bool noiseGateActive = GetParam(kNoiseGateActive)->Value();
-  const bool toneStackActive = GetParam(kEQActive)->Value();
+  const bool usesParametricModel = (mModel && mModel->IsParametric()) ||
+    (numChannelsInternal == kNumChannelsStereo && mModelRight && mModelRight->IsParametric());
+  const bool toneStackActive = GetParam(kEQActive)->Bool() && mToneStack != nullptr && !usesParametricModel;
   const bool toneStackPostNAM = mEQPostNAM.load();
+  const bool legacyGatePosition = std::adjacent_find(mActiveEffects.begin(), mActiveEffects.end(),
+    [](const EffectBlock& a, const EffectBlock& b) {
+      return a.settings.id == kMainNam && b.settings.id == kMainGate;
+    }) != mActiveEffects.end();
 
-  // Noise gate trigger
-  sample** triggerOutput = mInputPointers;
-  if (noiseGateActive)
+  std::array<bool, kMaxEffectBlocks + 1> neededTaps {};
+  std::array<size_t, kMaxEffectBlocks> detectorTaps {};
+  for (size_t index = 0; index < mActiveEffects.size(); ++index)
   {
-    const double time = 0.01;
-    const double threshold = GetParam(kNoiseGateThreshold)->Value(); // GetParam...
-    const double ratio = 0.1; // Quadratic...
-    const double openTime = 0.005;
-    const double holdTime = 0.01;
-    const double closeTime = 0.05;
-    const dsp::noise_gate::TriggerParams triggerParams(time, threshold, ratio, openTime, holdTime, closeTime);
-    mNoiseGateTrigger.SetParams(triggerParams);
-    mNoiseGateTrigger.SetSampleRate(sampleRate);
-    triggerOutput = mNoiseGateTrigger.Process(mInputPointers, numChannelsInternal, numFrames);
-  }
-  _ApplyInputGain(triggerOutput, numFrames, numChannelsInternal);
-
-  sample** preCutPointers = _ProcessCutFilters(mInputPointers, numChannelsInternal, numFrames, false);
-
-  sample** modelInputPointers = preCutPointers;
-  if (toneStackActive && !toneStackPostNAM && mToneStack != nullptr)
-    modelInputPointers = mToneStack->Process(preCutPointers, numChannelsInternal, nFrames);
-
-  void* audioWorkgroup = mAudioWorkgroup.load(std::memory_order_acquire);
-  const bool namActive = GetParam(kNAMToggle)->Value();
-  if (mModel != nullptr && namActive)
-    mModel->SetAudioWorkgroup(audioWorkgroup);
-  if (mModelRight != nullptr && namActive)
-    mModelRight->SetAudioWorkgroup(audioWorkgroup);
-
-  if (mModel != nullptr && namActive)
-  {
-    if (numChannelsInternal == kNumChannelsStereo)
+    const auto& settings = mActiveEffects[index].settings;
+    if (settings.type != EffectType::Gate || settings.sidechain == kEffectInput)
+      continue;
+    if (settings.sidechain == kChainInput)
+      neededTaps[0] = true;
+    else
     {
-      if (mModelRight != nullptr)
+      for (size_t source = 0; source < index; ++source)
       {
-        sample* modelInputLeft[1] = {modelInputPointers[0]};
-        sample* modelOutputLeft[1] = {mOutputPointers[0]};
-        sample* modelInputRight[1] = {modelInputPointers[1]};
-        sample* modelOutputRight[1] = {mOutputPointers[1]};
-        mModel->process_stereo(
-          *mModelRight, modelInputLeft, modelOutputLeft, modelInputRight, modelOutputRight, nFrames);
+        if (mActiveEffects[source].settings.id == settings.sidechain)
+        {
+          detectorTaps[index] = source + 1;
+          neededTaps[source + 1] = true;
+          break;
+        }
+      }
+    }
+  }
+  if (neededTaps[0])
+    _SaveEffectTap(0, mInputPointers, numChannelsInternal, nFrames);
+  _ApplyInputGain(mInputPointers, numFrames, numChannelsInternal);
+
+  const auto mainNam = [&](sample** modelInputPointers) {
+    void* audioWorkgroup = mAudioWorkgroup.load(std::memory_order_acquire);
+    const bool namActive = GetParam(kNAMToggle)->Value();
+    if (mModel != nullptr && namActive)
+      mModel->SetAudioWorkgroup(audioWorkgroup);
+    if (mModelRight != nullptr && namActive)
+      mModelRight->SetAudioWorkgroup(audioWorkgroup);
+
+    if (mModel != nullptr && namActive)
+    {
+      if (numChannelsInternal == kNumChannelsStereo)
+      {
+        if (mModelRight != nullptr)
+        {
+          sample* modelInputLeft[1] = {modelInputPointers[0]};
+          sample* modelOutputLeft[1] = {mOutputPointers[0]};
+          sample* modelInputRight[1] = {modelInputPointers[1]};
+          sample* modelOutputRight[1] = {mOutputPointers[1]};
+          mModel->process_stereo(
+            *mModelRight, modelInputLeft, modelOutputLeft, modelInputRight, modelOutputRight, nFrames);
+        }
+        else
+        {
+          sample* modelInputLeft[1] = {modelInputPointers[0]};
+          sample* modelOutputLeft[1] = {mOutputPointers[0]};
+          mModel->process(modelInputLeft, modelOutputLeft, nFrames);
+          for (size_t f = 0; f < nFrames; ++f)
+            mOutputPointers[1][f] = mOutputPointers[0][f];
+        }
       }
       else
       {
-        sample* modelInputLeft[1] = {modelInputPointers[0]};
-        sample* modelOutputLeft[1] = {mOutputPointers[0]};
-        mModel->process(modelInputLeft, modelOutputLeft, nFrames);
-        for (size_t f = 0; f < nFrames; ++f)
-          mOutputPointers[1][f] = mOutputPointers[0][f];
+        mModel->process(modelInputPointers, mOutputPointers, nFrames);
       }
     }
     else
     {
-      mModel->process(modelInputPointers, mOutputPointers, nFrames);
+      _FallbackDSP(modelInputPointers, mOutputPointers, numChannelsInternal, numFrames);
     }
-  }
-  else
-  {
-    _FallbackDSP(modelInputPointers, mOutputPointers, numChannelsInternal, numFrames);
-  }
+    return mOutputPointers;
+  };
+  const auto mainCab = [&](sample** signal) {
+    sample** irPointers = signal;
+    const bool linkIR = GetParam(kIRLink)->Bool();
+    const bool irActiveL = GetParam(kIRToggle)->Bool();
+    const bool irActiveR = (linkIR || numChannelsInternal != kNumChannelsStereo) ? irActiveL : GetParam(kIRToggleRight)->Bool();
 
-  // Apply the noise gate after the NAM
-  sample** gateGainOutput =
-    noiseGateActive ? mNoiseGateGain.Process(mOutputPointers, numChannelsInternal, numFrames) : mOutputPointers;
-
-  sample** toneStackOutPointers = (toneStackActive && toneStackPostNAM && mToneStack != nullptr)
-                                    ? mToneStack->Process(gateGainOutput, numChannelsInternal, nFrames)
-                                    : gateGainOutput;
-
-  sample** irPointers = toneStackOutPointers;
-  const bool linkIR = GetParam(kIRLink)->Bool();
-  const bool irActiveL = GetParam(kIRToggle)->Bool();
-  const bool irActiveR = (linkIR || numChannelsInternal != kNumChannelsStereo) ? irActiveL : GetParam(kIRToggleRight)->Bool();
-
-  if (numChannelsInternal == kNumChannelsStereo)
-  {
-    const bool hasIRL = (mIR != nullptr) && irActiveL;
-
-    if (hasIRL || (mIRRight != nullptr && irActiveR))
+    if (numChannelsInternal == kNumChannelsStereo)
     {
-      sample* irInputLeft[1] = {toneStackOutPointers[0]};
-      sample* irInputRight[1] = {toneStackOutPointers[1]};
+      const bool hasIRL = (mIR != nullptr) && irActiveL;
 
-      if (hasIRL && mIR != nullptr)
-        mStereoIRPointers[0] = mIR->Process(irInputLeft, kNumChannelsMono, numFrames)[0];
-      else
-        mStereoIRPointers[0] = toneStackOutPointers[0];
+      if (hasIRL || (mIRRight != nullptr && irActiveR))
+      {
+        sample* irInputLeft[1] = {signal[0]};
+        sample* irInputRight[1] = {signal[1]};
 
-      if (mIRRight != nullptr && irActiveR)
-      {
-        mStereoIRPointers[1] = mIRRight->Process(irInputRight, kNumChannelsMono, numFrames)[0];
-      }
-      else if (hasIRL && irActiveR)
-      {
-        mStereoIRPointers[1] = mStereoIRPointers[0];
-      }
-      else
-      {
-        mStereoIRPointers[1] = toneStackOutPointers[1];
-      }
+        if (hasIRL && mIR != nullptr)
+          mStereoIRPointers[0] = mIR->Process(irInputLeft, kNumChannelsMono, numFrames)[0];
+        else
+          mStereoIRPointers[0] = signal[0];
 
-      irPointers = mStereoIRPointers;
+        if (mIRRight != nullptr && irActiveR)
+        {
+          mStereoIRPointers[1] = mIRRight->Process(irInputRight, kNumChannelsMono, numFrames)[0];
+        }
+        else if (hasIRL && irActiveR)
+        {
+          mStereoIRPointers[1] = mStereoIRPointers[0];
+        }
+        else
+        {
+          mStereoIRPointers[1] = signal[1];
+        }
+
+        irPointers = mStereoIRPointers;
+      }
     }
-  }
-  else
-  {
-    if (mIR != nullptr && irActiveL)
+    else
     {
-      irPointers = mIR->Process(toneStackOutPointers, numChannelsInternal, numFrames);
+      if (mIR != nullptr && irActiveL)
+      {
+        irPointers = mIR->Process(signal, numChannelsInternal, numFrames);
+      }
     }
+    return irPointers;
+  };
+
+  sample** irPointers = _ProcessCutFilters(mInputPointers, numChannelsInternal, numFrames, false);
+  for (size_t index = 0; index < mActiveEffects.size(); ++index)
+  {
+    const auto& block = mActiveEffects[index];
+    const auto& settings = block.settings;
+    if (settings.type == EffectType::Gate)
+    {
+      const bool primary = settings.id == kMainGate;
+      const bool enabled = primary ? GetParam(kNoiseGateActive)->Bool() : settings.enabled;
+      if (enabled && (primary || block.audio))
+      {
+        const auto tap = detectorTaps[index];
+        sample** detector = (settings.sidechain == kChainInput || tap != 0)
+                              ? mEffectTapPointers[tap].data() : irPointers;
+        const double threshold = primary ? GetParam(kNoiseGateThreshold)->Value() : settings.threshold;
+        irPointers = _ProcessGate(primary ? mMainGateAudio : *block.audio, threshold, detector,
+                                  irPointers, numChannelsInternal, nFrames);
+      }
+      if (primary && legacyGatePosition && toneStackActive && toneStackPostNAM)
+        irPointers = mToneStack->Process(irPointers, numChannelsInternal, nFrames);
+    }
+    else if (settings.id == kMainNam)
+    {
+      if (toneStackActive && !toneStackPostNAM)
+        irPointers = mToneStack->Process(irPointers, numChannelsInternal, nFrames);
+      irPointers = mainNam(irPointers);
+      if (toneStackActive && toneStackPostNAM && !legacyGatePosition)
+        irPointers = mToneStack->Process(irPointers, numChannelsInternal, nFrames);
+    }
+    else if (settings.id == kMainCab && settings.enabled)
+      irPointers = mainCab(irPointers);
+    else if (settings.enabled && block.audio)
+      irPointers = _ProcessExtraEffect(block, irPointers, numChannelsInternal, nFrames);
+
+    if (neededTaps[index + 1])
+      _SaveEffectTap(index + 1, irPointers, numChannelsInternal, nFrames);
   }
 
   sample** postMixPointers = irPointers;
@@ -1968,6 +1969,7 @@ void NeuralAmpModeler::OnReset()
 
   // Reset the model/IR first, then apply the active realtime/offline oversampling/filter settings.
   _ResetModelAndIR(sampleRate, GetBlockSize());
+  _ResetEffects(sampleRate, maxBlockSize);
   mPendingPhaseMulticoreEnabled.store(-1, std::memory_order_release);
   mRealtimeDSPTransitionFadingOut = false;
   mRealtimeDSPTransitionFadingIn = false;
@@ -2362,6 +2364,7 @@ bool NeuralAmpModeler::SerializeState(IByteChunk& chunk) const
     const std::string internalPresetState = _SerializeInternalPresetState();
     chunk.PutStr(internalPresetState.c_str());
     chunk.PutStr(mHighLightColor.Get());
+    chunk.PutStr(_SerializeEffects().c_str());
   }
   return paramsSerialized;
 }
@@ -2556,22 +2559,27 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
     const bool namLink = GetParam(kNAMLink)->Bool();
     const bool irLink = GetParam(kIRLink)->Bool();
 
-    const auto b = pGraphics->GetBounds();
-    const auto contentArea = b.GetPadded(-10.0f).GetReducedFromTop(30.0f).GetReducedFromBottom(20.0f);
-    const auto fileWidth = 230.0f;
-    const auto fileHeight = 30.0f;
-    const auto irYOffset = 38.0f;
-    const auto modelArea =
-      contentArea.GetFromBottom((2.0f * fileHeight)).GetFromTop(fileHeight).GetMidHPadded(fileWidth).GetVShifted(-1);
+    const bool inspectNam = mSelectedEffect == kMainNam;
+    const bool inspectCab = mSelectedEffect == kMainCab;
+    const bool hasParametric = GetEffectModelControls(kMainNam, 0) ||
+                              (isStereo && GetEffectModelControls(kMainNam, 1));
+    const IRECT modelArea {144, 264, 720, 299};
+    const IRECT namLinkArea {421, 268, 443, 295};
+    const IRECT modelLeftArea {144, 264, 417, 299};
+    const IRECT modelRightArea {447, 264, 720, 299};
+    const auto irArea = modelArea;
+    const auto irLinkArea = namLinkArea;
+    const auto irLeftArea = modelLeftArea;
+    const auto irRightArea = modelRightArea;
 
-    const auto namLinkArea = IRECT(modelArea.MW() - 9.0f, modelArea.T + 6.0f, modelArea.MW() + 9.0f, modelArea.T + 24.0f);
-    const auto modelLeftArea = IRECT(modelArea.L, modelArea.T, modelArea.MW() - 11.0f, modelArea.B);
-    const auto modelRightArea = IRECT(modelArea.MW() + 11.0f, modelArea.T, modelArea.R, modelArea.B);
-
-    const auto irArea = modelArea.GetVShifted(irYOffset);
-    const auto irLinkArea = IRECT(irArea.MW() - 9.0f, irArea.T + 6.0f, irArea.MW() + 9.0f, irArea.T + 24.0f);
-    const auto irLeftArea = IRECT(irArea.L, irArea.T, irArea.MW() - 11.0f, irArea.B);
-    const auto irRightArea = IRECT(irArea.MW() + 11.0f, irArea.T, irArea.R, irArea.B);
+    pGraphics->ForControlInGroup("EQ_KNOBS", [&](IControl* control) {
+      control->Hide(!inspectNam || hasParametric);
+    });
+    pGraphics->ForControlInGroup("GATE_CONTROLS", [&](IControl* control) {
+      control->Hide(mSelectedEffect != kMainGate);
+    });
+    if (auto* modelSize = pGraphics->GetControlWithTag(kCtrlTagSlimmableIcon))
+      modelSize->Hide(!inspectNam || !PrimaryHasModelSize());
 
     if (auto* leftNamCtrl = dynamic_cast<NAMFileBrowserControl*>(pGraphics->GetControlWithTag(kCtrlTagModelFileBrowser)))
     {
@@ -2582,6 +2590,7 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
       leftNamCtrl->SetDefaultLabelStr(isStereo ? "Select left model..." : "Select model...");
 #endif
       leftNamCtrl->SetTargetAndDrawRECTs(isStereo ? modelLeftArea : modelArea);
+      leftNamCtrl->Hide(!inspectNam);
       leftNamCtrl->SetDisabled(!namActive);
       leftNamCtrl->SetDirty(false);
     }
@@ -2596,14 +2605,14 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
       rightNamCtrl->SetTargetAndDrawRECTs(modelRightArea);
       bool rightNamDisabled = !namActive || !isStereo || namLink;
       rightNamCtrl->SetDisabled(rightNamDisabled);
-      rightNamCtrl->Hide(!isStereo);
+      rightNamCtrl->Hide(!inspectNam || !isStereo);
       rightNamCtrl->SetDirty(false);
     }
     if (auto* namLinkCtrl = pGraphics->GetControlWithTag(kCtrlTagNAMLink))
     {
       namLinkCtrl->SetTargetAndDrawRECTs(namLinkArea);
       namLinkCtrl->SetDisabled(!isStereo);
-      namLinkCtrl->Hide(!isStereo);
+      namLinkCtrl->Hide(!inspectNam || !isStereo);
       namLinkCtrl->SetDirty(false);
     }
     if (auto* leftIrCtrl = dynamic_cast<NAMFileBrowserControl*>(pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)))
@@ -2615,6 +2624,7 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
       leftIrCtrl->SetDefaultLabelStr(isStereo ? "Select left IR..." : "Select IR...");
 #endif
       leftIrCtrl->SetTargetAndDrawRECTs(isStereo ? irLeftArea : irArea);
+      leftIrCtrl->Hide(!inspectCab);
       leftIrCtrl->SetDisabled(!irActive);
       leftIrCtrl->SetDirty(false);
     }
@@ -2630,38 +2640,38 @@ void NeuralAmpModeler::_UpdateLinkAndBrowserAvailability()
       rightIrCtrl->SetTargetAndDrawRECTs(irRightArea);
       bool rightIrDisabled = !irActiveRight || !isStereo || irLink;
       rightIrCtrl->SetDisabled(rightIrDisabled);
-      rightIrCtrl->Hide(!isStereo);
+      rightIrCtrl->Hide(!inspectCab || !isStereo);
       rightIrCtrl->SetDirty(false);
     }
     if (auto* irLinkCtrl = pGraphics->GetControlWithTag(kCtrlTagIRLink))
     {
       irLinkCtrl->SetTargetAndDrawRECTs(irLinkArea);
       irLinkCtrl->SetDisabled(!isStereo);
-      irLinkCtrl->Hide(!isStereo);
+      irLinkCtrl->Hide(!inspectCab || !isStereo);
       irLinkCtrl->SetDirty(false);
     }
 
     const bool splitIRButtons = isStereo && !irLink;
-    const auto irSwitchArea = irArea.GetFromLeft(30.0f).GetHShifted(-40.0f).GetScaledAboutCentre(0.6f);
-    const auto irSwitchAreaLeft = irArea.GetFromLeft(15.0f).GetHShifted(-41.0f).GetCentredInside(15.0f, 18.0f);
-    const auto irSwitchAreaRight = irArea.GetFromLeft(15.0f).GetHShifted(-24.0f).GetCentredInside(15.0f, 18.0f);
+    const IRECT irSwitchArea {148, 313, 175, 337};
+    const IRECT irSwitchAreaLeft {148, 313, 175, 337};
+    const IRECT irSwitchAreaRight {184, 313, 211, 337};
 
     if (auto* singleIrSwitch = pGraphics->GetControlWithTag(kCtrlTagIRToggle))
     {
       singleIrSwitch->SetTargetAndDrawRECTs(irSwitchArea);
-      singleIrSwitch->Hide(splitIRButtons);
+      singleIrSwitch->Hide(!inspectCab || splitIRButtons);
       singleIrSwitch->SetDirty(false);
     }
     if (auto* leftIrSwitch = pGraphics->GetControlWithTag(kCtrlTagIRToggleLeft))
     {
       leftIrSwitch->SetTargetAndDrawRECTs(irSwitchAreaLeft);
-      leftIrSwitch->Hide(!splitIRButtons);
+      leftIrSwitch->Hide(!inspectCab || !splitIRButtons);
       leftIrSwitch->SetDirty(false);
     }
     if (auto* rightIrSwitch = pGraphics->GetControlWithTag(kCtrlTagIRToggleRight))
     {
       rightIrSwitch->SetTargetAndDrawRECTs(irSwitchAreaRight);
-      rightIrSwitch->Hide(!splitIRButtons);
+      rightIrSwitch->Hide(!inspectCab || !splitIRButtons);
       rightIrSwitch->SetDirty(false);
     }
     if (auto* filtersPage = pGraphics->GetControlWithTag(kCtrlTagCutFiltersBox))
@@ -2833,6 +2843,13 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
   switch (msgTag)
   {
     case kMsgTagClearModel:
+      {
+        std::lock_guard<std::mutex> lock(mEffectsMutex);
+        mPrimaryModelControls[0].reset();
+        if (GetParam(kNAMLink)->Bool() || !_IsStereoRequested())
+          mPrimaryModelControls[1].reset();
+        mPrimaryHasModelSize.store(false);
+      }
       mNAMPath.Set("");
       mShouldRemoveModel = true;
       if (GetParam(kNAMLink)->Bool() || !_IsStereoRequested())
@@ -2848,6 +2865,10 @@ bool NeuralAmpModeler::OnMessage(int msgTag, int ctrlTag, int dataSize, const vo
       _MarkCurrentInternalPresetDirty();
       return true;
     case kMsgTagClearModelRight:
+      {
+        std::lock_guard<std::mutex> lock(mEffectsMutex);
+        mPrimaryModelControls[1].reset();
+      }
       mNAMRightPath.Set("");
       {
         std::lock_guard<std::mutex> lock(mDSPStagingMutex);
@@ -3287,12 +3308,13 @@ int NeuralAmpModeler::_GetAntiAliasFilterPhaseIndex() const
 
 void NeuralAmpModeler::_ApplyImmediateDSPSettings(int oversamplingFactor, int filterPhaseIndex)
 {
-  if (mModel == nullptr)
-    return;
+  const bool qualityChanged = oversamplingFactor != mAppliedOversamplingFactor ||
+                              filterPhaseIndex != mAppliedAntiAliasFilterPhase;
 
   if (oversamplingFactor != mAppliedOversamplingFactor)
   {
-    mModel->SetOversamplingFactor(oversamplingFactor);
+    if (mModel)
+      mModel->SetOversamplingFactor(oversamplingFactor);
     if (mModelRight != nullptr)
       mModelRight->SetOversamplingFactor(oversamplingFactor);
     mAppliedOversamplingFactor = oversamplingFactor;
@@ -3303,10 +3325,18 @@ void NeuralAmpModeler::_ApplyImmediateDSPSettings(int oversamplingFactor, int fi
     const auto filterPhase = filterPhaseIndex == 0 ? dsp::EAntiAliasFilterPhase::MinimumPhaseCascadedFIR
                            : filterPhaseIndex == 1 ? dsp::EAntiAliasFilterPhase::LinearCascadedFIRShort
                                                    : dsp::EAntiAliasFilterPhase::LinearCascadedFIRLong;
-    mModel->SetAntiAliasFilterPhase(filterPhase);
+    if (mModel)
+      mModel->SetAntiAliasFilterPhase(filterPhase);
     if (mModelRight != nullptr)
       mModelRight->SetAntiAliasFilterPhase(filterPhase);
     mAppliedAntiAliasFilterPhase = filterPhaseIndex;
+  }
+  if (qualityChanged)
+  {
+    const auto phase = filterPhaseIndex == 0 ? dsp::EAntiAliasFilterPhase::MinimumPhaseCascadedFIR
+                     : filterPhaseIndex == 1 ? dsp::EAntiAliasFilterPhase::LinearCascadedFIRShort
+                                             : dsp::EAntiAliasFilterPhase::LinearCascadedFIRLong;
+    _ApplyExtraModelQuality(oversamplingFactor, phase);
   }
 
   _UpdateLatency();
@@ -3316,9 +3346,6 @@ void NeuralAmpModeler::_ApplyActiveDSPSettings(bool allowSmoothRealtimeTransitio
 {
   const int factor = _GetActiveOversamplingFactor();
   const int filterPhaseIndex = _GetAntiAliasFilterPhaseIndex();
-
-  if (mModel == nullptr)
-    return;
 
   if (factor == mAppliedOversamplingFactor && filterPhaseIndex == mAppliedAntiAliasFilterPhase)
     return;
@@ -3478,11 +3505,29 @@ bool NeuralAmpModeler::_CanProcessStereo(const size_t nChansIn, const size_t nCh
   return true;
 }
 
-std::unique_ptr<ResamplingNAM> NeuralAmpModeler::_CreateModel(const WDL_String& modelPath, nam::dspData* returnedConfig)
+std::unique_ptr<ResamplingNAM> NeuralAmpModeler::_CreateModel(const WDL_String& modelPath, nam::dspData* returnedConfig,
+                                                              std::shared_ptr<ModelControls>* parametric)
 {
   auto dspPath = std::filesystem::u8path(modelPath.Get());
-  std::unique_ptr<nam::DSP> model = returnedConfig != nullptr ? nam::get_dsp(dspPath, *returnedConfig) : nam::get_dsp(dspPath);
+  std::ifstream stream(dspPath);
+  if (!stream)
+    throw std::runtime_error("Could not open NAM model.");
+  const auto file = nlohmann::json::parse(stream, nullptr, false);
+  if (!file.is_object() || !file.contains("architecture"))
+    throw std::runtime_error("Invalid NAM model file.");
+  auto controls = parametric ? *parametric : std::shared_ptr<ModelControls>();
+  auto model = LoadParametricModel(file, modelPath.Get(), controls, returnedConfig);
+  const bool isParametric = model != nullptr;
+  if (!model)
+  {
+    controls.reset();
+    model = returnedConfig ? nam::get_dsp(file, *returnedConfig) : nam::get_dsp(file);
+  }
+  if (parametric)
+    *parametric = std::move(controls);
 
+  if (!model)
+    throw std::runtime_error("NAM model loader returned no model.");
   if (model->NumInputChannels() != 1)
   {
     throw std::runtime_error("Model must have 1 input channel, but has " + std::to_string(model->NumInputChannels()));
@@ -3492,8 +3537,9 @@ std::unique_ptr<ResamplingNAM> NeuralAmpModeler::_CreateModel(const WDL_String& 
     throw std::runtime_error("Model must have 1 output channel, but has " + std::to_string(model->NumOutputChannels()));
   }
 
-  std::unique_ptr<ResamplingNAM> temp = std::make_unique<ResamplingNAM>(std::move(model), GetSampleRate(), dspPath);
-  temp->Reset(GetSampleRate(), GetBlockSize());
+  const double rate = GetSampleRate() > 0.0 ? GetSampleRate() : 48000.0;
+  auto temp = std::make_unique<ResamplingNAM>(std::move(model), rate, dspPath, isParametric);
+  temp->Reset(rate, std::max(1, GetBlockSize()));
   temp->SetPhaseMulticoreSettings(mPhaseMulticoreEnabledParam.load(), mPhaseMulticoreRequestedThreadsParam.load());
   temp->SetSlimmableSize(GetParam(kSlim)->Value());
 
@@ -3530,7 +3576,16 @@ void NeuralAmpModeler::_EnsureRightModelForStereo()
 
   try
   {
-    auto rightModel = _CreateModel(mNAMPath);
+    std::shared_ptr<ModelControls> controls;
+    {
+      std::lock_guard<std::mutex> lock(mEffectsMutex);
+      controls = mPrimaryModelControls[0];
+    }
+    auto rightModel = _CreateModel(mNAMPath, nullptr, &controls);
+    {
+      std::lock_guard<std::mutex> lock(mEffectsMutex);
+      mPrimaryModelControls[1] = controls;
+    }
     std::lock_guard<std::mutex> lock(mDSPStagingMutex);
     if (needStagedRight && mStagedModel != nullptr && mStagedModelRight == nullptr)
     {
@@ -3663,7 +3718,12 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
   try
   {
     nam::dspData returnedConfig;
-    auto stagedModel = _CreateModel(modelPath, &returnedConfig);
+    std::array<std::shared_ptr<ModelControls>, 2> controls;
+    {
+      std::lock_guard<std::mutex> lock(mEffectsMutex);
+      controls = mPrimaryModelControls;
+    }
+    auto stagedModel = _CreateModel(modelPath, &returnedConfig, &controls[0]);
     std::unique_ptr<ResamplingNAM> stagedModelRight;
 
     bool isStereo = _IsStereoRequested();
@@ -3674,17 +3734,19 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
     {
       if (linkNAM || !CStringHasContents(mNAMRightPath.Get()))
       {
-        stagedModelRight = _CreateModel(modelPath);
+        controls[1] = controls[0];
+        stagedModelRight = _CreateModel(modelPath, nullptr, &controls[1]);
         mNAMRightPath = modelPath;
       }
       else
       {
-        stagedModelRight = _CreateModel(mNAMRightPath);
+        stagedModelRight = _CreateModel(mNAMRightPath, nullptr, &controls[1]);
       }
     }
     else
     {
       mNAMRightPath = modelPath;
+      controls[1] = controls[0];
     }
 
     std::string gearType = "";
@@ -3759,6 +3821,11 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
         stagedModelRight->SetOutputLevel(returnLevel);
     }
 
+    {
+      std::lock_guard<std::mutex> lock(mEffectsMutex);
+      mPrimaryModelControls = std::move(controls);
+      mPrimaryHasModelSize.store(stagedModel->GetSlimmableModel() != nullptr);
+    }
     WDL_String loadedNAMPath;
     {
       std::lock_guard<std::mutex> lock(mDSPStagingMutex);
@@ -3813,7 +3880,7 @@ std::string NeuralAmpModeler::_StageModel(const WDL_String& modelPath)
       SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadedModelRight, mNAMRightPath.GetLength() ? mNAMRightPath.GetLength() + 1 : 0, mNAMRightPath.Get());
     }
   }
-  catch (std::runtime_error& e)
+  catch (const std::exception& e)
   {
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadFailed);
 
@@ -3838,7 +3905,16 @@ std::string NeuralAmpModeler::_StageModelRight(const WDL_String& modelPath)
   try
   {
     nam::dspData returnedConfig;
-    auto stagedModelRight = _CreateModel(modelPath, &returnedConfig);
+    std::shared_ptr<ModelControls> controls;
+    {
+      std::lock_guard<std::mutex> lock(mEffectsMutex);
+      controls = mPrimaryModelControls[1];
+    }
+    auto stagedModelRight = _CreateModel(modelPath, &returnedConfig, &controls);
+    {
+      std::lock_guard<std::mutex> lock(mEffectsMutex);
+      mPrimaryModelControls[1] = std::move(controls);
+    }
 
     WDL_String loadedNAMRightPath;
     {
@@ -3893,7 +3969,7 @@ std::string NeuralAmpModeler::_StageModelRight(const WDL_String& modelPath)
     _MarkCurrentInternalPresetDirty();
     SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadedModelRight, loadedNAMRightPath.GetLength() ? loadedNAMRightPath.GetLength() + 1 : 0, loadedNAMRightPath.Get());
   }
-  catch (std::runtime_error& e)
+  catch (const std::exception& e)
   {
     SendControlMsgFromDelegate(kCtrlTagModelRightFileBrowser, kMsgTagLoadFailed);
 
@@ -4451,7 +4527,7 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
 
     if (auto* pSlimIcon = pGraphics->GetControlWithTag(kCtrlTagSlimmableIcon))
     {
-      const bool show = mModel->GetSlimmableModel() != nullptr;
+      const bool show = mSelectedEffect == kMainNam && PrimaryHasModelSize();
       pSlimIcon->Hide(!show);
     }
   }
@@ -4461,15 +4537,17 @@ void NeuralAmpModeler::_UpdateControlsFromModel()
 void NeuralAmpModeler::_UpdateLatency()
 {
   int latency = 0;
-  if (mModel)
+  for (const auto& block : mActiveEffects)
   {
-    latency += mModel->GetLatency();
+    if (block.settings.id == kMainNam)
+    {
+      const int left = mModel ? mModel->GetLatency() : 0;
+      const int right = mModelRight ? mModelRight->GetLatency() : 0;
+      latency += std::max(left, right);
+    }
+    else if (block.settings.enabled && block.audio && block.audio->nam[0])
+      latency += block.audio->nam[0]->GetLatency();
   }
-  if (mModelRight)
-  {
-    latency = std::max(latency, mModelRight->GetLatency());
-  }
-  // Other things that add latency here...
 
   // Feels weird to have to do this.
   if (GetLatency() != latency)
@@ -4488,4 +4566,5 @@ void NeuralAmpModeler::_UpdateMeters(sample** inputPointer, sample** outputPoint
 }
 
 // HACK
+#include "EffectChain.cpp"
 #include "Unserialization.cpp"

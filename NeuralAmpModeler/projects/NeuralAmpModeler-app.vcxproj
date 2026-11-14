@@ -410,6 +410,83 @@
     <ClCompile Include="..\..\AudioDSPTools\dsp\RecursiveLinearFilter.cpp" />
     <ClCompile Include="..\..\AudioDSPTools\dsp\wav.cpp" />
     <ClCompile Include="..\NeuralAmpModeler.cpp" />
+    <ClCompile Include="..\ParametricModel.cpp" />
+    <ClCompile Include="..\..\ParametricCore\NAM\activations.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\concat_lstm.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\container.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\conv1d.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\convnet.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\dsp.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\get_dsp.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\hypernet.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\linear.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\lstm.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\parametric_control.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\parametric_version.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\ring_buffer.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\util.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\wavenet\a2_fast.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\wavenet\concat_wavenet.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\wavenet\hyperwavenet.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\wavenet\model.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="..\..\ParametricCore\NAM\wavenet\slimmable.cpp">
+      <PreprocessorDefinitions>nam=pnamcore;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)pnam_%(Filename).obj</ObjectFileName>
+    </ClCompile>
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\activations.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\conv1d.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\convnet.cpp" />

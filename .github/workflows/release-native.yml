@@ -5,37 +5,16 @@ on:
   push:
     tags:
       - "v*"
+    branches:
+      - "release/v*"
 
 env:
   PROJECT_DIR: NeuralAmpModeler
   ARTIFACT_NAME: NAM On Steroids
 
 jobs:
-  create_release:
-    name: Create release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{steps.create_release.outputs.upload_url}}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Create release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-        with:
-          draft: true
-          tag_name: ${{github.ref}}
-          release_name: Release ${{github.ref}}
-          body_path: ${{env.PROJECT_DIR}}/installer/changelog.txt
-
   build:
     name: Build
-    needs: create_release
     runs-on: ${{matrix.os}}
     strategy:
       fail-fast: false
@@ -94,39 +73,6 @@ jobs:
         echo "zip_name=$(basename "$ZIP_PATH")" >> $GITHUB_OUTPUT
       shell: bash
 
-    - name: Upload Linux VST3 release asset
-      if: matrix.os == 'ubuntu-latest'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      with:
-        upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{steps.linux_build_step.outputs.zip_path}}
-        asset_name: ${{steps.linux_build_step.outputs.zip_name}}
-        asset_content_type: application/zip
-
-    - name: Upload mac DSYMs release asset
-      if: matrix.os == 'macos-15'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      with:
-        upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{env.PROJECT_DIR}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}-dSYMs.zip
-        asset_name: ${{steps.mac_archivename_step.outputs.archive_name}}-dSYMs.zip
-        asset_content_type: application/zip
-
-    - name: Upload mac dmg release asset
-      if: matrix.os == 'macos-15'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-      with:
-        upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{env.PROJECT_DIR}}/${{matrix.build_dir}}/out/${{steps.mac_archivename_step.outputs.archive_name}}.dmg
-        asset_name: ${{steps.mac_archivename_step.outputs.archive_name}}.dmg
-        asset_content_type: application/octet-stream
-
     - name: Add msbuild to PATH (Windows)
       if: matrix.os == 'windows-2022'
       uses: microsoft/setup-msbuild@v3
@@ -153,24 +99,62 @@ jobs:
         .\makedist-win.bat full installer
       shell: pwsh
 
-    - name: Upload Windows pdb release asset
-      if: matrix.os == 'windows-2022'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+    - name: Upload Linux packages
+      if: matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v4
       with:
-        upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{env.PROJECT_DIR}}/${{matrix.build_dir}}/out/${{steps.win_archivename_step.outputs.archive_name}}-pdbs.zip
-        asset_name: ${{steps.win_archivename_step.outputs.archive_name}}-pdbs.zip
-        asset_content_type: application/zip
+        name: native-linux
+        path: ${{ steps.linux_build_step.outputs.zip_path }}
+        if-no-files-found: error
 
-    - name: Upload Windows zip release asset
-      if: matrix.os == 'windows-2022'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+    - name: Upload macOS packages
+      if: matrix.os == 'macos-15'
+      uses: actions/upload-artifact@v4
       with:
-        upload_url: ${{needs.create_release.outputs.upload_url}}
-        asset_path: ${{env.PROJECT_DIR}}/${{matrix.build_dir}}/out/${{steps.win_archivename_step.outputs.archive_name}}.zip
-        asset_name: ${{steps.win_archivename_step.outputs.archive_name}}.zip
-        asset_content_type: application/zip
+        name: native-macos
+        path: |
+          ${{ env.PROJECT_DIR }}/${{ matrix.build_dir }}/out/${{ steps.mac_archivename_step.outputs.archive_name }}-dSYMs.zip
+          ${{ env.PROJECT_DIR }}/${{ matrix.build_dir }}/out/${{ steps.mac_archivename_step.outputs.archive_name }}.dmg
+        if-no-files-found: error
+
+    - name: Upload Windows packages
+      if: matrix.os == 'windows-2022'
+      uses: actions/upload-artifact@v4
+      with:
+        name: native-windows
+        path: |
+          ${{ env.PROJECT_DIR }}/${{ matrix.build_dir }}/out/${{ steps.win_archivename_step.outputs.archive_name }}-pdbs.zip
+          ${{ env.PROJECT_DIR }}/${{ matrix.build_dir }}/out/${{ steps.win_archivename_step.outputs.archive_name }}.zip
+        if-no-files-found: error
+
+  draft_release:
+    name: Save draft release
+    if: startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: packages
+          merge-multiple: true
+      - name: Attach the packages to a draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REF: ${{ github.ref_name }}
+        run: |
+          tag="${RELEASE_REF#release/}"
+          version="$(sed -n 's/^#define PLUG_VERSION_STR "\([^"]*\)".*$/\1/p' NeuralAmpModeler/config.h)"
+          test "$tag" = "v$version"
+          if gh release view "$tag" --json isDraft --jq .isDraft > draft-status; then
+            test "$(cat draft-status)" = true
+            gh release edit "$tag" --target "$GITHUB_SHA" --draft
+            gh release upload "$tag" packages/* --clobber
+          else
+            gh release create "$tag" packages/* --target "$GITHUB_SHA" --draft \
+              --title "NAM On Steroids $version" --notes-file "$PROJECT_DIR/installer/changelog.txt"
+          fi
+          test "$(gh release view "$tag" --json isDraft --jq .isDraft)" = true

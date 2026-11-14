@@ -50,6 +50,12 @@ file(GLOB NAM_CORE_SOURCES
   "${NAM_CORE_ROOT}/NAM/*/*.cpp"
 )
 
+file(GLOB PNAM_CORE_SOURCES
+  "${PROJECT_ROOT}/ParametricCore/NAM/*.cpp"
+  "${PROJECT_ROOT}/ParametricCore/NAM/*/*.cpp"
+)
+set_source_files_properties(${PNAM_CORE_SOURCES} PROPERTIES COMPILE_DEFINITIONS "nam=pnamcore")
+
 set(PLUGIN_SOURCES
   "${PLUGIN_ROOT}/NeuralAmpModeler.cpp"
   "${PLUGIN_ROOT}/ToneStack.cpp"
@@ -73,6 +79,8 @@ set(PLUGIN_SOURCES
   "${AUDIO_DSP_TOOLS_ROOT}/dsp/RecursiveLinearFilter.cpp"
   "${AUDIO_DSP_TOOLS_ROOT}/dsp/wav.cpp"
   ${NAM_CORE_SOURCES}
+  ${PNAM_CORE_SOURCES}
+  "${PLUGIN_ROOT}/ParametricModel.cpp"
 )
 
 smtg_add_vst3plugin(NAMOnSteroids PACKAGE_NAME "NAM On Steroids" SOURCES_LIST ${PLUGIN_SOURCES})
